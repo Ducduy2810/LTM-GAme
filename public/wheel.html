@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chiếc Nón Kỳ Diệu - Gameshow VTV3</title>
+    <link rel="stylesheet" href="wheel_theme.css">
+</head>
+<body>
+    <div class="wheel-app">
+        <!-- HEADER TRƯỜNG QUAY -->
+        <header class="wheel-header">
+            <div class="wheel-logo">
+                <span class="wheel-logo-badge">🎡</span>
+                <span class="wheel-title">Chiếc Nón Kỳ Diệu</span>
+            </div>
+            <div class="user-status-bar">
+                <div class="user-badge" id="current-user-badge">
+                    <span>👤</span> <strong id="current-username">Đang tải...</strong>
+                </div>
+                <a href="index.html" class="btn-action" style="background:#334155; border-color:#475569; text-decoration:none;">
+                    ⬅ Cổng Game
+                </a>
+            </div>
+        </header>
+
+        <!-- 1. MÀN HÌNH SẢNH PHÒNG (LOBBY SCREEN) -->
+        <section id="lobby-screen" class="screen active">
+            <div class="lobby-controls">
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <button id="btn-open-create-modal" class="btn-action btn-create-room">
+                        ➕ Tạo Phòng Mới
+                    </button>
+                    <button id="btn-refresh-rooms" class="btn-action">
+                        🔄 Làm Mới
+                    </button>
+                </div>
+                <div class="join-by-code-form">
+                    <input type="text" id="input-join-code" class="input-code" placeholder="MÃ PHÒNG" maxlength="10">
+                    <button id="btn-join-code" class="btn-action" style="background:#f59e0b; color:#000; border-color:#d97706;">
+                        Vào Phòng
+                    </button>
+                </div>
+            </div>
+
+            <!-- DANH SÁCH CÁC PHÒNG -->
+            <div style="width:100%; text-align:left; margin-bottom:12px;">
+                <h3 style="color:#facc15; margin:0; display:flex; align-items:center; gap:8px;">
+                    <span>📋</span> Danh Sách Sàn Đấu (Tối đa 4 người/phòng)
+                </h3>
+            </div>
+            <div id="wheel-rooms-container" class="rooms-grid">
+                <!-- Danh sách phòng render bằng JS -->
+            </div>
+        </section>
+
+        <!-- 2. MÀN HÌNH PHÒNG CHỜ (WAITING SCREEN - 4 SLOTS) -->
+        <section id="waiting-screen" class="screen">
+            <div class="waiting-container">
+                <div class="room-info-banner">
+                    <div>
+                        <h2 id="wait-room-name" style="margin:0; color:#facc15; font-size:20px;">Sàn Đấu Chiếc Nón</h2>
+                        <div style="font-size:13px; color:#94a3b8; margin-top:4px;">
+                            Chủ phòng: <strong id="wait-host-name" style="color:#fff;">...</strong> | 
+                            Chủ đề: <span id="wait-topic-name" style="color:#38bdf8;">Tổng hợp</span> | 
+                            Lượt: <span id="wait-time-limit" style="color:#f87171;">10s</span>
+                        </div>
+                    </div>
+                    <div>
+                        <span class="room-code-badge" id="btn-copy-code" title="Bấm để sao chép mã phòng">
+                            <span>🔑</span> <span id="wait-room-code">CNKD</span> 📋
+                        </span>
+                    </div>
+                </div>
+
+                <!-- 4 BỤC NGỒI CỦA 4 NGƯỜI CHƠI -->
+                <div class="podiums-container" id="waiting-podiums">
+                    <!-- Render 4 slots bằng JS -->
+                </div>
+
+                <!-- HƯỚNG DẪN & NÚT THAO TÁC -->
+                <div id="waiting-status-msg" style="margin-bottom:16px; font-weight:700; color:#facc15;">
+                    👉 Hãy bấm nút [SẴN SÀNG] để Chủ phòng có thể bắt đầu trận đấu!
+                </div>
+
+                <div class="waiting-actions">
+                    <button id="btn-toggle-ready" class="btn-ready-toggle">
+                        ✅ SẴN SÀNG
+                    </button>
+                    <button id="btn-start-game" class="btn-start-game" style="display:none;">
+                        👑 BẮT ĐẦU VÁN ĐẤU
+                    </button>
+                    <button id="btn-leave-room" class="btn-action" style="background:#475569; border-color:#64748b;">
+                        ⬅ Rời Phòng
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. MÀN HÌNH TRẬN ĐẤU (GAME SCREEN) -->
+        <section id="game-screen" class="screen">
+            <!-- THANH TRẠNG THÁI LƯỢT CHƠI -->
+            <div class="game-status-header">
+                <div class="turn-indicator" id="turn-indicator">
+                    🟢 ĐANG TẢI LƯỢT CHƠI...
+                </div>
+                <div class="turn-timer-box">
+                    <span>⏱️</span> <span id="time-left">10</span>s
+                </div>
+            </div>
+
+            <!-- GỢI Ý CHỦ ĐỀ Ô CHỮ -->
+            <div class="hint-banner" id="hint-banner">
+                💡 Chủ đề: Đang tải...
+            </div>
+
+            <!-- 4 BỤC NGỒI LIVE CỦA 4 NGƯỜI CHƠI TRONG TRẬN ĐẤU -->
+            <div class="podiums-container" id="game-podiums">
+                <!-- 4 slots live update score and active turn -->
+            </div>
+
+            <!-- BẢNG Ô CHỮ (PHRASE BOARD) -->
+            <div class="phrase-board" id="phrase-board">
+                <!-- Render các ô chữ cái -->
+            </div>
+
+            <!-- SÂN KHẤU CHIẾC NÓN & BẢNG ĐIỀU KHIỂN THAO TÁC -->
+            <div class="wheel-stage">
+                <div class="wheel-graphic-container">
+                    <div class="wheel-pointer"></div>
+                    <svg class="wheel-svg" id="wheel-svg" viewBox="0 0 200 200">
+                        <circle cx="100" cy="100" r="96" fill="#0f172a" stroke="#facc15" stroke-width="4"/>
+                        <!-- 12 nan quạt rực rỡ tượng trưng các ô điểm -->
+                        <g id="wheel-slices">
+                            <path d="M100,100 L100,6 A94,94 0 0,1 147,15 Z" fill="#ef4444"/>
+                            <path d="M100,100 L147,15 A94,94 0 0,1 181,49 Z" fill="#3b82f6"/>
+                            <path d="M100,100 L181,49 A94,94 0 0,1 194,96 Z" fill="#10b981"/>
+                            <path d="M100,100 L194,96 A94,94 0 0,1 185,147 Z" fill="#f59e0b"/>
+                            <path d="M100,100 L185,147 A94,94 0 0,1 151,181 Z" fill="#8b5cf6"/>
+                            <path d="M100,100 L151,181 A94,94 0 0,1 104,194 Z" fill="#06b6d4"/>
+                            <path d="M100,100 L104,194 A94,94 0 0,1 57,185 Z" fill="#ec4899"/>
+                            <path d="M100,100 L57,185 A94,94 0 0,1 23,151 Z" fill="#14b8a6"/>
+                            <path d="M100,100 L23,151 A94,94 0 0,1 6,104 Z" fill="#f97316"/>
+                            <path d="M100,100 L6,104 A94,94 0 0,1 15,57 Z" fill="#6366f1"/>
+                            <path d="M100,100 L15,57 A94,94 0 0,1 49,23 Z" fill="#84cc16"/>
+                            <path d="M100,100 L49,23 A94,94 0 0,1 96,6 Z" fill="#e11d48"/>
+                        </g>
+                        <!-- Trục tâm nón -->
+                        <circle cx="100" cy="100" r="28" fill="#1e293b" stroke="#facc15" stroke-width="3"/>
+                        <circle cx="100" cy="100" r="10" fill="#facc15"/>
+                    </svg>
+                </div>
+
+                <!-- BẢNG ĐIỀU KHIỂN HÀNH ĐỘNG CỦA NGƯỜI CHƠI -->
+                <div class="action-controls-box">
+                    <!-- Nút Quay Nón -->
+                    <div id="spin-control-box" style="display:none;">
+                        <button id="btn-spin" class="btn-spin-wheel">
+                            🎲 BẤM QUAY NÓN
+                        </button>
+                    </div>
+
+                    <!-- Đoán chữ cái sau khi quay vào ô điểm -->
+                    <div id="guess-control-box" style="display:none;" class="guess-box">
+                        <div id="spin-result-banner" style="font-size:16px; font-weight:800; color:#facc15;">
+                            🎉 Bạn vừa quay vào ô: 500 ĐIỂM!
+                        </div>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <input type="text" id="guess-input" class="input-guess-letter" maxlength="1" autocomplete="off" placeholder="?">
+                            <button id="btn-guess" class="btn-action" style="background:#10b981; border-color:#059669; padding:15px 25px; font-size:16px;">
+                                Đoán Chữ
+                            </button>
+                        </div>
+
+                        <!-- Đoán cả ô chữ trực tiếp -->
+                        <div class="solve-phrase-form">
+                            <input type="text" id="solve-input" class="input-solve-phrase" placeholder="Đoán toàn bộ ô chữ..." autocomplete="off">
+                            <button id="btn-solve" class="btn-action" style="background:#f59e0b; color:#000; border-color:#d97706;">
+                                Giải Ô Chữ
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Trạng thái chờ lượt -->
+                    <div id="wait-control-box" style="display:none;">
+                        <p id="wait-action-text" style="color:#94a3b8; font-size:15px; margin:10px 0;">
+                            ⏳ Đang chờ người chơi thực hiện lượt...
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KHUNG LỊCH SỬ THAO TÁC / CHAT TRƯỜNG QUAY -->
+            <div style="width:100%; text-align:left; margin-bottom:6px;">
+                <span style="font-size:13px; font-weight:700; color:#94a3b8;">📢 Nhật ký trường quay:</span>
+            </div>
+            <div class="wheel-log-box" id="wheel-chat-box">
+                <div><i>Chào mừng đến với Chiếc Nón Kỳ Diệu!</i></div>
+            </div>
+
+            <div style="margin-top:16px;">
+                <button id="btn-game-leave" class="btn-action" style="background:#334155; border-color:#475569;">
+                    ⬅ Rời Phòng Về Sảnh
+                </button>
+            </div>
+        </section>
+
+        <!-- 4. MÀN HÌNH KẾT THÚC (END SCREEN) -->
+        <section id="end-screen" class="screen">
+            <div class="waiting-container" style="max-width:600px;">
+                <div style="font-size:55px; margin-bottom:10px;">🏆</div>
+                <h1 style="color:#facc15; margin:0 0 10px 0;">VÁN ĐẤU HOÀN THÀNH!</h1>
+                <p id="end-reason" style="font-size:16px; color:#fff; font-weight:700; margin-bottom:16px;">
+                    Đã giải mã thành công ô chữ!
+                </p>
+
+                <div style="background:#09132b; border:1px solid #1e3a8a; border-radius:10px; padding:12px 20px; width:100%; margin-bottom:20px;">
+                    <div style="font-size:13px; color:#94a3b8;">Ô chữ trọn vẹn:</div>
+                    <div id="end-full-phrase" style="font-size:24px; font-weight:900; color:#38bdf8; letter-spacing:2px; margin-top:4px;">
+                        ...
+                    </div>
+                </div>
+
+                <div style="width:100%; margin-bottom:24px;">
+                    <h3 style="color:#facc15; margin-bottom:10px;">Bảng Tổng Kết Điểm Số</h3>
+                    <div id="end-winners-list" style="display:flex; flex-direction:column; gap:8px;">
+                        <!-- Render điểm số 4 người -->
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:12px;">
+                    <button id="btn-play-again" class="btn-action btn-create-room">
+                        🔄 Chơi Tiếp Ván Mới
+                    </button>
+                    <button id="btn-end-leave" class="btn-action" style="background:#475569; border-color:#64748b;">
+                        ⬅ Về Sảnh Chờ
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- MODAL TẠO PHÒNG MỚI -->
+        <div id="modal-create-wheel-room" class="modal-overlay">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h3 class="modal-title">➕ Tạo Sàn Đấu Chiếc Nón Mới</h3>
+                    <button id="btn-close-modal" style="background:none; border:none; color:#94a3b8; font-size:20px; cursor:pointer;">✖</button>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Tên Phòng Đấu:</label>
+                    <input type="text" id="create-room-name" class="form-input" placeholder="Ví dụ: Sàn đấu bạn bè">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Mã Phòng (Để trống để tự tạo mã ngẫu nhiên):</label>
+                    <input type="text" id="create-room-code" class="form-input" placeholder="Ví dụ: VIP88" maxlength="10">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Chủ Đề Ô Chữ:</label>
+                    <select id="create-topic" class="form-select">
+                        <option value="ALL">Tất cả chủ đề (Ngẫu nhiên)</option>
+                        <option value="IT">Công nghệ thông tin & Mạng máy tính</option>
+                        <option value="GEOGRAPHY">Danh lam thắng cảnh & Du lịch Việt Nam</option>
+                        <option value="PROVERBS">Ca dao & Tục ngữ Việt Nam</option>
+                        <option value="GENERAL">Gameshow & Văn hóa đại chúng</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Thời Gian Mỗi Lượt Đoán:</label>
+                    <select id="create-time-limit" class="form-select">
+                        <option value="10">10 Giây</option>
+                        <option value="15">15 Giây</option>
+                        <option value="20">20 Giây</option>
+                    </select>
+                </div>
+
+                <div class="modal-actions">
+                    <button id="btn-cancel-modal" class="btn-action" style="background:#334155; border-color:#475569;">Hủy</button>
+                    <button id="btn-submit-create-room" class="btn-action btn-create-room">Tạo Phòng Ngay</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="wheel.js"></script>
+</body>
+</html>

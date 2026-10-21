@@ -1,0 +1,11 @@
+# Môi trường và thông tin bảo mật
+.env
+
+# Thư mục build Java
+bin/
+out/
+*.class
+
+# Dữ liệu người dùng cục bộ
+data/
+*.db

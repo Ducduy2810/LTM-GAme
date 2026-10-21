@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đấu Trường 100 - Gameshow VTV3</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="arena_theme.css">
+</head>
+<body>
+    <div class="arena-app">
+        <!-- 1. HEADER TRUYỀN HÌNH & HUD (Chỉ hiển thị khi đang trong game) -->
+        <header class="arena-header" id="arena-header" style="display: none;">
+            <div class="arena-logo">
+                <div class="arena-logo-badge">100</div>
+                <div class="arena-logo-text">ĐẤU TRƯỜNG 100</div>
+            </div>
+            <div class="arena-hud">
+                <div class="hud-stat survivors">
+                    <span>👥 Đối thủ còn:</span>
+                    <strong id="survivor-hud">0</strong>
+                </div>
+                <div class="hud-stat eliminated">
+                    <span>❌ Đã loại:</span>
+                    <strong id="eliminated-hud">0</strong>
+                </div>
+                <div class="hud-stat" style="background: rgba(245,158,11,0.2); border-color: #f59e0b;">
+                    <span>🏆 Điểm:</span>
+                    <strong id="score-hud">0</strong>
+                </div>
+                <button class="sound-toggle-btn" id="btn-sound" title="Bật/Tắt âm thanh">🔊</button>
+            </div>
+        </header>
+
+        <!-- 2. KHÁN ĐÀI 100 ĐẤU THỦ -->
+        <div class="podiums-container" id="podiums-container" style="display:none;">
+            <div class="podiums-header">
+                <span>🏟️ Khán Đài Sàn Đấu 100 Người</span>
+                <span id="player-room-status">Đang kết nối...</span>
+            </div>
+            <div class="podiums-grid" id="podiums-grid">
+                <!-- 100 bục thi đấu sinh động sẽ được sinh tự động tại đây -->
+            </div>
+        </div>
+
+        <!-- 3. KHUNG TRÌNH DIỄN CHÍNH -->
+        <main class="stage-card">
+
+            <!-- MÀN HÌNH 0: SẢNH CHỌN PHÒNG -->
+            <div id="lobby-screen" class="screen active">
+                <div class="lobby-header-bar">
+                    <div>
+                        <h2 style="color: #fde047; margin: 0; text-transform: uppercase; letter-spacing: 1px;">Sảnh Danh Sách Phòng</h2>
+                        <p style="color: #94a3b8; font-size: 13px; margin: 4px 0 0 0;">Chọn phòng có sẵn hoặc tự tạo phòng thi đấu riêng</p>
+                    </div>
+                    <div class="lobby-actions">
+                        <button class="btn-gold-action" id="btn-open-create-modal">➕ Tạo Phòng Mới</button>
+                        <input type="text" id="input-join-code" class="input-room-code" placeholder="MÃ PHÒNG..." maxlength="10">
+                        <button class="btn-primary-action" id="btn-join-code">🚀 Vào</button>
+                        <button class="sound-toggle-btn" id="btn-refresh-rooms" title="Làm mới danh sách">🔄</button>
+                    </div>
+                </div>
+
+                <!-- Danh sách phòng -->
+                <div class="rooms-grid" id="rooms-list-container">
+                    <p style="color: #94a3b8; grid-column: 1/-1; text-align: center; padding: 30px;">⏳ Đang tải danh sách phòng đấu trường...</p>
+                </div>
+
+                <!-- BẢNG XẾP HẠNG -->
+                <div id="leaderboard-panel" style="margin-top: 18px; background: rgba(0,0,0,0.35); border: 1px solid rgba(245,158,11,0.3); border-radius: 14px; padding: 16px;">
+                    <h3 style="color: #fde047; margin: 0 0 10px 0; font-size: 15px; text-transform: uppercase; letter-spacing: 1px;">🏆 Bảng Xếp Hạng Toàn Cầu</h3>
+                    <div style="overflow-x: auto;">
+                        <table id="leaderboard-table" style="width:100%; border-collapse: collapse; font-size: 13px; color: #e2e8f0;">
+                            <thead>
+                                <tr style="color: #94a3b8; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                    <th style="padding:6px 8px; text-align:left;">#</th>
+                                    <th style="padding:6px 8px; text-align:left;">Người Chơi</th>
+                                    <th style="padding:6px 8px; text-align:center;">Điểm</th>
+                                    <th style="padding:6px 8px; text-align:center;">Thắng</th>
+                                    <th style="padding:6px 8px; text-align:center;">Trận</th>
+                                    <th style="padding:6px 8px; text-align:center;">Loại</th>
+                                </tr>
+                            </thead>
+                            <tbody id="leaderboard-body">
+                                <tr><td colspan="6" style="text-align:center; color:#64748b; padding:12px;">Chưa có dữ liệu xếp hạng</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 15px;">
+                    <a href="index.html" style="color: #64748b; text-decoration: none; font-size: 14px;">⬅ Về sảnh chính (Game Portal)</a>
+                </div>
+            </div>
+
+            <!-- MÀN HÌNH 1: PHÒNG CHỜ -->
+            <div id="waiting-screen" class="screen">
+                <div class="waiting-box">
+                    <!-- Dải tóm tắt cấu hình phòng -->
+                    <div class="room-info-strip">
+                        <div class="room-info-details">
+                            <span class="room-code-badge" id="room-code-badge">DT100</span>
+                            <strong id="room-name-display" style="color: #f8fafc; font-size: 16px;">Sàn Đấu VTV3</strong>
+                            <span id="room-settings-summary" style="color: #38bdf8; font-size: 13px;"></span>
+                        </div>
+                        <button class="btn-join-card" id="btn-copy-code" style="background:#334155; border-color:#64748b;">📋 Sao chép mã</button>
+                    </div>
+
+                    <!-- Thông tin vai trò -->
+                    <div id="role-badge-waiting" style="margin: 8px 0; padding: 6px 14px; border-radius: 20px; background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.4); color:#93c5fd; font-size:13px; font-weight:600; display:none;"></div>
+
+                    <div class="room-counter-circle">
+                        <span class="num" id="player-count">0</span>
+                        <span class="label">Đấu thủ</span>
+                    </div>
+
+                    <p style="color: #94a3b8; font-size: 14px; margin: 0;">Danh sách đấu thủ đang có mặt trên sàn đấu:</p>
+                    <div class="player-chips-list" id="player-list"></div>
+
+                    <p id="waiting-msg" style="color: #facc15; font-style: italic; margin-top: 10px; font-weight: 600;">Đang kết nối vào trường quay...</p>
+                    
+                    <div style="display: flex; gap: 15px; justify-content: center; align-items: center; flex-wrap: wrap; margin-top: 15px;">
+                        <button id="btn-toggle-ready" class="btn-ready-toggle">✅ SẴN SÀNG</button>
+                        <button id="btn-start" class="btn-gameshow" style="display:none; margin: 0;">👑 Bắt đầu Trận Đấu</button>
+                    </div>
+                    
+                    <div style="margin-top: 25px;">
+                        <button id="btn-leave-room" style="background:none; border:none; color: #ef4444; cursor: pointer; font-size: 14px; font-weight: 700; text-decoration: underline;">⬅ Rời phòng (Về danh sách phòng)</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MÀN HÌNH 2: CÂU HỎI TRƯỜNG QUAY -->
+            <div id="game-screen" class="screen">
+                    <div class="game-hud-bar">
+                    <div class="player-status-badge alive" id="my-status">Trạng thái: CÒN SỐNG</div>
+                    
+                    <!-- Đồng hồ đếm ngược vòng tròn -->
+                    <div class="timer-dial" id="timer-dial">
+                        <svg class="timer-svg" viewBox="0 0 80 80">
+                            <circle class="timer-circle-bg" cx="40" cy="40" r="35"></circle>
+                            <circle class="timer-circle-progress" id="timer-progress" cx="40" cy="40" r="35"></circle>
+                        </svg>
+                        <span class="timer-number" id="time-left">10</span>
+                    </div>
+
+                    <!-- Vai trò trong trận -->
+                    <div id="role-badge-game" style="font-size:12px; font-weight:700; padding: 4px 12px; border-radius:20px; background: rgba(0,0,0,0.4);"></div>
+                    
+                    <!-- YÊU CẦU 5: Nút tạm dừng/tiếp tục (chỉ cho host/admin) -->
+                    <div id="pause-controls" style="display:none; margin-left: auto;">
+                        <button id="btn-pause-game" class="sound-toggle-btn" title="Tạm dừng trận đấu" style="background: rgba(239, 68, 68, 0.3); border-color: #ef4444;">⏸️</button>
+                        <button id="btn-resume-game" class="sound-toggle-btn" title="Tiếp tục trận đấu" style="display:none; background: rgba(34, 197, 94, 0.3); border-color: #22c55e;">▶️</button>
+                    </div>
+                </div>
+
+                <!-- Bảng câu hỏi -->
+                <div class="question-frame">
+                    <div class="question-badge" id="question-badge">CÂU HỎI SỐ 01</div>
+                    <h2 class="question-title" id="question-text">Đang tải câu hỏi...</h2>
+                </div>
+
+                <!-- 4 Đáp án A, B, C, D -->
+                <div class="answers-grid" id="options-container"></div>
+                
+                <!-- BA QUYỀN TRỢ GIÚP (chỉ hiển thị cho Người Chơi Chính) -->
+                <div id="lifelines-panel" style="display:none; margin-top:16px; background:rgba(0,0,0,0.3); border:1px solid rgba(245,158,11,0.3); border-radius:12px; padding:12px;">
+                    <div style="color:#fde047; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">⚡ Quyền Trợ Giúp (mỗi quyền dùng 1 lần)</div>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
+                        <button id="btn-life-trust" class="lifeline-btn" title="Xem đáp án của 1 đối thủ ngẫu nhiên">
+                            👁 Tin Người Chơi
+                        </button>
+                        <button id="btn-life-ask" class="lifeline-btn" title="Chọn 1 đối thủ cụ thể để hỏi đáp án">
+                            🙋 Hỏi Người Chơi
+                        </button>
+                        <button id="btn-life-survey" class="lifeline-btn" title="Xem % phân bố đáp án của toàn bộ đối thủ">
+                            📊 Khảo Sát Người Chơi
+                        </button>
+                    </div>
+                    <!-- Hiển thị kết quả trợ giúp -->
+                    <div id="lifeline-result" style="display:none; margin-top:12px; padding:10px; background:rgba(59,130,246,0.15); border:1px solid rgba(59,130,246,0.4); border-radius:8px; font-size:14px; color:#93c5fd;"></div>
+                </div>
+
+                <p id="feedback-msg" class="feedback" style="margin-top: 20px; font-weight: 600;"></p>
+                
+                <!-- Nút rời phòng (luôn hiển thị) -->
+                <div style="text-align: center; margin-top: 20px;">
+                    <button id="btn-leave-game-ingame" style="background: rgba(239, 68, 68, 0.8); border: 1px solid #ef4444; color: white; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 14px;">🚪 Rời Phòng</button>
+                </div>
+            </div>
+
+            <!-- MÀN HÌNH 3: KẾT QUẢ VÒNG THI -->
+            <div id="result-screen" class="screen">
+                <div class="result-banner">
+                    <h2 style="color: #facc15; margin: 0; text-transform: uppercase;">Kết Quả Vòng Thi</h2>
+                    <p id="result-info" style="font-size: 1.25rem; font-weight: 700; margin: 12px 0 0 0;"></p>
+                </div>
+
+                <div class="result-stat-row">
+                    <div class="result-card">
+                        <div style="color: #94a3b8; font-size: 13px; font-weight: 600; text-transform: uppercase;">Đối thủ còn lại</div>
+                        <div class="big-num" style="color: #10b981;" id="survivor-count">0</div>
+                    </div>
+                    <div class="result-card">
+                        <div style="color: #94a3b8; font-size: 13px; font-weight: 600; text-transform: uppercase;">Vừa bị loại</div>
+                        <div class="big-num" style="color: #ef4444;" id="eliminated-round-count">0</div>
+                    </div>
+                    <div class="result-card">
+                        <div style="color: #94a3b8; font-size: 13px; font-weight: 600; text-transform: uppercase;">Điểm hiện tại</div>
+                        <div class="big-num" style="color: #f59e0b;" id="current-score-result">0</div>
+                    </div>
+                </div>
+
+                <div id="main-player-result-badge" style="display:none; margin: 12px auto; padding:8px 18px; border-radius: 20px; font-size:13px; font-weight:700; text-align:center;"></div>
+
+                <div style="margin-top: 12px; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 10px; font-size: 14px;">
+                    <span style="color: #ef4444; font-weight: 700;">Danh sách bị loại vòng này:</span>
+                    <span id="eliminated-list" style="color: #cbd5e1; margin-left: 8px;"></span>
+                </div>
+
+                <p style="margin-top: 25px; color: #38bdf8; font-style: italic; font-weight: 600;">⏳ Chuẩn bị câu hỏi tiếp theo...</p>
+                
+                <!-- Nút rời phòng (luôn hiển thị) -->
+                <div style="text-align: center; margin-top: 20px;">
+                    <button id="btn-leave-result-ingame" style="background: rgba(239, 68, 68, 0.8); border: 1px solid #ef4444; color: white; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 14px;">🚪 Rời Phòng</button>
+                </div>
+            </div>
+
+            <!-- MÀN HÌNH 4: KẾT THÚC GAME -->
+            <div id="end-screen" class="screen">
+                <div class="trophy-glow" id="end-trophy">🏆</div>
+                <h2 id="end-title" style="color: #f59e0b; text-transform: uppercase; margin: 10px 0 5px 0;">Trận Đấu Kết Thúc</h2>
+                <h4 id="end-reason" style="color: #94a3b8; font-weight: 600; margin: 0 0 20px 0;"></h4>
+                
+                <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--neon-gold); border-radius: 16px; padding: 20px; margin-bottom: 16px;">
+                    <div style="font-size: 13px; color: #facc15; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">Người Chơi Chính</div>
+                    <div class="winner-champion-name" id="end-main-player">—</div>
+                    <div style="margin-top:8px; display:flex; gap:20px; justify-content:center; flex-wrap:wrap;">
+                        <div style="text-align:center;">
+                            <div style="color:#94a3b8; font-size:12px;">Đã loại</div>
+                            <div style="color:#ef4444; font-size:24px; font-weight:900;" id="end-eliminated">0</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="color:#94a3b8; font-size:12px;">Tổng đối thủ</div>
+                            <div style="color:#f59e0b; font-size:24px; font-weight:900;" id="end-total">0</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="color:#94a3b8; font-size:12px;">Điểm đạt được</div>
+                            <div style="color:#10b981; font-size:24px; font-weight:900;" id="end-score">0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mini bảng xếp hạng sau trận -->
+                <div id="end-leaderboard-panel" style="background: rgba(0,0,0,0.25); border: 1px solid rgba(245,158,11,0.2); border-radius: 12px; padding: 14px; margin-bottom: 16px; display:none;">
+                    <div style="color:#fde047; font-size:13px; font-weight:700; text-transform:uppercase; margin-bottom:8px;">🏆 Bảng Xếp Hạng Top 10</div>
+                    <div id="end-leaderboard-body"></div>
+                </div>
+
+                <button class="btn-gameshow" id="btn-back-to-room">Về Phòng Chờ</button>
+                <div style="margin-top: 20px;">
+                    <button id="btn-end-leave" style="background:none; border:none; color: #94a3b8; cursor: pointer; text-decoration: underline;">⬅ Rời phòng về sảnh</button>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- MODAL TẠO PHÒNG MỚI -->
+    <div class="modal-overlay" id="modal-create-room">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">⚙️ Thiết Lập Phòng Đấu Trường</h3>
+                <button id="btn-close-modal" style="background:none; border:none; color:#cbd5e1; font-size:24px; cursor:pointer;">&times;</button>
+            </div>
+
+            <form id="form-create-room" onsubmit="return false;">
+                <div class="form-group">
+                    <label>Tên phòng thi đấu:</label>
+                    <input type="text" id="create-room-name" class="form-control" placeholder="Nhập tên phòng..." required>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Mã phòng (Tùy chọn):</label>
+                        <input type="text" id="create-room-code" class="form-control" placeholder="Tự sinh nếu để trống" maxlength="10">
+                    </div>
+                    <div class="form-group">
+                        <label>Số Bot đối thủ (0–100):</label>
+                        <input type="number" id="create-bot-count" class="form-control" min="0" max="100" value="9" placeholder="Số bot đối thủ">
+                        <small style="color:#64748b; font-size:11px;">0 = chỉ người thật; 100 = 1 người 100 bot</small>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Chủ đề câu hỏi:</label>
+                        <select id="create-topic" class="form-control">
+                            <option value="ALL" selected>Tổng Hợp Gameshow ĐT100</option>
+                            <option value="MIX">🔀 Xáo Trộn Tất Cả Chủ Đề</option>
+                            <option value="NETWORKING">Lập Trình &amp; Mạng Máy Tính</option>
+                            <option value="SCIENCE">Khoa Học &amp; Đời Sống</option>
+                            <option value="HISTORY">Lịch Sử, Văn Hóa &amp; Địa Lý</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Độ khó:</label>
+                        <select id="create-difficulty" class="form-control">
+                            <option value="MIX" selected>🔀 Tăng Dần (Dễ → Khó)</option>
+                            <option value="EASY">Dễ (Bot đúng ~75%)</option>
+                            <option value="MEDIUM">Trung Bình (Bot đúng ~55%)</option>
+                            <option value="HARD">Khó – Bot đúng ~35%</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Số lượng câu hỏi:</label>
+                        <select id="create-question-count" class="form-control">
+                            <option value="5">5 Câu</option>
+                            <option value="10" selected>10 Câu</option>
+                            <option value="15">15 Câu</option>
+                            <option value="20">20 Câu</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Thời gian mỗi câu:</label>
+                        <select id="create-time-limit" class="form-control">
+                            <option value="5">5 Giây (Chớp nhoáng)</option>
+                            <option value="7">7 Giây</option>
+                            <option value="10" selected>10 Giây (Chuẩn VTV3)</option>
+                            <option value="15">15 Giây</option>
+                            <option value="20">20 Giây</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn-primary-action" id="btn-cancel-modal" style="background:#334155; border-color:#475569;">Hủy</button>
+                    <button type="submit" class="btn-gold-action" id="btn-submit-create-room">🚀 Tạo Phòng &amp; Vào Ngay</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL HỎI NGƯỜI CHƠI (chọn username) -->
+    <div class="modal-overlay" id="modal-ask-player">
+        <div class="modal-content" style="max-width:380px;">
+            <div class="modal-header">
+                <h3 class="modal-title">🙋 Hỏi Người Chơi</h3>
+                <button id="btn-close-ask-modal" style="background:none; border:none; color:#cbd5e1; font-size:24px; cursor:pointer;">&times;</button>
+            </div>
+            <p style="color:#94a3b8; font-size:13px; margin:0 0 12px 0;">Chọn 1 đối thủ để tham khảo đáp án của họ:</p>
+            <div id="ask-player-list" style="display:flex; flex-direction:column; gap:8px; max-height:200px; overflow-y:auto;"></div>
+        </div>
+    </div>
+
+    <script src="arena_sound.js"></script>
+    <script src="arena.js"></script>
+</body>
+</html>

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Khôi Phục Mật Khẩu - Java Backend</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; text-align: center; margin: 0;}
+        .container { background: #1e293b; padding: 30px; border-radius: 10px; width: 400px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        input { width: 85%; padding: 12px; margin: 10px 0; border-radius: 5px; border: none; font-size: 16px; background:#334155; color:white;}
+        input:focus { outline: 2px solid #3b82f6;}
+        button { width: 92%; padding: 14px; margin: 10px 0; background: #10b981; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; transition: 0.3s;}
+        button:hover { background: #059669; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 style="color:#facc15; margin-top:0;">🔑 Đặt Lại Mật Khẩu</h2>
+        <p id="msg" style="color:#ef4444; font-size:0.9em; min-height: 1.2em;"></p>
+        
+        <input type="password" id="new-password" placeholder="Nhập mật khẩu mới">
+        <button id="btn-reset">Cập Nhật Mật Khẩu</button>
+        <br><br><a href="/" style="color:#60a5fa; text-decoration:none;">⬅ Quay lại Trang Chủ</a>
+    </div>
+    
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+
+        document.getElementById('btn-reset').onclick = async () => {
+            const newPassword = document.getElementById('new-password').value;
+            if (!newPassword || !token) {
+                document.getElementById('msg').innerText = "Vui lòng nhập mật khẩu mới (hoặc đường link không hợp lệ).";
+                return;
+            }
+
+            try {
+                const res = await fetch('/auth/reset', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token, newPassword })
+                });
+                const data = await res.json();
+                
+                const msgBox = document.getElementById('msg');
+                msgBox.innerText = data.message || data.error;
+                msgBox.style.color = data.success ? '#10b981' : '#ef4444';
+                
+                if(data.success) {
+                    setTimeout(() => window.location.href = '/', 1800);
+                }
+            } catch (e) {
+                document.getElementById('msg').innerText = "Lỗi kết nối máy chủ!";
+            }
+        };
+    </script>
+</body>
+</html>
