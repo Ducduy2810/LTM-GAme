@@ -8,9 +8,11 @@ import vn.game.util.JsonUtil;
 
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class WheelRoom {
 
+    // ─── 1. NGƯỜI CHƠI THẬT ──────────────────────────────────────────────────
     public static class WheelPlayerState {
         public final WebSocketClient client;
         public final String username;
@@ -30,37 +32,120 @@ public class WheelRoom {
             map.put("isReady", isReady);
             map.put("isHost", isHost);
             map.put("isSuperAdmin", isSuperAdmin);
+            map.put("isBot", false);
             return map;
         }
     }
 
+    // ─── 2. BOT PLAYER ───────────────────────────────────────────────────────
+    public static class BotPlayer {
+        public final String username;
+        public int score = 0;
+        private static final Random RNG = new Random();
+        private final double skill; // 0.0 (ngu) → 1.0 (giỏi)
+
+        private static final AtomicInteger BOT_COUNTER = new AtomicInteger(1);
+
+        public BotPlayer(double skill) {
+            this.username = "Bot_" + BOT_COUNTER.getAndIncrement();
+            this.skill = Math.max(0.0, Math.min(1.0, skill));
+        }
+
+        /** Chọn chữ cái để đoán: skill cao → ưu tiên chữ có trong câu */
+        public char pickLetter(Set<Character> revealed, String phrase) {
+            List<Character> inPhrase = new ArrayList<>();
+            for (char c = 'A'; c <= 'Z'; c++) {
+                if (!revealed.contains(c) && phrase.indexOf(c) >= 0) inPhrase.add(c);
+            }
+            if (!inPhrase.isEmpty() && RNG.nextDouble() < (0.3 + skill * 0.6)) {
+                // Ưu tiên chữ xuất hiện nhiều nhất
+                char best = inPhrase.get(0);
+                int bestCount = 0;
+                for (char c : inPhrase) {
+                    int cnt = 0;
+                    for (char p : phrase.toCharArray()) if (p == c) cnt++;
+                    if (cnt > bestCount) { bestCount = cnt; best = c; }
+                }
+                return best;
+            }
+            // Ngẫu nhiên từ chưa lật
+            List<Character> pool = new ArrayList<>();
+            for (char c = 'A'; c <= 'Z'; c++) if (!revealed.contains(c)) pool.add(c);
+            if (pool.isEmpty()) return 'A';
+            return pool.get(RNG.nextInt(pool.size()));
+        }
+
+        /** Thử đoán cả câu; null = không thử lượt này */
+        public String trySolve(String phrase, Set<Character> revealed) {
+            long unknown = phrase.chars()
+                    .filter(c -> c >= 'A' && c <= 'Z' && !revealed.contains((char) c))
+                    .distinct().count();
+            if (unknown > skill * 3) return null;  // Còn quá nhiều ẩn
+            if (RNG.nextDouble() > (0.25 + skill * 0.55)) return null;
+            return phrase; // Bot biết đáp án
+        }
+
+        public Map<String, Object> toMap(boolean isHost, boolean isSuperAdmin) {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", "bot-" + username);
+            map.put("username", username);
+            map.put("score", score);
+            map.put("isReady", true);
+            map.put("isHost", isHost);
+            map.put("isSuperAdmin", isSuperAdmin);
+            map.put("isBot", true);
+            return map;
+        }
+    }
+
+    // ─── 3. PLAYER SLOT (thống nhất người thật + bot) ────────────────────────
+    public static class PlayerSlot {
+        public final WheelPlayerState real; // null nếu là bot
+        public final BotPlayer bot;          // null nếu là người thật
+
+        public PlayerSlot(WheelPlayerState real) { this.real = real; this.bot = null; }
+        public PlayerSlot(BotPlayer bot)          { this.real = null; this.bot = bot; }
+
+        public boolean isBot()           { return bot != null; }
+        public String getUsername()      { return isBot() ? bot.username : real.username; }
+        public int getScore()            { return isBot() ? bot.score : real.score; }
+        public void addScore(int pts)    { if (isBot()) bot.score += pts; else real.score += pts; }
+        public boolean isReady()         { return isBot() || real.isReady; }
+
+        public Map<String, Object> toMap(boolean isHost, boolean isSuperAdmin) {
+            return isBot() ? bot.toMap(isHost, isSuperAdmin)
+                           : real.toMap(isHost, isSuperAdmin);
+        }
+    }
+
+    // ─── 4. TRẠNG THÁI PHÒNG ────────────────────────────────────────────────
     private final String roomCode;
     private final String roomName;
     private volatile String hostUsername;
     private final String topic;
-    private final int timeLimit; // giây mỗi lượt
+    private final int timeLimit;
     private static final int MAX_PLAYERS = 4;
 
     private final UserRepository userRepository;
     private final ScheduledExecutorService scheduler;
     private final Random random = new Random();
 
-    // Danh sách người chơi trong phòng (tối đa 4 người)
+    // Người thật: WebSocketClient → WheelPlayerState
     private final Map<WebSocketClient, WheelPlayerState> players = new ConcurrentHashMap<>();
-    private final List<WheelPlayerState> orderedPlayers = new CopyOnWriteArrayList<>();
+    // Thứ tự lượt đấu (người thật + bot)
+    private final List<PlayerSlot> orderedPlayers = new CopyOnWriteArrayList<>();
 
-    private volatile String gameState = "WAITING"; // WAITING, PLAYING, END
+    private volatile String gameState = "WAITING";
     private volatile int turnIndex = 0;
-    private volatile String currentAction = "SPIN"; // SPIN, GUESS, WAIT
+    private volatile String currentAction = "SPIN";
     private volatile Object currentSpinValue = 0;
     private volatile WheelPhrase currentPhrase;
     private final Set<Character> revealedLetters = Collections.synchronizedSet(new HashSet<>());
     private ScheduledFuture<?> turnTimer = null;
 
-    // Các ô trên nón kỳ diệu với tỉ lệ:
-    // Xanh dương 100đ: 50% | Vàng 200đ: 25% | Đỏ 500đ: 15% | Đen 1000đ: 7% | Tím 2000đ: 3%
-    private static final int[]  WHEEL_VALUES  = {  100,  200,  500,  1000,  2000 };
-    private static final int[]  WHEEL_WEIGHTS = {   50,   25,   15,     7,     3 };
+    // ─── 5. VÒNG QUAY ────────────────────────────────────────────────────────
+    private static final int[] WHEEL_VALUES  = { 100, 200, 500, 1000, 2000 };
+    private static final int[] WHEEL_WEIGHTS = {  50,  25,  15,    7,    3 };
 
     private int spinWeighted() {
         int roll = random.nextInt(100);
@@ -72,39 +157,41 @@ public class WheelRoom {
         return WHEEL_VALUES[0];
     }
 
+    // ─── 6. CONSTRUCTOR ──────────────────────────────────────────────────────
     public WheelRoom(String roomCode, String roomName, String hostUsername,
                      String topic, int timeLimit,
                      UserRepository userRepository, ScheduledExecutorService scheduler) {
-        this.roomCode = roomCode;
-        this.roomName = (roomName != null && !roomName.trim().isEmpty()) ? roomName.trim() : ("Phòng " + roomCode);
+        this.roomCode  = roomCode;
+        this.roomName  = (roomName != null && !roomName.trim().isEmpty()) ? roomName.trim() : ("Phòng " + roomCode);
         this.hostUsername = hostUsername;
-        this.topic = (topic != null) ? topic : "ALL";
+        this.topic     = (topic != null) ? topic : "ALL";
         this.timeLimit = (timeLimit >= 5) ? timeLimit : 10;
         this.userRepository = userRepository;
         this.scheduler = scheduler;
         this.currentPhrase = WheelPhraseBank.getRandomPhrase(this.topic);
     }
 
-    public String getRoomCode() { return roomCode; }
-    public String getRoomName() { return roomName; }
+    // ─── 7. GETTERS ──────────────────────────────────────────────────────────
+    public String getRoomCode()   { return roomCode; }
+    public String getRoomName()   { return roomName; }
+    public String getTopic()      { return topic; }
+    public int getTimeLimit()     { return timeLimit; }
+    public String getGameState()  { return gameState; }
+    public int getPlayerCount()   { return players.size(); }
+    public int getMaxPlayers()    { return MAX_PLAYERS; }
     public String getHostUsername() { return getEffectiveHostUsername(); }
-    public String getTopic() { return topic; }
-    public int getTimeLimit() { return timeLimit; }
-    public String getGameState() { return gameState; }
-    public int getPlayerCount() { return players.size(); }
-    public int getMaxPlayers() { return MAX_PLAYERS; }
 
     public boolean isHostPresent() {
         if (hostUsername == null) return false;
-        for (WheelPlayerState p : orderedPlayers) {
-            if (hostUsername.equalsIgnoreCase(p.username)) return true;
+        for (PlayerSlot s : orderedPlayers) {
+            if (!s.isBot() && hostUsername.equalsIgnoreCase(s.getUsername())) return true;
         }
         return false;
     }
 
     public String getEffectiveHostUsername() {
         if (isHostPresent()) return hostUsername;
-        if (!orderedPlayers.isEmpty()) return orderedPlayers.get(0).username;
+        for (PlayerSlot s : orderedPlayers) if (!s.isBot()) return s.getUsername();
         return hostUsername;
     }
 
@@ -138,167 +225,158 @@ public class WheelRoom {
         return map;
     }
 
+    // ─── 8. THAM GIA / RỜI PHÒNG ────────────────────────────────────────────
     public synchronized boolean addPlayer(WebSocketClient client) {
         String username = client.getUsername();
         if (username == null) return false;
 
-        // Kiểm tra đang trong trận đấu: chỉ cho phép reconnect, không cho người mới vào
-        boolean isReconnecting = false;
-        for (WheelPlayerState ps : players.values()) {
-            if (username.equalsIgnoreCase(ps.username)) {
-                isReconnecting = true;
-                break;
-            }
-        }
+        // Reconnect check
+        boolean isReconnecting = players.values().stream()
+                .anyMatch(p -> username.equalsIgnoreCase(p.username));
         if ("PLAYING".equals(gameState) && !isReconnecting) {
             sendError(client, "Trận đấu đang diễn ra! Không thể vào phòng lúc này.");
             return false;
         }
 
-        // Xóa kết nối cũ nếu cùng 1 username vào lại
         removePlayerByUsername(username, client);
 
         if (players.size() >= MAX_PLAYERS) {
-            sendError(client, "Phòng này đã đầy (Tối đa 4 người chơi)!");
+            sendError(client, "Phòng đã đầy (Tối đa 4 người)!");
             return false;
         }
 
         WheelPlayerState state = new WheelPlayerState(client, username);
-        
-        // Khôi phục quyền chủ phòng nếu đây là chủ phòng gốc
-        if (isHost(username) || isSuperAdmin(username)) {
-            state.isReady = true;
-        }
+        if (isHost(username) || isSuperAdmin(username)) state.isReady = true;
 
         players.put(client, state);
-        orderedPlayers.add(state);
+        orderedPlayers.add(new PlayerSlot(state));
 
-        // Chỉ gán hostUsername lần đầu tiên
-        if (hostUsername == null || hostUsername.isEmpty()) {
-            hostUsername = username;
-        }
+        if (hostUsername == null || hostUsername.isEmpty()) hostUsername = username;
 
         sendRoomInfo(client);
         broadcastPlayers();
         broadcastChat("👋 [" + username + "] đã tham gia phòng.");
 
-        if ("PLAYING".equals(gameState)) {
-            sendState(client);
-        }
-
+        if ("PLAYING".equals(gameState)) sendState(client);
         return true;
     }
 
     private void removePlayerByUsername(String username, WebSocketClient newClient) {
-        for (Map.Entry<WebSocketClient, WheelPlayerState> entry : players.entrySet()) {
+        Iterator<Map.Entry<WebSocketClient, WheelPlayerState>> it = players.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<WebSocketClient, WheelPlayerState> entry = it.next();
             if (entry.getValue().username.equalsIgnoreCase(username)) {
-                WebSocketClient oldClient = entry.getKey();
-                if (!oldClient.equals(newClient)) {
-                    oldClient.close();
-                }
-                players.remove(oldClient);
-                orderedPlayers.remove(entry.getValue());
+                WebSocketClient old = entry.getKey();
+                if (!old.equals(newClient)) old.close();
+                it.remove();
+                orderedPlayers.removeIf(s -> !s.isBot() && s.real == entry.getValue());
             }
         }
     }
 
     public synchronized void removePlayer(WebSocketClient client) {
         WheelPlayerState removed = players.remove(client);
-        if (removed != null) {
-            int removeIdx = orderedPlayers.indexOf(removed);
-            String removedUsername = removed.username;
-            boolean wasHost = isHost(removedUsername);
-            
-            orderedPlayers.remove(removed);
-            broadcastChat("🚪 [" + removedUsername + "] đã rời phòng.");
+        if (removed == null) return;
 
-            if (players.isEmpty()) {
-                gameState = "WAITING";
-                cancelTimer();
-                return;
-            }
+        int removeIdx = -1;
+        for (int i = 0; i < orderedPlayers.size(); i++) {
+            PlayerSlot s = orderedPlayers.get(i);
+            if (!s.isBot() && s.real == removed) { removeIdx = i; break; }
+        }
+        if (removeIdx >= 0) orderedPlayers.remove(removeIdx);
 
-            // Nếu Chủ phòng rời đi, chuyển quyền cho người tiếp theo
-            if (wasHost && !orderedPlayers.isEmpty()) {
-                WheelPlayerState tempHost = orderedPlayers.get(0);
-                tempHost.isReady = true;
-                hostUsername = tempHost.username;
-                broadcastChat("👑 [" + tempHost.username + "] đã trở thành Chủ phòng mới.");
-                broadcastRoomInfoToAll();
-            }
+        String removedUsername = removed.username;
+        boolean wasHost = isHost(removedUsername);
+        broadcastChat("🚪 [" + removedUsername + "] đã rời phòng.");
 
-            // Nếu đang trong trận đấu mà người đến lượt rời đi -> chuyển lượt ngay
-            if ("PLAYING".equals(gameState)) {
-                if (removeIdx != -1) {
-                    if (removeIdx < turnIndex) {
-                        turnIndex--;
-                    }
-                    if (removeIdx == turnIndex) {
-                        if (turnIndex >= orderedPlayers.size()) turnIndex = 0;
-                        currentAction = "SPIN";
-                        cancelTimer();
-                        broadcastState();
-                        startTurnTimer();
-                    }
+        if (players.isEmpty()) {
+            gameState = "WAITING";
+            cancelTimer();
+            orderedPlayers.clear(); // Xóa luôn bot
+            return;
+        }
+
+        if (wasHost) {
+            // Chuyển quyền cho người thật tiếp theo (không chuyển cho bot)
+            for (PlayerSlot s : orderedPlayers) {
+                if (!s.isBot()) {
+                    s.real.isReady = true;
+                    hostUsername = s.getUsername();
+                    broadcastChat("👑 [" + hostUsername + "] đã trở thành Chủ phòng mới.");
+                    broadcastRoomInfoToAll();
+                    break;
                 }
             }
-
-            broadcastPlayers();
         }
+
+        if ("PLAYING".equals(gameState)) {
+            if (removeIdx >= 0 && removeIdx < turnIndex) turnIndex--;
+            if (turnIndex >= orderedPlayers.size()) turnIndex = 0;
+            if (removeIdx == turnIndex || orderedPlayers.isEmpty()) {
+                currentAction = "SPIN";
+                cancelTimer();
+                if (!orderedPlayers.isEmpty()) {
+                    broadcastState();
+                    scheduleCurrentTurn();
+                }
+            }
+        }
+        broadcastPlayers();
     }
 
     public synchronized void toggleReady(WebSocketClient client) {
         WheelPlayerState state = players.get(client);
         if (state == null) return;
-        if (!isHost(state.username)) {
-            state.isReady = !state.isReady;
-        }
+        if (!isHost(state.username)) state.isReady = !state.isReady;
         broadcastPlayers();
     }
 
+    // ─── 9. BẮT ĐẦU TRẬN ────────────────────────────────────────────────────
     public synchronized void handleStartGame(WebSocketClient client) {
         String username = client.getUsername();
         if (username == null) return;
-
         if (!canControl(username)) {
-            sendError(client, "Chỉ Chủ phòng mới có quyền bấm bắt đầu ván đấu!");
+            sendError(client, "Chỉ Chủ phòng mới có quyền bắt đầu ván đấu!");
             return;
         }
-
-        // Kiểm tra điều kiện bắt đầu
-        if (!isSuperAdmin(username) && orderedPlayers.size() > 1) {
-            boolean allReady = true;
-            for (WheelPlayerState p : orderedPlayers) {
+        if (!isSuperAdmin(username) && players.size() > 1) {
+            for (WheelPlayerState p : players.values()) {
                 if (!isHost(p.username) && !p.isReady) {
-                    allReady = false;
-                    break;
+                    sendError(client, "Vẫn còn người chơi chưa bấm Sẵn sàng!");
+                    return;
                 }
             }
-            if (!allReady) {
-                sendError(client, "Chưa thể bắt đầu! Vẫn còn người chơi chưa bấm 'Sẵn sàng'.");
-                return;
-            }
         }
-
-        if ("WAITING".equals(gameState) || "END".equals(gameState)) {
-            startGame();
-        }
+        if ("WAITING".equals(gameState) || "END".equals(gameState)) startGame();
     }
 
     private synchronized void startGame() {
         gameState = "PLAYING";
         turnIndex = 0;
         currentAction = "SPIN";
+        currentSpinValue = 0;
         revealedLetters.clear();
-
-        // Lấy ngẫu nhiên ô chữ mới từ ngân hàng câu hỏi theo chủ đề
         currentPhrase = WheelPhraseBank.getRandomPhrase(topic);
 
-        for (WheelPlayerState p : orderedPlayers) {
-            p.score = 0;
+        // Reset điểm tất cả người thật
+        for (PlayerSlot s : orderedPlayers) {
+            if (s.isBot()) s.bot.score = 0;
+            else s.real.score = 0;
         }
 
-        broadcastChat("🎬 Trò chơi bắt đầu! Chủ đề ô chữ: [" + WheelPhraseBank.getTopicDisplayName(currentPhrase.getTopic()) + "]");
+        // Thêm bot nếu tổng số slot < 2
+        // Xóa bot cũ trước
+        orderedPlayers.removeIf(PlayerSlot::isBot);
+        int realCount = players.size();
+        int botsNeeded = Math.max(0, 2 - realCount);
+        double[] skills = { 0.4, 0.65, 0.8 }; // Mỗi bot có skill khác nhau
+        for (int i = 0; i < botsNeeded && i < skills.length; i++) {
+            BotPlayer bot = new BotPlayer(skills[i]);
+            orderedPlayers.add(new PlayerSlot(bot));
+            broadcastChat("🤖 Bot [" + bot.username + "] đã tham gia để đủ người chơi!");
+        }
+
+        broadcastChat("🎬 Trò chơi bắt đầu! Chủ đề: [" + WheelPhraseBank.getTopicDisplayName(currentPhrase.getTopic()) + "]");
         broadcastChat("💡 Gợi ý: " + currentPhrase.getHint());
 
         Map<String, Object> startMsg = new HashMap<>();
@@ -311,31 +389,122 @@ public class WheelRoom {
         broadcast(startMsg);
 
         broadcastState();
-        startTurnTimer();
+        scheduleCurrentTurn();
     }
 
+    // ─── 10. ĐIỀU PHỐI LƯỢT ──────────────────────────────────────────────────
+    /**
+     * Kiểm tra lượt hiện tại: nếu là bot thì lên lịch hành động tự động,
+     * nếu là người thật thì bắt đầu đếm giờ bình thường.
+     */
+    private void scheduleCurrentTurn() {
+        if (orderedPlayers.isEmpty()) return;
+        if (turnIndex >= orderedPlayers.size()) turnIndex = 0;
+        PlayerSlot current = orderedPlayers.get(turnIndex);
+        if (current.isBot()) {
+            scheduleBotAction(current.bot);
+        } else {
+            startTurnTimer();
+        }
+    }
+
+    /** Lên lịch bot tự động hành động sau 1.5–2.5 giây (giống người thật) */
+    private void scheduleBotAction(BotPlayer bot) {
+        cancelTimer();
+        long delay = 1500 + random.nextInt(1000); // 1.5s – 2.5s
+        broadcastState();
+        turnTimer = scheduler.schedule(() -> {
+            synchronized (WheelRoom.this) {
+                if (!"PLAYING".equals(gameState)) return;
+                if (turnIndex >= orderedPlayers.size()) return;
+                PlayerSlot slot = orderedPlayers.get(turnIndex);
+                if (!slot.isBot() || slot.bot != bot) return;
+
+                if ("SPIN".equals(currentAction)) {
+                    doBotSpin(bot);
+                } else if ("GUESS".equals(currentAction)) {
+                    doBotGuess(bot);
+                }
+            }
+        }, delay, TimeUnit.MILLISECONDS);
+    }
+
+    private void doBotSpin(BotPlayer bot) {
+        int spinResult = spinWeighted();
+        Map<String, Object> spinAnim = new HashMap<>();
+        spinAnim.put("type", "wheel_spin_result");
+        spinAnim.put("username", bot.username);
+        spinAnim.put("result", spinResult);
+        broadcast(spinAnim);
+        broadcastChat("🎡 [" + bot.username + "] vừa quay vào ô: " + formatSpinName(spinResult));
+        currentSpinValue = spinResult;
+        currentAction = "GUESS";
+        // Sau khi spin, lên lịch bot đoán chữ
+        scheduleBotAction(bot);
+    }
+
+    private void doBotGuess(BotPlayer bot) {
+        String phrase = currentPhrase.getPhrase();
+        // Thử đoán cả câu trước
+        String solve = bot.trySolve(phrase, new HashSet<>(revealedLetters));
+        if (solve != null) {
+            broadcastChat("🤖 [" + bot.username + "] thử đoán cả câu: \"" + solve + "\"");
+            String target = normalizePhrase(phrase);
+            if (target.equalsIgnoreCase(normalizePhrase(solve))) {
+                bot.score += 1000;
+                for (char c : phrase.toCharArray()) if (c >= 'A' && c <= 'Z') revealedLetters.add(c);
+                endGame("🌟 Bot [" + bot.username + "] đã đoán trúng toàn bộ ô chữ! (+1000đ)");
+            } else {
+                broadcastChat("❌ Bot [" + bot.username + "] đoán sai câu! Mất lượt.");
+                nextTurn();
+            }
+            return;
+        }
+        // Đoán chữ cái
+        char letter = bot.pickLetter(new HashSet<>(revealedLetters), phrase);
+        if (revealedLetters.contains(letter)) {
+            broadcastChat("❌ Bot [" + bot.username + "] chọn chữ [" + letter + "] đã lật rồi! Mất lượt.");
+            nextTurn();
+            return;
+        }
+        int count = 0;
+        for (char c : phrase.toCharArray()) if (c == letter) count++;
+        if (count > 0) {
+            revealedLetters.add(letter);
+            int pts = ((Number) currentSpinValue).intValue() * count;
+            bot.score += pts;
+            broadcastChat("🤖 Bot [" + bot.username + "] đoán chữ [" + letter + "] — Có " + count + " chữ! +" + pts + " điểm.");
+            if (isPuzzleSolved()) {
+                endGame("🎉 Bot [" + bot.username + "] mở chữ cuối và giải xong ô chữ! 🏆");
+                return;
+            }
+            // Đúng → quay tiếp
+            currentAction = "SPIN";
+            scheduleBotAction(bot);
+        } else {
+            broadcastChat("🤖 Bot [" + bot.username + "] đoán chữ [" + letter + "] — Không có! Mất lượt.");
+            nextTurn();
+        }
+    }
+
+    // ─── 11. HÀNH ĐỘNG NGƯỜI THẬT ────────────────────────────────────────────
     public synchronized void handleSpin(WebSocketClient client) {
         if (!"PLAYING".equals(gameState) || orderedPlayers.isEmpty()) return;
         if (turnIndex >= orderedPlayers.size()) turnIndex = 0;
-
-        WheelPlayerState current = orderedPlayers.get(turnIndex);
-        if (!current.client.equals(client) || !"SPIN".equals(currentAction)) {
-            return;
-        }
+        PlayerSlot current = orderedPlayers.get(turnIndex);
+        if (current.isBot()) return;
+        if (!current.real.client.equals(client) || !"SPIN".equals(currentAction)) return;
 
         cancelTimer();
         int spinResult = spinWeighted();
 
-        // Phát thông báo quay nón kèm kết quả
         Map<String, Object> spinAnim = new HashMap<>();
         spinAnim.put("type", "wheel_spin_result");
-        spinAnim.put("username", current.username);
+        spinAnim.put("username", current.getUsername());
         spinAnim.put("result", spinResult);
         broadcast(spinAnim);
+        broadcastChat("🎡 [" + current.getUsername() + "] vừa quay vào ô: " + formatSpinName(spinResult));
 
-        broadcastChat("🎡 [" + current.username + "] vừa quay vào ô: " + formatSpinName(spinResult));
-
-        // Tất cả kết quả quay đều là điểm số (int), không còn ô đặc biệt
         currentSpinValue = spinResult;
         currentAction = "GUESS";
         broadcastState();
@@ -345,21 +514,18 @@ public class WheelRoom {
     public synchronized void handleGuess(WebSocketClient client, String letterStr) {
         if (!"PLAYING".equals(gameState) || orderedPlayers.isEmpty() || letterStr == null || letterStr.isEmpty()) return;
         if (turnIndex >= orderedPlayers.size()) turnIndex = 0;
-
-        WheelPlayerState current = orderedPlayers.get(turnIndex);
-        if (!current.client.equals(client) || !"GUESS".equals(currentAction)) return;
+        PlayerSlot current = orderedPlayers.get(turnIndex);
+        if (current.isBot()) return;
+        if (!current.real.client.equals(client) || !"GUESS".equals(currentAction)) return;
 
         char letter = Character.toUpperCase(letterStr.charAt(0));
-        if (letter < 'A' || letter > 'Z') {
-            sendError(client, "Vui lòng chỉ đoán các chữ cái từ A đến Z!");
-            return;
-        }
+        if (letter < 'A' || letter > 'Z') { sendError(client, "Chỉ đoán chữ A–Z!"); return; }
 
         cancelTimer();
 
         if (revealedLetters.contains(letter)) {
             currentAction = "WAIT";
-            broadcastChat("❌ Chữ cái [" + letter + "] đã được lật rồi. Rất tiếc bạn bị mất lượt!");
+            broadcastChat("❌ Chữ [" + letter + "] đã được lật! [" + current.getUsername() + "] mất lượt.");
             broadcastState();
             scheduler.schedule(this::nextTurn, 2, TimeUnit.SECONDS);
             return;
@@ -367,36 +533,30 @@ public class WheelRoom {
 
         String phrase = currentPhrase.getPhrase();
         int count = 0;
-        for (char c : phrase.toCharArray()) {
-            if (c == letter) count++;
-        }
+        for (char c : phrase.toCharArray()) if (c == letter) count++;
 
         if (count > 0) {
             revealedLetters.add(letter);
             int pts = ((Number) currentSpinValue).intValue() * count;
-            current.score += pts;
-            broadcastChat("✅ Chính xác! Có " + count + " chữ [" + letter + "]! [" + current.username + "] nhận +" + pts + " điểm.");
-
-            // Kiểm tra xem đã giải xong ô chữ chưa
+            current.addScore(pts);
+            broadcastChat("✅ Có " + count + " chữ [" + letter + "]! [" + current.getUsername() + "] +" + pts + " điểm.");
             if (isPuzzleSolved()) {
-                endGame("🎉 CHIẾN THẮNG! [" + current.username + "] đã mở chữ cái cuối cùng và giải mã ô chữ thành công! 🏆");
+                endGame("🎉 [" + current.getUsername() + "] mở chữ cuối và giải xong ô chữ! 🏆");
                 return;
             }
-
-            // Đúng thì được thưởng quay tiếp sau 1.5 giây
             currentAction = "WAIT";
             broadcastState();
             scheduler.schedule(() -> {
                 synchronized (WheelRoom.this) {
                     if ("PLAYING".equals(gameState) && !orderedPlayers.isEmpty()) {
                         currentAction = "SPIN";
-                        startTurnTimer();
+                        scheduleCurrentTurn();
                     }
                 }
             }, 1500, TimeUnit.MILLISECONDS);
         } else {
             currentAction = "WAIT";
-            broadcastChat("❌ Không có chữ [" + letter + "] nào trong ô chữ! [" + current.username + "] mất lượt.");
+            broadcastChat("❌ Không có chữ [" + letter + "]! [" + current.getUsername() + "] mất lượt.");
             broadcastState();
             scheduler.schedule(this::nextTurn, 2, TimeUnit.SECONDS);
         }
@@ -405,37 +565,31 @@ public class WheelRoom {
     public synchronized void handleSolvePhrase(WebSocketClient client, String solution) {
         if (!"PLAYING".equals(gameState) || orderedPlayers.isEmpty() || solution == null) return;
         if (turnIndex >= orderedPlayers.size()) turnIndex = 0;
-
-        WheelPlayerState current = orderedPlayers.get(turnIndex);
-        if (!current.client.equals(client)) return;
+        PlayerSlot current = orderedPlayers.get(turnIndex);
+        if (current.isBot()) return;
+        if (!current.real.client.equals(client)) return;
 
         cancelTimer();
         String target = normalizePhrase(currentPhrase.getPhrase());
-        String guess = normalizePhrase(solution);
+        String guess  = normalizePhrase(solution);
 
         if (target.equalsIgnoreCase(guess)) {
-            // Đoán trúng cả ô chữ!
-            current.score += 1000;
-            // Lật tất cả các chữ cái
-            for (char c : currentPhrase.getPhrase().toCharArray()) {
+            current.addScore(1000);
+            for (char c : currentPhrase.getPhrase().toCharArray())
                 if (c >= 'A' && c <= 'Z') revealedLetters.add(c);
-            }
-            endGame("🌟 XUẤT SẮC! [" + current.username + "] đã đoán trúng toàn bộ ô chữ: \"" + currentPhrase.getPhrase() + "\" (+1000đ)! 🏆");
+            endGame("🌟 [" + current.getUsername() + "] đoán trúng toàn bộ ô chữ! (+1000đ) 🏆");
         } else {
             currentAction = "WAIT";
-            broadcastChat("❌ [" + current.username + "] đoán ô chữ \"" + solution.trim() + "\" nhưng KHÔNG CHÍNH XÁC! Mất lượt.");
+            broadcastChat("❌ [" + current.getUsername() + "] đoán \"" + solution.trim() + "\" — SAI! Mất lượt.");
             broadcastState();
             scheduler.schedule(this::nextTurn, 2, TimeUnit.SECONDS);
         }
     }
 
+    // ─── 12. TIỆN ÍCH ────────────────────────────────────────────────────────
     private boolean isPuzzleSolved() {
-        String phrase = currentPhrase.getPhrase();
-        for (char c : phrase.toCharArray()) {
-            if (c >= 'A' && c <= 'Z' && !revealedLetters.contains(c)) {
-                return false;
-            }
-        }
+        for (char c : currentPhrase.getPhrase().toCharArray())
+            if (c >= 'A' && c <= 'Z' && !revealedLetters.contains(c)) return false;
         return true;
     }
 
@@ -445,57 +599,46 @@ public class WheelRoom {
 
     private synchronized void nextTurn() {
         cancelTimer();
-        if (orderedPlayers.isEmpty()) {
-            gameState = "WAITING";
-            return;
-        }
-        currentSpinValue = 0; // Reset giá trị ô quay cho lượt mới
+        if (orderedPlayers.isEmpty()) { gameState = "WAITING"; return; }
+        currentSpinValue = 0;
         currentAction = "SPIN";
         turnIndex = (turnIndex + 1) % orderedPlayers.size();
         broadcastState();
-        startTurnTimer();
+        scheduleCurrentTurn();
     }
 
     private synchronized void startTurnTimer() {
         cancelTimer();
         if (!"PLAYING".equals(gameState) || orderedPlayers.isEmpty()) return;
         if (turnIndex >= orderedPlayers.size()) turnIndex = 0;
-
         broadcastState();
+        final int idx = turnIndex;
         turnTimer = scheduler.schedule(() -> {
             synchronized (WheelRoom.this) {
-                if ("PLAYING".equals(gameState) && !orderedPlayers.isEmpty() && turnIndex < orderedPlayers.size()) {
-                    WheelPlayerState current = orderedPlayers.get(turnIndex);
-                    broadcastChat("⏱️ Hết " + timeLimit + "s! [" + current.username + "] không kịp thao tác và bị mất lượt.");
-                    nextTurn();
-                }
+                if (!"PLAYING".equals(gameState) || idx != turnIndex) return;
+                if (turnIndex >= orderedPlayers.size()) return;
+                PlayerSlot cur = orderedPlayers.get(turnIndex);
+                broadcastChat("⏱️ Hết giờ! [" + cur.getUsername() + "] mất lượt.");
+                nextTurn();
             }
         }, timeLimit, TimeUnit.SECONDS);
     }
 
     private void cancelTimer() {
-        if (turnTimer != null) {
-            turnTimer.cancel(false);
-            turnTimer = null;
-        }
+        if (turnTimer != null) { turnTimer.cancel(false); turnTimer = null; }
     }
 
     private synchronized void endGame(String reason) {
         gameState = "END";
         cancelTimer();
 
-        // Tìm quán quân có điểm cao nhất
-        WheelPlayerState winner = null;
-        for (WheelPlayerState p : orderedPlayers) {
-            if (winner == null || p.score > winner.score) {
-                winner = p;
-            }
-        }
+        PlayerSlot winner = null;
+        for (PlayerSlot s : orderedPlayers)
+            if (winner == null || s.getScore() > winner.getScore()) winner = s;
 
         List<String> winners = new ArrayList<>();
-        if (winner != null && winner.score > 0) {
-            winners.add(winner.username + " (" + winner.score + "đ)");
-        }
+        if (winner != null && winner.getScore() > 0)
+            winners.add(winner.getUsername() + " (" + winner.getScore() + "đ)");
 
         broadcastChat(reason);
         broadcastState();
@@ -503,12 +646,13 @@ public class WheelRoom {
         Map<String, Object> endMsg = new HashMap<>();
         endMsg.put("type", "wheel_end_game");
         endMsg.put("reason", reason);
-        endMsg.put("winner", winner != null ? winner.username : "Không có");
+        endMsg.put("winner", winner != null ? winner.getUsername() : "Không có");
         endMsg.put("winners", winners);
         endMsg.put("fullPhrase", currentPhrase.getPhrase());
         broadcast(endMsg);
     }
 
+    // ─── 13. BROADCAST ────────────────────────────────────────────────────────
     public void sendRoomInfo(WebSocketClient client) {
         Map<String, Object> info = new HashMap<>();
         info.put("type", "wheel_room_info");
@@ -538,17 +682,12 @@ public class WheelRoom {
     public void broadcastPlayers() {
         List<Map<String, Object>> list = new ArrayList<>();
         boolean allReady = true;
-
-        for (WheelPlayerState p : orderedPlayers) {
-            boolean userIsHost = isHost(p.username);
-            boolean userIsAdmin = isSuperAdmin(p.username);
-            list.add(p.toMap(userIsHost, userIsAdmin));
-
-            if (!userIsHost && !p.isReady) {
-                allReady = false;
-            }
+        for (PlayerSlot s : orderedPlayers) {
+            boolean uIsHost  = !s.isBot() && isHost(s.getUsername());
+            boolean uIsAdmin = !s.isBot() && isSuperAdmin(s.getUsername());
+            list.add(s.toMap(uIsHost, uIsAdmin));
+            if (!uIsHost && !s.isReady()) allReady = false;
         }
-
         Map<String, Object> msg = new HashMap<>();
         msg.put("type", "update_wheel_players");
         msg.put("players", list);
@@ -558,59 +697,45 @@ public class WheelRoom {
         broadcast(msg);
     }
 
+    private List<Map<String, Object>> buildPlayerList() {
+        List<Map<String, Object>> pList = new ArrayList<>();
+        for (PlayerSlot s : orderedPlayers) {
+            boolean uIsHost  = !s.isBot() && isHost(s.getUsername());
+            boolean uIsAdmin = !s.isBot() && isSuperAdmin(s.getUsername());
+            pList.add(s.toMap(uIsHost, uIsAdmin));
+        }
+        return pList;
+    }
+
     public void broadcastState() {
         if (orderedPlayers.isEmpty()) return;
         if (turnIndex >= orderedPlayers.size()) turnIndex = 0;
-
-        List<Map<String, Object>> pList = new ArrayList<>();
-        for (WheelPlayerState p : orderedPlayers) {
-            pList.add(p.toMap(isHost(p.username), isSuperAdmin(p.username)));
-        }
+        PlayerSlot current = orderedPlayers.get(turnIndex);
 
         List<String> revList = new ArrayList<>();
         for (Character c : revealedLetters) revList.add(c.toString());
 
-        WheelPlayerState current = orderedPlayers.get(turnIndex);
-
-        Map<String, Object> msg = new HashMap<>();
-        msg.put("type", "wheel_state");
-        msg.put("players", pList);
-        msg.put("gameState", gameState);
-        msg.put("turnIndex", turnIndex);
-        msg.put("currentTurnUsername", current.username);
-        msg.put("phrase", currentPhrase.getPhrase());
-        msg.put("topic", currentPhrase.getTopic());
-        msg.put("topicName", WheelPhraseBank.getTopicDisplayName(currentPhrase.getTopic()));
-        msg.put("hint", currentPhrase.getHint());
-        msg.put("revealedLetters", revList);
-        msg.put("currentAction", currentAction);
-        msg.put("currentSpinValue", currentSpinValue);
-        msg.put("timeLimit", timeLimit);
-        msg.put("hostUsername", hostUsername);
-
+        Map<String, Object> msg = buildStateMap(current);
         broadcast(msg);
     }
 
     private void sendState(WebSocketClient client) {
         if (orderedPlayers.isEmpty()) return;
         if (turnIndex >= orderedPlayers.size()) turnIndex = 0;
+        PlayerSlot current = orderedPlayers.get(turnIndex);
+        client.send(JsonUtil.toJson(buildStateMap(current)));
+    }
 
-        List<Map<String, Object>> pList = new ArrayList<>();
-        for (WheelPlayerState p : orderedPlayers) {
-            pList.add(p.toMap(isHost(p.username), isSuperAdmin(p.username)));
-        }
-
+    private Map<String, Object> buildStateMap(PlayerSlot current) {
         List<String> revList = new ArrayList<>();
         for (Character c : revealedLetters) revList.add(c.toString());
 
-        WheelPlayerState current = orderedPlayers.get(turnIndex);
-
         Map<String, Object> msg = new HashMap<>();
         msg.put("type", "wheel_state");
-        msg.put("players", pList);
+        msg.put("players", buildPlayerList());
         msg.put("gameState", gameState);
         msg.put("turnIndex", turnIndex);
-        msg.put("currentTurnUsername", current.username);
+        msg.put("currentTurnUsername", current.getUsername());
         msg.put("phrase", currentPhrase.getPhrase());
         msg.put("topic", currentPhrase.getTopic());
         msg.put("topicName", WheelPhraseBank.getTopicDisplayName(currentPhrase.getTopic()));
@@ -620,8 +745,7 @@ public class WheelRoom {
         msg.put("currentSpinValue", currentSpinValue);
         msg.put("timeLimit", timeLimit);
         msg.put("hostUsername", hostUsername);
-
-        client.send(JsonUtil.toJson(msg));
+        return msg;
     }
 
     private void broadcastChat(String text) {
@@ -641,9 +765,7 @@ public class WheelRoom {
     private void broadcast(Map<String, Object> map) {
         String json = JsonUtil.toJson(map);
         for (WebSocketClient c : players.keySet()) {
-            if (!c.isClosed()) {
-                c.send(json);
-            }
+            if (!c.isClosed()) c.send(json);
         }
     }
 
