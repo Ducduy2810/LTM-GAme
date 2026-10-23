@@ -57,11 +57,20 @@ public class WheelRoom {
     private final Set<Character> revealedLetters = Collections.synchronizedSet(new HashSet<>());
     private ScheduledFuture<?> turnTimer = null;
 
-    // Các ô trên nón kỳ diệu (điểm thưởng & ô đặc biệt)
-    private final Object[] wheelOptions = new Object[]{
-            100, 200, 300, 400, 500, 600, 800, 1000,
-            "MAT_LUOT", "CHIA_DOI", "MAY_MAN"
-    };
+    // Các ô trên nón kỳ diệu với tỉ lệ:
+    // Xanh dương 100đ: 50% | Vàng 200đ: 25% | Đỏ 500đ: 15% | Đen 1000đ: 7% | Tím 2000đ: 3%
+    private static final int[]  WHEEL_VALUES  = {  100,  200,  500,  1000,  2000 };
+    private static final int[]  WHEEL_WEIGHTS = {   50,   25,   15,     7,     3 };
+
+    private int spinWeighted() {
+        int roll = random.nextInt(100);
+        int cum = 0;
+        for (int i = 0; i < WHEEL_WEIGHTS.length; i++) {
+            cum += WHEEL_WEIGHTS[i];
+            if (roll < cum) return WHEEL_VALUES[i];
+        }
+        return WHEEL_VALUES[0];
+    }
 
     public WheelRoom(String roomCode, String roomName, String hostUsername,
                      String topic, int timeLimit,
@@ -78,15 +87,31 @@ public class WheelRoom {
 
     public String getRoomCode() { return roomCode; }
     public String getRoomName() { return roomName; }
-    public String getHostUsername() { return hostUsername; }
+    public String getHostUsername() { return getEffectiveHostUsername(); }
     public String getTopic() { return topic; }
     public int getTimeLimit() { return timeLimit; }
     public String getGameState() { return gameState; }
     public int getPlayerCount() { return players.size(); }
     public int getMaxPlayers() { return MAX_PLAYERS; }
 
+    public boolean isHostPresent() {
+        if (hostUsername == null) return false;
+        for (WheelPlayerState p : orderedPlayers) {
+            if (hostUsername.equalsIgnoreCase(p.username)) return true;
+        }
+        return false;
+    }
+
+    public String getEffectiveHostUsername() {
+        if (isHostPresent()) return hostUsername;
+        if (!orderedPlayers.isEmpty()) return orderedPlayers.get(0).username;
+        return hostUsername;
+    }
+
     public boolean isHost(String username) {
-        return username != null && username.equalsIgnoreCase(hostUsername);
+        if (username == null) return false;
+        String eff = getEffectiveHostUsername();
+        return eff != null && eff.equalsIgnoreCase(username);
     }
 
     public boolean isSuperAdmin(String username) {
@@ -103,7 +128,7 @@ public class WheelRoom {
         Map<String, Object> map = new HashMap<>();
         map.put("roomCode", roomCode);
         map.put("roomName", roomName);
-        map.put("hostUsername", hostUsername);
+        map.put("hostUsername", getEffectiveHostUsername());
         map.put("topic", topic);
         map.put("topicName", WheelPhraseBank.getTopicDisplayName(topic));
         map.put("timeLimit", timeLimit);
@@ -193,12 +218,13 @@ public class WheelRoom {
                 return;
             }
 
-            // Nếu Chủ phòng rời đi, KHÔNG đổi hostUsername
-            // Chỉ trao quyền ready tạm thời cho người khác
+            // Nếu Chủ phòng rời đi, chuyển quyền cho người tiếp theo
             if (wasHost && !orderedPlayers.isEmpty()) {
                 WheelPlayerState tempHost = orderedPlayers.get(0);
                 tempHost.isReady = true;
-                broadcastChat("👑 [" + tempHost.username + "] tạm thời điều hành phòng.");
+                hostUsername = tempHost.username;
+                broadcastChat("👑 [" + tempHost.username + "] đã trở thành Chủ phòng mới.");
+                broadcastRoomInfoToAll();
             }
 
             // Nếu đang trong trận đấu mà người đến lượt rời đi -> chuyển lượt ngay
@@ -298,7 +324,7 @@ public class WheelRoom {
         }
 
         cancelTimer();
-        Object spinResult = wheelOptions[random.nextInt(wheelOptions.length)];
+        int spinResult = spinWeighted();
 
         // Phát thông báo quay nón kèm kết quả
         Map<String, Object> spinAnim = new HashMap<>();
@@ -309,36 +335,11 @@ public class WheelRoom {
 
         broadcastChat("🎡 [" + current.username + "] vừa quay vào ô: " + formatSpinName(spinResult));
 
-        if ("MAT_LUOT".equals(spinResult)) {
-            currentAction = "WAIT";
-            broadcastState();
-            scheduler.schedule(this::nextTurn, 2, TimeUnit.SECONDS);
-        } else if ("CHIA_DOI".equals(spinResult)) {
-            currentAction = "WAIT";
-            current.score = current.score / 2;
-            broadcastChat("💸 [" + current.username + "] bị chia đôi số điểm!");
-            broadcastState();
-            scheduler.schedule(this::nextTurn, 2, TimeUnit.SECONDS);
-        } else if ("MAY_MAN".equals(spinResult)) {
-            currentAction = "WAIT";
-            current.score += 500;
-            broadcastChat("🍀 Ô MAY MẮN! [" + current.username + "] được cộng ngay 500 điểm và được quay tiếp!");
-            broadcastState();
-            scheduler.schedule(() -> {
-                synchronized (WheelRoom.this) {
-                    if ("PLAYING".equals(gameState) && !orderedPlayers.isEmpty()) {
-                        currentAction = "SPIN";
-                        startTurnTimer();
-                    }
-                }
-            }, 1800, TimeUnit.MILLISECONDS);
-        } else {
-            // Quay vào ô điểm (100, 200, 500, ...)
-            currentSpinValue = spinResult;
-            currentAction = "GUESS";
-            broadcastState();
-            startTurnTimer();
-        }
+        // Tất cả kết quả quay đều là điểm số (int), không còn ô đặc biệt
+        currentSpinValue = spinResult;
+        currentAction = "GUESS";
+        broadcastState();
+        startTurnTimer();
     }
 
     public synchronized void handleGuess(WebSocketClient client, String letterStr) {
@@ -448,6 +449,7 @@ public class WheelRoom {
             gameState = "WAITING";
             return;
         }
+        currentSpinValue = 0; // Reset giá trị ô quay cho lượt mới
         currentAction = "SPIN";
         turnIndex = (turnIndex + 1) % orderedPlayers.size();
         broadcastState();
@@ -512,12 +514,25 @@ public class WheelRoom {
         info.put("type", "wheel_room_info");
         info.put("roomCode", roomCode);
         info.put("roomName", roomName);
-        info.put("hostUsername", hostUsername);
+        info.put("hostUsername", getEffectiveHostUsername());
         info.put("topic", topic);
         info.put("topicName", WheelPhraseBank.getTopicDisplayName(topic));
         info.put("timeLimit", timeLimit);
         info.put("maxPlayers", MAX_PLAYERS);
         client.send(JsonUtil.toJson(info));
+    }
+
+    public void broadcastRoomInfoToAll() {
+        Map<String, Object> info = new HashMap<>();
+        info.put("type", "wheel_room_info");
+        info.put("roomCode", roomCode);
+        info.put("roomName", roomName);
+        info.put("hostUsername", getEffectiveHostUsername());
+        info.put("topic", topic);
+        info.put("topicName", WheelPhraseBank.getTopicDisplayName(topic));
+        info.put("timeLimit", timeLimit);
+        info.put("maxPlayers", MAX_PLAYERS);
+        broadcast(info);
     }
 
     public void broadcastPlayers() {
@@ -537,9 +552,9 @@ public class WheelRoom {
         Map<String, Object> msg = new HashMap<>();
         msg.put("type", "update_wheel_players");
         msg.put("players", list);
-        msg.put("hostUsername", hostUsername);
+        msg.put("hostUsername", getEffectiveHostUsername());
         msg.put("allReady", allReady);
-        msg.put("hasAdminInRoom", isSuperAdmin(hostUsername));
+        msg.put("hasAdminInRoom", isSuperAdmin(getEffectiveHostUsername()));
         broadcast(msg);
     }
 
@@ -632,10 +647,12 @@ public class WheelRoom {
         }
     }
 
-    private String formatSpinName(Object val) {
-        if ("MAT_LUOT".equals(val)) return "❌ MẤT LƯỢT";
-        if ("CHIA_DOI".equals(val)) return "💸 CHIA ĐÔI ĐIỂM";
-        if ("MAY_MAN".equals(val)) return "🍀 Ô MAY MẮN (+500đ)";
+    private String formatSpinName(int val) {
+        if (val == 100)  return "🔵 100 ĐIỂM";
+        if (val == 200)  return "🟡 200 ĐIỂM";
+        if (val == 500)  return "🔴 500 ĐIỂM";
+        if (val == 1000) return "⚫ 1000 ĐIỂM";
+        if (val == 2000) return "🟣 2000 ĐIỂM";
         return val + " ĐIỂM";
     }
 }

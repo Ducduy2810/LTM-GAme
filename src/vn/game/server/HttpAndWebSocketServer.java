@@ -306,6 +306,9 @@ public class HttpAndWebSocketServer {
             case "get_leaderboard":
                 arenaGame.handleGetLeaderboard(client);
                 break;
+            case "admin_clear_leaderboard":
+                arenaGame.handleAdminClearLeaderboard(client);
+                break;
             case "get_wheel_rooms":
                 wheelGame.registerLobbyClient(client);
                 break;
@@ -419,6 +422,20 @@ public class HttpAndWebSocketServer {
             Map<String, Object> lb = new HashMap<>();
             lb.put("leaderboard", vn.game.model.Leaderboard.getTop(20));
             sendJson(out, 200, lb, null);
+            socket.close();
+            return;
+        }
+
+        if ("POST".equals(method) && "/api/leaderboard/clear".equals(path)) {
+            String username = sessionManager.getUsername(sessionId);
+            if (username == null || !userRepository.isAdmin(username)) {
+                sendJson(out, 403, Map.of("error", "Chỉ Super Admin mới có quyền xóa bảng xếp hạng!"), null);
+                socket.close();
+                return;
+            }
+            vn.game.model.Leaderboard.clear();
+            arenaGame.broadcastLeaderboard();
+            sendJson(out, 200, Map.of("success", true, "message", "Đã xóa toàn bộ bảng xếp hạng thành công!"), null);
             socket.close();
             return;
         }

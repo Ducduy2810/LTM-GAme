@@ -9,6 +9,100 @@ let currentUsername = null;
 let isCurrentUserAdmin = false;
 let currentRoomCode = null;
 let isMyHost = false;
+
+// ── VẼ VÒNG QUAY THEO TỈ LỆ ĐÚNG ─────────────────────────────
+// Định nghĩa các ô: màu, điểm, tỉ lệ %
+const WHEEL_SEGMENTS = [
+    { value: 100,  label: '100',  color: '#2563eb', darkColor: '#1d4ed8', weight: 50 }, // Xanh dương
+    { value: 200,  label: '200',  color: '#f59e0b', darkColor: '#d97706', weight: 25 }, // Vàng
+    { value: 500,  label: '500',  color: '#ef4444', darkColor: '#dc2626', weight: 15 }, // Đỏ
+    { value: 1000, label: '1000', color: '#374151', darkColor: '#1f2937', weight: 7  }, // Đen
+    { value: 2000, label: '2000', color: '#7c3aed', darkColor: '#6d28d9', weight: 3  }, // Tím
+];
+
+// Màu tương ứng để highlight khi quay trúng
+const SPIN_COLOR_MAP = {
+    100:  '#2563eb',
+    200:  '#f59e0b',
+    500:  '#ef4444',
+    1000: '#374151',
+    2000: '#7c3aed',
+};
+
+function buildWheelSVG() {
+    const svg = document.getElementById('wheel-svg');
+    const slices = document.getElementById('wheel-slices');
+    if (!slices) return;
+    slices.innerHTML = '';
+
+    const cx = 100, cy = 100, r = 94;
+    const total = WHEEL_SEGMENTS.reduce((s, seg) => s + seg.weight, 0); // = 100
+    let startAngleDeg = -90; // Bắt đầu từ 12 giờ
+
+    // Tách mỗi segment thành nhiều ô nhỏ để vòng quay trông đẹp hơn
+    // Số ô tối thiểu mỗi màu = 1, tối đa phụ thuộc tỉ lệ
+    const sliceCountPerSeg = [5, 3, 2, 1, 1]; // Xanh 5 ô, Vàng 3, Đỏ 2, Đen 1, Tím 1
+
+    WHEEL_SEGMENTS.forEach((seg, segIdx) => {
+        const totalAngle = (seg.weight / total) * 360;
+        const numSlices  = sliceCountPerSeg[segIdx];
+        const sliceAngle = totalAngle / numSlices;
+
+        for (let i = 0; i < numSlices; i++) {
+            const a1 = startAngleDeg + i * sliceAngle;
+            const a2 = a1 + sliceAngle;
+
+            const x1 = cx + r * Math.cos(a1 * Math.PI / 180);
+            const y1 = cy + r * Math.sin(a1 * Math.PI / 180);
+            const x2 = cx + r * Math.cos(a2 * Math.PI / 180);
+            const y2 = cy + r * Math.sin(a2 * Math.PI / 180);
+
+            const largeArc = sliceAngle > 180 ? 1 : 0;
+            const fill = (i % 2 === 0) ? seg.color : seg.darkColor;
+
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', `M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${largeArc},1 ${x2.toFixed(2)},${y2.toFixed(2)} Z`);
+            path.setAttribute('fill', fill);
+            path.setAttribute('stroke', '#0f172a');
+            path.setAttribute('stroke-width', '1');
+            slices.appendChild(path);
+
+            // Thêm nhãn điểm ở giữa slice
+            const midAngle = (a1 + a2) / 2;
+            const labelR = r * 0.65; // 65% bán kính
+            const lx = cx + labelR * Math.cos(midAngle * Math.PI / 180);
+            const ly = cy + labelR * Math.sin(midAngle * Math.PI / 180);
+
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', lx.toFixed(2));
+            text.setAttribute('y', ly.toFixed(2));
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('dominant-baseline', 'middle');
+            text.setAttribute('fill', seg.value === 1000 ? '#facc15' : '#ffffff');
+            text.setAttribute('font-size', sliceAngle >= 30 ? '9' : (sliceAngle >= 15 ? '7' : '6'));
+            text.setAttribute('font-weight', '900');
+            text.setAttribute('font-family', 'Arial, sans-serif');
+            text.setAttribute('transform', `rotate(${midAngle + 90}, ${lx.toFixed(2)}, ${ly.toFixed(2)})`);
+            text.textContent = seg.label;
+            slices.appendChild(text);
+        }
+
+        startAngleDeg += totalAngle;
+    });
+
+    // Vẽ lại trục tâm lên trên cùng (sau khi các slice đã vẽ xong)
+    const hub1 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    hub1.setAttribute('cx', '100'); hub1.setAttribute('cy', '100'); hub1.setAttribute('r', '26');
+    hub1.setAttribute('fill', '#1e293b'); hub1.setAttribute('stroke', '#facc15'); hub1.setAttribute('stroke-width', '3');
+    svg.appendChild(hub1);
+    const hub2 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    hub2.setAttribute('cx', '100'); hub2.setAttribute('cy', '100'); hub2.setAttribute('r', '9');
+    hub2.setAttribute('fill', '#facc15');
+    svg.appendChild(hub2);
+}
+
+// Vẽ vòng quay khi trang load xong
+document.addEventListener('DOMContentLoaded', buildWheelSVG);
 let currentTurnUsername = null;
 let countdownInterval = null;
 let currentWheelRotation = 0;
@@ -50,6 +144,13 @@ function showScreen(screenName) {
 socket.onopen = () => {
     // Khi vừa vào trang, đăng ký lắng nghe danh sách phòng ở Sảnh
     socket.send(JSON.stringify({ type: 'get_wheel_rooms' }));
+
+    // Tự động vào phòng nếu có tham số ?room=CODE trên URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetRoom = urlParams.get('room');
+    if (targetRoom) {
+        socket.send(JSON.stringify({ type: 'join_wheel_room', roomCode: targetRoom }));
+    }
 };
 
 socket.onmessage = (event) => {
@@ -103,7 +204,7 @@ socket.onmessage = (event) => {
 
     // HIỆU ỨNG QUAY NÓN
     if (data.type === 'wheel_spin_result') {
-        animateWheelSpin();
+        animateWheelSpin(data.result);
     }
 
     // CẬP NHẬT TRẠNG THÁI VÁN ĐẤU LIVE
@@ -376,7 +477,9 @@ function handleWheelState(data) {
             spinBox.style.display = 'none';
             guessBox.style.display = 'flex';
             waitBox.style.display = 'none';
-            document.getElementById('spin-result-banner').innerText = `🎉 Bạn vừa quay vào ô: ${data.currentSpinValue} ĐIỂM!`;
+            const spinColor = SPIN_COLOR_MAP[data.currentSpinValue] || '#facc15';
+            document.getElementById('spin-result-banner').innerHTML =
+                `🎉 Bạn vừa quay vào ô: <span style="color:${spinColor}; font-size:1.3em; font-weight:900;">■</span> <strong style="color:${spinColor};">${data.currentSpinValue} ĐIỂM!</strong>`;
             const guessInput = document.getElementById('guess-input');
             guessInput.value = '';
             guessInput.focus();
@@ -416,14 +519,24 @@ function startTurnTimer(seconds) {
 }
 
 // 8. HIỆU ỨNG QUAY NÓN (WHEEL ANIMATION)
-function animateWheelSpin() {
+function animateWheelSpin(spinValue) {
     const wheel = document.getElementById('wheel-svg');
     if (!wheel) return;
 
-    // Quay thêm từ 4 đến 6 vòng (1440 - 2160 độ) ngẫu nhiên
+    // Quay thêm từ 4 đến 6 vòng ngẫu nhiên
     const extraRot = 1440 + Math.floor(Math.random() * 360);
     currentWheelRotation += extraRot;
     wheel.style.transform = `rotate(${currentWheelRotation}deg)`;
+
+    // Hiển thị màu kết quả ô quay trúng
+    if (spinValue && SPIN_COLOR_MAP[spinValue]) {
+        const color = SPIN_COLOR_MAP[spinValue];
+        const pointer = document.querySelector('.wheel-pointer');
+        if (pointer) {
+            pointer.style.borderBottomColor = color;
+            setTimeout(() => { pointer.style.borderBottomColor = ''; }, 3000);
+        }
+    }
 }
 
 // 9. GẮN CÁC SỰ KIỆN TƯƠNG TÁC (BUTTON EVENTS)

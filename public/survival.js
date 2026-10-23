@@ -566,6 +566,19 @@
         currentRoundNum = data.round || data.questionId || 1;
         totalRounds     = data.totalRounds || totalRounds || 15;
 
+        // Cập nhật trạng thái người chơi nếu server gửi (để sync HP sau khi trả lời sai)
+        if (data.playerStates) {
+            latestPlayerStates = data.playerStates;
+            const meInStates = data.playerStates.find(p => p.username === currentUsername);
+            if (meInStates) {
+                myHp = meInStates.hp !== undefined ? meInStates.hp : myHp;
+                myScore = meInStates.score !== undefined ? meInStates.score : myScore;
+                myIsAlive = (meInStates.isAlive !== false) && (myHp > 0);
+                updateHpBar(myHp, maxHp);
+                updateScoreHud(myScore);
+            }
+        }
+
         // Cập nhật Phase (Giai đoạn)
         if (data.phase || data.phaseName) {
             currentPhase.name = data.phaseName || data.phase || currentPhase.name;
@@ -601,11 +614,9 @@
             badge.innerText = `VÒNG ${String(currentRoundNum).padStart(2, '0')} / ${totalRounds} • ${currentPhase.name.toUpperCase()}`;
         }
 
-        // Penalty warning
-        const penaltyWarning = document.getElementById('penalty-warning');
-        if (penaltyWarning) {
-            penaltyWarning.innerHTML = `⚠️ Trả lời sai trừ <strong>${currentPhase.penalty} HP</strong>!`;
-        }
+        // Penalty warning (đã xóa khỏi giao diện)
+        // const penaltyWarning = document.getElementById('penalty-warning');
+        // if (penaltyWarning) { ... }
 
         // Nội dung câu hỏi
         const qText = document.getElementById('question-text');

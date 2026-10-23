@@ -193,6 +193,14 @@ public class Leaderboard {
         return stats.get(username);
     }
 
+    /**
+     * Đặc quyền Admin: Xóa toàn bộ dữ liệu bảng xếp hạng và lưu file.
+     */
+    public static synchronized void clear() {
+        stats.clear();
+        saveToFile();
+    }
+
     // ── PERSISTENCE: Lưu/đọc dữ liệu ra file ──────────────────────
 
     public static synchronized void saveToFile() {

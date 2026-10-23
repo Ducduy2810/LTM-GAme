@@ -139,8 +139,26 @@ public class SurvivalRoom {
         return userRepository != null && userRepository.isAdmin(username);
     }
 
+    public boolean isHostPresent() {
+        if (hostUsername == null) return false;
+        for (PlayerState p : players.values()) {
+            if (hostUsername.equalsIgnoreCase(p.username)) return true;
+        }
+        return false;
+    }
+
+    public String getEffectiveHostUsername() {
+        if (isHostPresent()) return hostUsername;
+        for (PlayerState p : players.values()) {
+            if (p.username != null) return p.username;
+        }
+        return hostUsername;
+    }
+
     public boolean isHost(String username) {
-        return hostUsername != null && hostUsername.equalsIgnoreCase(username);
+        if (username == null) return false;
+        String eff = getEffectiveHostUsername();
+        return eff != null && eff.equalsIgnoreCase(username);
     }
 
     public boolean canControl(String username) {
@@ -240,8 +258,6 @@ public class SurvivalRoom {
                 currentTimer = null;
             }
         } else if (wasHost) {
-            // Chỉ chuyển quyền ready TẠM THỜI cho người khác
-            // KHÔNG đổi hostUsername để chủ phòng gốc có thể lấy lại
             WebSocketClient nextHost = players.keySet().stream()
                     .filter(c -> !c.isClosed())
                     .findFirst()
@@ -249,7 +265,11 @@ public class SurvivalRoom {
             
             if (nextHost != null) {
                 PlayerState ps = players.get(nextHost);
-                if (ps != null) ps.isReady = true;
+                if (ps != null) {
+                    ps.isReady = true;
+                    hostUsername = ps.username;
+                    broadcastRoomInfoToAll();
+                }
             }
         }
         broadcastPlayers();
@@ -380,6 +400,17 @@ public class SurvivalRoom {
 
         long totalEliminated = initialPlayerCount - survivorsCount;
 
+        // Tạo danh sách trạng thái người chơi để gửi cùng câu hỏi
+        List<Map<String, Object>> playerStates = new ArrayList<>();
+        for (PlayerState p : players.values()) {
+            Map<String, Object> map = new HashMap<>();
+            map.put("username", p.username);
+            map.put("hp", p.hp);
+            map.put("score", p.score);
+            map.put("isAlive", p.isAlive);
+            playerStates.add(map);
+        }
+
         Map<String, Object> msg = new HashMap<>();
         msg.put("type", "survival_new_question");
         msg.put("questionId", currentRound);
@@ -393,6 +424,7 @@ public class SurvivalRoom {
         msg.put("playersAlive", survivorsCount);
         msg.put("totalEliminated", totalEliminated);
         msg.put("round", currentRound);
+        msg.put("playerStates", playerStates);
         broadcast(msg);
 
         if (currentTimer != null) currentTimer.cancel(false);
@@ -618,6 +650,17 @@ public class SurvivalRoom {
             long survivorsCount = countAlivePlayers();
             long totalEliminated = initialPlayerCount - survivorsCount;
             
+            // Tạo danh sách trạng thái người chơi
+            List<Map<String, Object>> playerStates = new ArrayList<>();
+            for (PlayerState p : players.values()) {
+                Map<String, Object> map = new HashMap<>();
+                map.put("username", p.username);
+                map.put("hp", p.hp);
+                map.put("score", p.score);
+                map.put("isAlive", p.isAlive);
+                playerStates.add(map);
+            }
+            
             Map<String, Object> msg = new HashMap<>();
             msg.put("type", "survival_new_question");
             msg.put("questionId", currentRound);
@@ -631,6 +674,7 @@ public class SurvivalRoom {
             msg.put("playersAlive", survivorsCount);
             msg.put("totalEliminated", totalEliminated);
             msg.put("round", currentRound);
+            msg.put("playerStates", playerStates);
             msg.put("spectatorMode", true); // Đánh dấu là chế độ xem
             client.send(JsonUtil.toJson(msg));
         }
@@ -641,7 +685,7 @@ public class SurvivalRoom {
         info.put("type", "survival_room_info");
         info.put("roomCode", roomCode);
         info.put("roomName", roomName);
-        info.put("hostUsername", hostUsername);
+        info.put("hostUsername", getEffectiveHostUsername());
         info.put("topic", topic);
         info.put("topicName", getTopicDisplayName(topic));
         info.put("startingHp", startingHp);
@@ -650,6 +694,14 @@ public class SurvivalRoom {
         info.put("isHost", isHost(client.getUsername()));
         info.put("isSuperAdmin", isSuperAdmin(client.getUsername()));
         client.send(JsonUtil.toJson(info));
+    }
+
+    public void broadcastRoomInfoToAll() {
+        for (WebSocketClient c : players.keySet()) {
+            if (!c.isClosed()) {
+                sendRoomInfo(c);
+            }
+        }
     }
 
     public void broadcastPlayers() {
@@ -678,7 +730,7 @@ public class SurvivalRoom {
         Map<String, Object> msg = new HashMap<>();
         msg.put("type", "survival_update_players");
         msg.put("players", list);
-        msg.put("hostUsername", hostUsername);
+        msg.put("hostUsername", getEffectiveHostUsername());
         msg.put("roomCode", roomCode);
         msg.put("roomName", roomName);
         msg.put("allReady", allReady);
@@ -689,7 +741,7 @@ public class SurvivalRoom {
         Map<String, Object> map = new HashMap<>();
         map.put("roomCode", roomCode);
         map.put("roomName", roomName);
-        map.put("hostUsername", hostUsername != null ? hostUsername : "Chưa có");
+        map.put("hostUsername", getEffectiveHostUsername());
         map.put("topic", topic);
         map.put("topicName", getTopicDisplayName(topic));
         map.put("startingHp", startingHp);

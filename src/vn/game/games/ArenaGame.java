@@ -32,7 +32,7 @@ public class ArenaGame {
     private void initDefaultRoom() {
         ArenaRoom defaultRoom = new ArenaRoom(
                 DEFAULT_ROOM_CODE, "Sàn Đấu Mặc Định VTV3", "DuyNguyen",
-                "ALL", "MEDIUM", 15, 15, 100,
+                "ALL", "MEDIUM", 15, 5, 100,
                 userRepository, scheduler
         );
         rooms.put(DEFAULT_ROOM_CODE, defaultRoom);
@@ -41,7 +41,10 @@ public class ArenaGame {
     public boolean isAdmin(String username) {
         if (username == null) return false;
         if ("admin".equalsIgnoreCase(username) || "DuyNguyen".equalsIgnoreCase(username)) return true;
-        return userRepository != null && userRepository.isAdmin(username);
+        if (userRepository != null) {
+            return userRepository.isAdmin(username);
+        }
+        return false;
     }
 
     // ==========================================
@@ -120,8 +123,7 @@ public class ArenaGame {
 
         int questionCount = req.get("questionCount") instanceof Number
                 ? ((Number) req.get("questionCount")).intValue() : 15;
-        int timeLimit = req.get("timeLimit") instanceof Number
-                ? ((Number) req.get("timeLimit")).intValue() : 15;
+        int timeLimit = 5;
         int botCount = req.get("botCount") instanceof Number
                 ? ((Number) req.get("botCount")).intValue() : 0;
 
@@ -250,6 +252,32 @@ public class ArenaGame {
     // ==========================================
     public void handleGetLeaderboard(WebSocketClient client) {
         sendLeaderboard(client);
+    }
+
+    public synchronized void handleAdminClearLeaderboard(WebSocketClient client) {
+        String username = client.getUsername();
+        if (!isAdmin(username)) {
+            sendError(client, "Chỉ Quản trị viên (Admin) mới có quyền xóa bảng xếp hạng!");
+            return;
+        }
+
+        Leaderboard.clear();
+        broadcastLeaderboard();
+        sendLeaderboard(client);
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("type", "admin_clear_leaderboard_success");
+        resp.put("message", "Đã xóa toàn bộ Bảng Xếp Hạng thành công!");
+        client.send(JsonUtil.toJson(resp));
+    }
+
+    public void broadcastLeaderboard() {
+        Map<String, Object> msg = new HashMap<>();
+        msg.put("type", "leaderboard_update");
+        msg.put("leaderboard", Leaderboard.getTop(10));
+        String json = JsonUtil.toJson(msg);
+        lobbyClients.removeIf(WebSocketClient::isClosed);
+        for (WebSocketClient c : lobbyClients) c.send(json);
     }
 
     // ==========================================

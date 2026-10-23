@@ -68,7 +68,10 @@
 
                 <!-- BẢNG XẾP HẠNG -->
                 <div id="leaderboard-panel" style="margin-top: 18px; background: rgba(0,0,0,0.35); border: 1px solid rgba(245,158,11,0.3); border-radius: 14px; padding: 16px;">
-                    <h3 style="color: #fde047; margin: 0 0 10px 0; font-size: 15px; text-transform: uppercase; letter-spacing: 1px;">🏆 Bảng Xếp Hạng Toàn Cầu</h3>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+                        <h3 style="color: #fde047; margin: 0; font-size: 15px; text-transform: uppercase; letter-spacing: 1px;">🏆 Bảng Xếp Hạng Toàn Cầu</h3>
+                        <button id="btn-admin-clear-leaderboard" style="display:none; background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; transition: 0.2s;" title="Đặc quyền Admin: Xóa toàn bộ dữ liệu bảng xếp hạng">🗑️ Xóa Bảng Xếp Hạng (Admin)</button>
+                    </div>
                     <div style="overflow-x: auto;">
                         <table id="leaderboard-table" style="width:100%; border-collapse: collapse; font-size: 13px; color: #e2e8f0;">
                             <thead>
@@ -315,23 +318,13 @@
                 </div>
 
                 <div class="form-row">
-                    <div class="form-group">
+                    <div class="form-group" style="flex: 1;">
                         <label>Số lượng câu hỏi:</label>
                         <select id="create-question-count" class="form-control">
                             <option value="5">5 Câu</option>
                             <option value="10" selected>10 Câu</option>
                             <option value="15">15 Câu</option>
                             <option value="20">20 Câu</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Thời gian mỗi câu:</label>
-                        <select id="create-time-limit" class="form-control">
-                            <option value="5">5 Giây (Chớp nhoáng)</option>
-                            <option value="7">7 Giây</option>
-                            <option value="10" selected>10 Giây (Chuẩn VTV3)</option>
-                            <option value="15">15 Giây</option>
-                            <option value="20">20 Giây</option>
                         </select>
                     </div>
                 </div>

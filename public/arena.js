@@ -72,6 +72,11 @@ fetch('/auth/me').then(r => r.json()).then(data => {
             || (data.user.email === 'mainung28@gmail.com')
             || currentUsername === 'admin'
             || currentUsername === 'DuyNguyen';
+
+        if (isCurrentUserAdmin) {
+            const clearLbBtn = document.getElementById('btn-admin-clear-leaderboard');
+            if (clearLbBtn) clearLbBtn.style.display = 'inline-block';
+        }
     } else {
         alert('Bạn chưa đăng nhập!');
         window.location.href = 'index.html';
@@ -200,7 +205,7 @@ socket.onmessage = (event) => {
             document.getElementById('room-code-badge').innerText = data.roomCode;
             document.getElementById('room-name-display').innerText = data.roomName;
             document.getElementById('room-settings-summary').innerText =
-                `[${data.topicName || data.topic}] • [${data.difficultyName || data.difficulty}] • ${data.questionCount} câu • ${data.timeLimit}s • Bot: ${data.botCount}`;
+                `[${data.topicName || data.topic}] • [${data.difficultyName || data.difficulty}] • ${data.questionCount} câu • ⏱️ Phụ 5s / Chính 15s • Bot: ${data.botCount}`;
 
             showScreen('waiting');
             break;
@@ -262,6 +267,10 @@ socket.onmessage = (event) => {
             
         case 'arena_game_resumed':
             handleGameResumed(data);
+            break;
+
+        case 'admin_clear_leaderboard_success':
+            alert('✅ ' + (data.message || 'Đã xóa toàn bộ Bảng Xếp Hạng thành công!'));
             break;
     }
 };
@@ -793,7 +802,7 @@ function renderRoomList(rooms = []) {
                     <span class="room-tag">📚 ${r.topicName}</span>
                     <span class="room-tag">⚡ ${r.difficultyName}</span>
                     <span class="room-tag">🤖 Bot: ${r.botCount}</span>
-                    <span class="room-tag">⏱️ ${r.timeLimit}s</span>
+                    <span class="room-tag">⏱️ 5s / 15s</span>
                 </div>
             </div>
             <div class="room-card-footer">
@@ -961,12 +970,11 @@ document.getElementById('btn-submit-create-room').addEventListener('click', () =
     const topic        = document.getElementById('create-topic').value;
     const difficulty   = document.getElementById('create-difficulty').value;
     const questionCount = parseInt(document.getElementById('create-question-count').value) || 10;
-    const timeLimit    = parseInt(document.getElementById('create-time-limit').value) || 10;
     const botCount     = parseInt(document.getElementById('create-bot-count').value) || 0;
 
     socket.send(JSON.stringify({
         type: 'create_room',
-        roomName, roomCode, topic, difficulty, questionCount, timeLimit, botCount
+        roomName, roomCode, topic, difficulty, questionCount, botCount
     }));
     modalCreateRoom.classList.remove('active');
 });
@@ -1046,6 +1054,20 @@ document.getElementById('btn-leave-game-ingame').addEventListener('click', () =>
         socket.send(JSON.stringify({ type: 'leave_room' }));
     }
 });
+
+// Đặc quyền Super Admin: Xóa toàn bộ dữ liệu Bảng Xếp Hạng
+const btnClearLeaderboard = document.getElementById('btn-admin-clear-leaderboard');
+if (btnClearLeaderboard) {
+    btnClearLeaderboard.addEventListener('click', () => {
+        if (!isCurrentUserAdmin) {
+            alert('Bạn không có quyền quản trị viên!');
+            return;
+        }
+        if (confirm('⚠️ [CẢNH BÁO SUPER ADMIN]\nBạn có chắc chắn muốn xóa toàn bộ dữ liệu Bảng Xếp Hạng Toàn Cầu không?\nHành động này sẽ xóa sạch dữ liệu xếp hạng và không thể hoàn tác!')) {
+            socket.send(JSON.stringify({ type: 'admin_clear_leaderboard' }));
+        }
+    });
+}
 document.getElementById('btn-leave-result-ingame').addEventListener('click', () => {
     if (confirm('Bạn có chắc muốn rời phòng?')) {
         socket.send(JSON.stringify({ type: 'leave_room' }));
