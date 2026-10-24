@@ -177,8 +177,10 @@ public class WheelGame {
             return;
         }
 
-        // Rời phòng cũ nếu có
-        handleLeaveRoom(client);
+        // Rời phòng cũ nếu đang ở phòng nào đó (không gửi message nếu chưa ở phòng)
+        if (clientRoomMap.containsKey(client)) {
+            handleLeaveRoom(client);
+        }
 
         boolean success = room.addPlayer(client);
         if (success) {
@@ -201,8 +203,11 @@ public class WheelGame {
         if (room != null) {
             room.removePlayer(client);
 
-            // Nếu không phải phòng mặc định và không còn ai -> dọn dẹp phòng
-            if (!DEFAULT_ROOM_CODE.equalsIgnoreCase(room.getRoomCode()) && room.getPlayerCount() == 0) {
+            // Chỉ xóa phòng khi: không phải phòng mặc định, trống người, và không đang chơi
+            boolean canDelete = room.getPlayerCount() == 0
+                    && !DEFAULT_ROOM_CODE.equalsIgnoreCase(room.getRoomCode())
+                    && !"PLAYING".equals(room.getGameState());
+            if (canDelete) {
                 rooms.remove(room.getRoomCode());
             }
 
@@ -297,9 +302,10 @@ public class WheelGame {
         WheelRoom room = clientRoomMap.remove(client);
         if (room != null) {
             room.removePlayer(client);
-            if (!DEFAULT_ROOM_CODE.equalsIgnoreCase(room.getRoomCode()) && room.getPlayerCount() == 0) {
-                rooms.remove(room.getRoomCode());
-            }
+            boolean canDelete = room.getPlayerCount() == 0
+                    && !DEFAULT_ROOM_CODE.equalsIgnoreCase(room.getRoomCode())
+                    && !"PLAYING".equals(room.getGameState());
+            if (canDelete) rooms.remove(room.getRoomCode());
             broadcastRoomListToLobby();
         }
     }

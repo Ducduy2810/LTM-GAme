@@ -133,6 +133,9 @@ public class WheelRoom {
 
     // Người thật: WebSocketClient → WheelPlayerState
     private final Map<WebSocketClient, WheelPlayerState> players = new ConcurrentHashMap<>();
+
+    // Theo dõi username đã từng trong phòng (để cho phép rejoin khi đang chơi)
+    private final Set<String> recentlyLeftUsernames = Collections.synchronizedSet(new HashSet<>());
     // Thứ tự lượt đấu (người thật + bot)
     private final List<PlayerSlot> orderedPlayers = new CopyOnWriteArrayList<>();
 
@@ -240,13 +243,13 @@ public class WheelRoom {
         String username = client.getUsername();
         if (username == null) return false;
 
-        // Reconnect check
-        boolean isReconnecting = players.values().stream()
-                .anyMatch(p -> username.equalsIgnoreCase(p.username));
-        if ("PLAYING".equals(gameState) && !isReconnecting) {
+        // Chặn người mới hoàn toàn khi đang chơi; cho phép người đã từng trong phòng vào lại
+        boolean gameActive = "PLAYING".equals(gameState);
+        if (gameActive && !recentlyLeftUsernames.contains(username.toLowerCase())) {
             sendError(client, "Trận đấu đang diễn ra! Không thể vào phòng lúc này.");
             return false;
         }
+        recentlyLeftUsernames.remove(username.toLowerCase());
 
         removePlayerByUsername(username, client);
 
@@ -287,6 +290,9 @@ public class WheelRoom {
     public synchronized void removePlayer(WebSocketClient client) {
         WheelPlayerState removed = players.remove(client);
         if (removed == null) return;
+
+        // Ghi nhận username để cho phép rejoin sau
+        recentlyLeftUsernames.add(removed.username.toLowerCase());
 
         int removeIdx = -1;
         for (int i = 0; i < orderedPlayers.size(); i++) {

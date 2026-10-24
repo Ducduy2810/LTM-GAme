@@ -166,11 +166,15 @@ public class SurvivalGame {
     }
 
     private synchronized void joinRoomInternal(WebSocketClient client, SurvivalRoom room) {
-        SurvivalRoom currentRoom = clientRoomMap.remove(client);
-        if (currentRoom != null) {
-            currentRoom.handleLeave(client);
-            if (currentRoom.isEmpty() && !DEFAULT_ROOM_CODE.equalsIgnoreCase(currentRoom.getRoomCode())) {
-                rooms.remove(currentRoom.getRoomCode());
+        // Chỉ rời phòng cũ nếu client đang thực sự ở phòng nào đó
+        if (clientRoomMap.containsKey(client)) {
+            SurvivalRoom currentRoom = clientRoomMap.remove(client);
+            if (currentRoom != null) {
+                currentRoom.handleLeave(client);
+                boolean canDelete = currentRoom.isEmpty()
+                        && !DEFAULT_ROOM_CODE.equalsIgnoreCase(currentRoom.getRoomCode())
+                        && ("WAITING".equals(currentRoom.getGameState()) || "END".equals(currentRoom.getGameState()));
+                if (canDelete) rooms.remove(currentRoom.getRoomCode());
             }
         }
         lobbyClients.remove(client);
@@ -186,7 +190,10 @@ public class SurvivalGame {
         SurvivalRoom currentRoom = clientRoomMap.remove(client);
         if (currentRoom != null) {
             currentRoom.handleLeave(client);
-            if (currentRoom.isEmpty() && !DEFAULT_ROOM_CODE.equalsIgnoreCase(currentRoom.getRoomCode())) {
+            boolean canDelete = currentRoom.isEmpty()
+                    && !DEFAULT_ROOM_CODE.equalsIgnoreCase(currentRoom.getRoomCode())
+                    && ("WAITING".equals(currentRoom.getGameState()) || "END".equals(currentRoom.getGameState()));
+            if (canDelete) {
                 rooms.remove(currentRoom.getRoomCode());
             }
         }
@@ -236,9 +243,10 @@ public class SurvivalGame {
         SurvivalRoom room = clientRoomMap.remove(client);
         if (room != null) {
             room.handleLeave(client);
-            if (room.isEmpty() && !DEFAULT_ROOM_CODE.equalsIgnoreCase(room.getRoomCode())) {
-                rooms.remove(room.getRoomCode());
-            }
+            boolean canDelete = room.isEmpty()
+                    && !DEFAULT_ROOM_CODE.equalsIgnoreCase(room.getRoomCode())
+                    && ("WAITING".equals(room.getGameState()) || "END".equals(room.getGameState()));
+            if (canDelete) rooms.remove(room.getRoomCode());
             broadcastRoomListToLobby();
         }
     }

@@ -1,15 +1,24 @@
 package vn.game;
 
+import vn.game.db.DatabaseManager;
 import vn.game.db.UserRepository;
 import vn.game.games.ArenaGame;
 import vn.game.games.SurvivalGame;
 import vn.game.games.WheelGame;
+import vn.game.model.Leaderboard;
+import vn.game.model.User;
 import vn.game.server.HttpAndWebSocketServer;
 import vn.game.server.SessionManager;
+import vn.game.util.JsonUtil;
 
 import java.io.File;
 import java.net.InetAddress;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.List;
+import java.util.Map;
 import java.net.NetworkInterface;
 
 public class Main {
@@ -30,7 +39,25 @@ public class Main {
         System.out.println("   - Giao thuc mang: TCP Socket + WebSocket RFC 6455 + HTTP    ");
         System.out.println("===============================================================");
 
-        UserRepository userRepository = new UserRepository();
+        // ── Khởi tạo SQLite DB ────────────────────────────────────────────────
+        DatabaseManager dbManager = DatabaseManager.getInstance();
+        dbManager.init();
+
+        // Đăng ký shutdown hook để đóng DB khi tắt server
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("🛑 Server đang tắt, đóng kết nối DB...");
+            dbManager.close();
+        }));
+
+        UserRepository userRepository = new UserRepository(dbManager);
+
+        // ── Migrate dữ liệu từ JSON (chạy 1 lần duy nhất) ────────────────────
+        migrateUsersFromJson(userRepository);
+        migrateLeaderboardFromJson();
+
+        // ── Reload leaderboard cache từ DB (sau khi DB đã sẵn sàng) ──────────
+        Leaderboard.reload();
+
         SessionManager sessionManager = new SessionManager();
         ArenaGame arenaGame = new ArenaGame(userRepository);
         WheelGame wheelGame = new WheelGame(userRepository);
@@ -78,5 +105,76 @@ public class Main {
             System.err.println("❌ Lỗi khởi động máy chủ: " + e.getMessage());
             e.printStackTrace();
         }
+    }
+
+    // ── Migrate từ JSON sang SQLite (chỉ chạy 1 lần nếu DB trống) ───────────
+
+    @SuppressWarnings("unchecked")
+    private static void migrateUsersFromJson(UserRepository userRepository) {
+        File jsonFile = new File("data/users.json");
+        if (!jsonFile.exists()) return;
+        try {
+            String json = Files.readString(jsonFile.toPath(), StandardCharsets.UTF_8);
+            Object parsed = JsonUtil.parse(json);
+            if (!(parsed instanceof List)) return;
+            List<User> users = new ArrayList<>();
+            for (Object item : (List<?>) parsed) {
+                if (item instanceof Map) {
+                    users.add(User.fromMap((Map<String, Object>) item));
+                }
+            }
+            userRepository.migrateFromJson(users);
+        } catch (Exception e) {
+            System.err.println("⚠️  Migrate users.json thất bại: " + e.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void migrateLeaderboardFromJson() {
+        File jsonFile = new File("data/leaderboard.json");
+        if (!jsonFile.exists()) return;
+        try {
+            // Chỉ migrate khi bảng leaderboard đang trống
+            if (!Leaderboard.getTop(1).isEmpty()) {
+                System.out.println("ℹ️  Leaderboard đã có dữ liệu, bỏ qua migrate.");
+                return;
+            }
+            String json = Files.readString(jsonFile.toPath(), StandardCharsets.UTF_8);
+            Object parsed = JsonUtil.parse(json);
+            if (!(parsed instanceof List)) return;
+            int count = 0;
+            for (Object item : (List<?>) parsed) {
+                if (!(item instanceof Map)) continue;
+                Map<String, Object> m = (Map<String, Object>) item;
+                String username = (String) m.get("username");
+                if (username == null) continue;
+                String sql = """
+                    INSERT INTO leaderboard
+                        (username, total_wins, total_games, total_eliminated,
+                         rank_points, best_eliminated)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(username) DO NOTHING
+                """;
+                try (java.sql.PreparedStatement ps =
+                        DatabaseManager.getInstance().getConnection().prepareStatement(sql)) {
+                    ps.setString(1, username);
+                    ps.setInt   (2, toInt(m.get("totalWins")));
+                    ps.setInt   (3, toInt(m.get("totalGames")));
+                    ps.setInt   (4, toInt(m.get("totalEliminated")));
+                    ps.setInt   (5, toInt(m.get("rankPoints")));
+                    ps.setInt   (6, toInt(m.get("bestEliminated")));
+                    ps.executeUpdate();
+                    count++;
+                }
+            }
+            System.out.println("✅ Đã migrate " + count + " bản ghi leaderboard từ JSON sang SQLite.");
+        } catch (Exception e) {
+            System.err.println("⚠️  Migrate leaderboard.json thất bại: " + e.getMessage());
+        }
+    }
+
+    private static int toInt(Object val) {
+        if (val instanceof Number) return ((Number) val).intValue();
+        try { return Integer.parseInt(String.valueOf(val)); } catch (Exception e) { return 0; }
     }
 }

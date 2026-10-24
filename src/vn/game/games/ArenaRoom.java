@@ -94,6 +94,9 @@ public class ArenaRoom {
     // Người chơi thật
     private final Map<WebSocketClient, PlayerState> players = new ConcurrentHashMap<>();
 
+    // Theo dõi username đã từng trong phòng (để cho phép rejoin khi đang chơi)
+    private final Set<String> recentlyLeftUsernames = Collections.synchronizedSet(new HashSet<>());
+
     // Bot đối thủ (chỉ active khi PLAYING)
     private final List<BotOpponent> bots = new CopyOnWriteArrayList<>();
 
@@ -169,20 +172,7 @@ public class ArenaRoom {
         String username = client.getUsername();
         if (username == null) return;
 
-        // Kiểm tra đang trong trận đấu: chỉ cho phép reconnect, không cho người mới vào
-        boolean isReconnecting = false;
-        for (WebSocketClient old : players.keySet()) {
-            if (username.equalsIgnoreCase(old.getUsername())) {
-                isReconnecting = true;
-                break;
-            }
-        }
-        if (!"WAITING".equals(gameState) && !"END".equals(gameState) && !isReconnecting) {
-            sendError(client, "Trận đấu đang diễn ra! Không thể vào phòng lúc này.");
-            return;
-        }
-
-        // Xóa kết nối cũ cùng username (reconnect)
+        // Xóa kết nối cũ cùng username nếu còn (reconnect/rejoin)
         players.keySet().removeIf(old -> {
             if (username.equalsIgnoreCase(old.getUsername())) {
                 if (!old.equals(client)) old.close();
@@ -191,6 +181,15 @@ public class ArenaRoom {
             return false;
         });
         players.keySet().removeIf(WebSocketClient::isClosed);
+
+        // Chặn người mới hoàn toàn (chưa từng trong phòng) khi đang chơi.
+        // Người đã rời phòng vẫn được vào lại xem / reconnect.
+        boolean gameActive = !"WAITING".equals(gameState) && !"END".equals(gameState);
+        if (gameActive && !recentlyLeftUsernames.contains(username.toLowerCase())) {
+            sendError(client, "Trận đấu đang diễn ra! Không thể vào phòng lúc này.");
+            return;
+        }
+        recentlyLeftUsernames.remove(username.toLowerCase());
 
         PlayerState state = new PlayerState(client, username);
         if (canControl(username)) state.isReady = true;
@@ -214,14 +213,22 @@ public class ArenaRoom {
     public synchronized void handleLeave(WebSocketClient client) {
         String leavingUsername = client.getUsername();
         boolean wasHost = (leavingUsername != null && leavingUsername.equalsIgnoreCase(hostUsername));
-        
+
+        // Ghi nhận username đã từng trong phòng để cho phép rejoin sau
+        if (leavingUsername != null) {
+            recentlyLeftUsernames.add(leavingUsername.toLowerCase());
+        }
+
         players.remove(client);
         players.keySet().removeIf(WebSocketClient::isClosed);
 
         if (players.isEmpty()) {
-            gameState = "WAITING";
-            currentQuestionIndex = 0;
-            if (currentTimer != null) { currentTimer.cancel(false); currentTimer = null; }
+            // Chỉ reset khi không đang chơi — nếu đang chơi giữ nguyên để phòng tồn tại cho rejoin
+            if ("WAITING".equals(gameState) || "END".equals(gameState)) {
+                gameState = "WAITING";
+                currentQuestionIndex = 0;
+                if (currentTimer != null) { currentTimer.cancel(false); currentTimer = null; }
+            }
         } else if (wasHost) {
             WebSocketClient nextHost = players.keySet().stream().filter(c -> !c.isClosed()).findFirst().orElse(null);
             if (nextHost != null) {

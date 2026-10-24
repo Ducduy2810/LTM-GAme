@@ -90,6 +90,9 @@ public class SurvivalRoom {
     private final ScheduledExecutorService scheduler;
 
     private final Map<WebSocketClient, PlayerState> players = new ConcurrentHashMap<>();
+
+    // Theo dõi username đã từng trong phòng (để cho phép rejoin khi đang chơi)
+    private final Set<String> recentlyLeftUsernames = Collections.synchronizedSet(new HashSet<>());
     private final List<Question> questions = new ArrayList<>();
 
     private volatile String gameState = "WAITING"; // WAITING, QUESTION, RESULT, END
@@ -195,20 +198,7 @@ public class SurvivalRoom {
         String username = client.getUsername();
         if (username == null) return;
 
-        // Kiểm tra đang trong trận đấu: chỉ cho phép reconnect, không cho người mới vào
-        boolean isReconnecting = false;
-        for (WebSocketClient old : players.keySet()) {
-            if (username.equalsIgnoreCase(old.getUsername())) {
-                isReconnecting = true;
-                break;
-            }
-        }
-        if (!"WAITING".equals(gameState) && !"END".equals(gameState) && !isReconnecting) {
-            sendError(client, "Trận đấu đang diễn ra! Không thể vào phòng lúc này.");
-            return;
-        }
-
-        // Xóa kết nối cũ trùng username (reconnect)
+        // Xóa kết nối cũ trùng username (reconnect/rejoin)
         players.keySet().removeIf(old -> {
             if (username.equalsIgnoreCase(old.getUsername())) {
                 if (!old.equals(client)) old.close();
@@ -217,6 +207,14 @@ public class SurvivalRoom {
             return false;
         });
         players.keySet().removeIf(WebSocketClient::isClosed);
+
+        // Chặn người mới hoàn toàn khi đang chơi; cho phép người đã từng trong phòng vào lại
+        boolean gameActive = !"WAITING".equals(gameState) && !"END".equals(gameState);
+        if (gameActive && !recentlyLeftUsernames.contains(username.toLowerCase())) {
+            sendError(client, "Trận đấu đang diễn ra! Không thể vào phòng lúc này.");
+            return;
+        }
+        recentlyLeftUsernames.remove(username.toLowerCase());
 
         PlayerState state = new PlayerState(client, username, startingHp);
         
@@ -245,17 +243,22 @@ public class SurvivalRoom {
     public synchronized void handleLeave(WebSocketClient client) {
         String leavingUsername = client.getUsername();
         boolean wasHost = (leavingUsername != null && leavingUsername.equalsIgnoreCase(hostUsername));
-        
+
+        // Ghi nhận username để cho phép rejoin sau
+        if (leavingUsername != null) {
+            recentlyLeftUsernames.add(leavingUsername.toLowerCase());
+        }
+
         players.remove(client);
         players.keySet().removeIf(WebSocketClient::isClosed);
 
         if (players.isEmpty()) {
-            gameState = "WAITING";
-            currentRound = 0;
-            milestonesTriggered.clear();
-            if (currentTimer != null) {
-                currentTimer.cancel(false);
-                currentTimer = null;
+            // Chỉ reset khi không đang chơi
+            if ("WAITING".equals(gameState) || "END".equals(gameState)) {
+                gameState = "WAITING";
+                currentRound = 0;
+                milestonesTriggered.clear();
+                if (currentTimer != null) { currentTimer.cancel(false); currentTimer = null; }
             }
         } else if (wasHost) {
             WebSocketClient nextHost = players.keySet().stream()
