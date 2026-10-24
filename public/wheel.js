@@ -664,13 +664,15 @@ document.getElementById('btn-submit-create-room').addEventListener('click', () =
     const roomCode = document.getElementById('create-room-code').value.trim();
     const topic = document.getElementById('create-topic').value;
     const timeLimit = parseInt(document.getElementById('create-time-limit').value) || 10;
+    const botCount = parseInt(document.getElementById('create-bot-count').value) || 0;
 
     socket.send(JSON.stringify({
         type: 'create_wheel_room',
         roomName: roomName,
         roomCode: roomCode,
         topic: topic,
-        timeLimit: timeLimit
+        timeLimit: timeLimit,
+        botCount: botCount
     }));
 
     modalCreate.classList.remove('active');

@@ -105,6 +105,7 @@ public class WheelGame {
         String roomCode = (String) req.get("roomCode");
         String topic = (String) req.get("topic");
         int timeLimit = (req.get("timeLimit") instanceof Number) ? ((Number) req.get("timeLimit")).intValue() : 10;
+        int botCount  = (req.get("botCount")  instanceof Number) ? ((Number) req.get("botCount")).intValue()  : 1;
 
         if (roomCode == null || roomCode.trim().isEmpty()) {
             roomCode = generateUniqueRoomCode();
@@ -126,6 +127,7 @@ public class WheelGame {
                 username,
                 topic,
                 timeLimit,
+                botCount,
                 userRepository,
                 scheduler
         );

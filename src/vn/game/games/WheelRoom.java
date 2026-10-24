@@ -124,6 +124,7 @@ public class WheelRoom {
     private volatile String hostUsername;
     private final String topic;
     private final int timeLimit;
+    private final int maxBotCount; // Số bot tối đa chủ phòng cho phép thêm
     private static final int MAX_PLAYERS = 4;
 
     private final UserRepository userRepository;
@@ -159,16 +160,24 @@ public class WheelRoom {
 
     // ─── 6. CONSTRUCTOR ──────────────────────────────────────────────────────
     public WheelRoom(String roomCode, String roomName, String hostUsername,
-                     String topic, int timeLimit,
+                     String topic, int timeLimit, int maxBotCount,
                      UserRepository userRepository, ScheduledExecutorService scheduler) {
         this.roomCode  = roomCode;
         this.roomName  = (roomName != null && !roomName.trim().isEmpty()) ? roomName.trim() : ("Phòng " + roomCode);
         this.hostUsername = hostUsername;
         this.topic     = (topic != null) ? topic : "ALL";
         this.timeLimit = (timeLimit >= 5) ? timeLimit : 10;
+        this.maxBotCount = Math.max(0, Math.min(3, maxBotCount)); // 0–3 bot
         this.userRepository = userRepository;
         this.scheduler = scheduler;
         this.currentPhrase = WheelPhraseBank.getRandomPhrase(this.topic);
+    }
+
+    /** Constructor tương thích ngược — mặc định 1 bot tối đa */
+    public WheelRoom(String roomCode, String roomName, String hostUsername,
+                     String topic, int timeLimit,
+                     UserRepository userRepository, ScheduledExecutorService scheduler) {
+        this(roomCode, roomName, hostUsername, topic, timeLimit, 1, userRepository, scheduler);
     }
 
     // ─── 7. GETTERS ──────────────────────────────────────────────────────────
@@ -219,6 +228,7 @@ public class WheelRoom {
         map.put("topic", topic);
         map.put("topicName", WheelPhraseBank.getTopicDisplayName(topic));
         map.put("timeLimit", timeLimit);
+        map.put("maxBotCount", maxBotCount);
         map.put("gameState", gameState);
         map.put("playerCount", players.size());
         map.put("maxPlayers", MAX_PLAYERS);
@@ -364,12 +374,13 @@ public class WheelRoom {
             else s.real.score = 0;
         }
 
-        // Thêm bot nếu tổng số slot < 2
+        // Thêm bot theo maxBotCount được cấu hình khi tạo phòng
         // Xóa bot cũ trước
         orderedPlayers.removeIf(PlayerSlot::isBot);
         int realCount = players.size();
-        int botsNeeded = Math.max(0, 2 - realCount);
-        double[] skills = { 0.4, 0.65, 0.8 }; // Mỗi bot có skill khác nhau
+        // Số bot cần: đủ 2 người tối thiểu, nhưng không vượt quá maxBotCount
+        int botsNeeded = (maxBotCount > 0) ? Math.min(maxBotCount, Math.max(0, 2 - realCount)) : 0;
+        double[] skills = { 0.4, 0.65, 0.8 };
         for (int i = 0; i < botsNeeded && i < skills.length; i++) {
             BotPlayer bot = new BotPlayer(skills[i]);
             orderedPlayers.add(new PlayerSlot(bot));
