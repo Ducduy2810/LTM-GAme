@@ -442,7 +442,7 @@ public class HttpAndWebSocketServer {
 
         // --- CÁC ROUTE REST API ---
         if (path.startsWith("/auth/")) {
-            handleAuthApi(out, method, path, query, body, sessionId);
+            handleAuthApi(out, method, path, query, body, sessionId, headers);
             socket.close();
             return;
         }
@@ -456,8 +456,13 @@ public class HttpAndWebSocketServer {
         socket.close();
     }
 
-    private void handleAuthApi(OutputStream out, String method, String path, String query, String body, String sessionId) throws IOException {
+    private void handleAuthApi(OutputStream out, String method, String path, String query, String body, String sessionId, Map<String, String> headers) throws IOException {
         Map<String, Object> req = JsonUtil.parseObject(body);
+        // Xây baseUrl từ Host header để hoạt động đúng cả khi truy cập qua LAN
+        String host = headers.getOrDefault("host", "localhost:" + port);
+        String baseUrl = "http://" + host;
+        // Google OAuth luôn dùng localhost vì Google Console chỉ cho phép redirect về localhost
+        String googleCallbackUri = "http://localhost:" + port + "/auth/google/callback";
 
         switch (path) {
             case "/auth/register": {
@@ -541,7 +546,7 @@ public class HttpAndWebSocketServer {
                 user.setResetExpires(System.currentTimeMillis() + 3600000); // 1 giờ
                 userRepository.update(user);
 
-                String resetLink = "http://localhost:" + port + "/reset.html?token=" + token;
+                String resetLink = baseUrl + "/reset.html?token=" + token;
 
                 System.out.println("\n==============================================");
                 System.out.println("[JAVA SERVER] YÊU CẦU ĐỔI MẬT KHẨU CHO EMAIL: " + email);
@@ -570,13 +575,20 @@ public class HttpAndWebSocketServer {
             }
 
             case "/auth/google": {
+                // Google OAuth chỉ hoạt động khi truy cập từ máy chủ (localhost)
+                // vì Google Console chỉ cho phép redirect_uri là localhost
+                boolean isLocalhost = host.startsWith("localhost") || host.startsWith("127.0.0.1");
+                if (!isLocalhost) {
+                    sendJson(out, 400, Map.of("error", "Đăng nhập bằng Google chỉ khả dụng khi truy cập từ máy chủ (localhost). Vui lòng dùng tài khoản thường khi chơi qua mạng LAN."), null);
+                    return;
+                }
                 String clientId = Env.get("GOOGLE_CLIENT_ID");
                 if (clientId.isEmpty()) {
                     sendResponse(out, 400, "text/html; charset=utf-8",
                             "<h3>Lỗi: Chưa cấu hình GOOGLE_CLIENT_ID trong file .env!</h3><br><a href='/'>Quay lại trang chủ</a>".getBytes(StandardCharsets.UTF_8), null);
                     return;
                 }
-                String redirectUri = URLEncoder.encode(getBaseUrl() + "/auth/google/callback", StandardCharsets.UTF_8);
+                String redirectUri = URLEncoder.encode(googleCallbackUri, StandardCharsets.UTF_8);
                 String scope = URLEncoder.encode("openid email profile", StandardCharsets.UTF_8);
                 String googleAuthUrl = "https://accounts.google.com/o/oauth2/v2/auth" +
                         "?client_id=" + clientId +
@@ -606,7 +618,7 @@ public class HttpAndWebSocketServer {
 
                 String clientId = Env.get("GOOGLE_CLIENT_ID");
                 String clientSecret = Env.get("GOOGLE_CLIENT_SECRET");
-                String redirectUri = getBaseUrl() + "/auth/google/callback";
+                String redirectUri = googleCallbackUri;
 
                 try {
                     // 1. Gửi request POST đổi authorization code lấy access_token
@@ -698,9 +710,10 @@ public class HttpAndWebSocketServer {
         String statusText = switch (status) {
             case 200 -> "OK";
             case 400 -> "Bad Request";
+            case 403 -> "Forbidden";
             case 404 -> "Not Found";
             case 405 -> "Method Not Allowed";
-            default -> "OK";
+            default -> "Internal Server Error";
         };
 
         StringBuilder sb = new StringBuilder();
@@ -717,19 +730,6 @@ public class HttpAndWebSocketServer {
         out.flush();
     }
 
-    /**
-     * Trả về base URL của server từ biến môi trường APP_BASE_URL.
-     * Nếu chưa set thì fallback về localhost.
-     * Người dùng khác cần sửa APP_BASE_URL trong .env thành IP hoặc domain của server.
-     */
-    private String getBaseUrl() {
-        String baseUrl = Env.get("APP_BASE_URL");
-        if (baseUrl != null && !baseUrl.isBlank()) {
-            return baseUrl.stripTrailing().replaceAll("/$", ""); // bỏ dấu / cuối nếu có
-        }
-        return "http://localhost:" + port;
-    }
-
     private void sendRedirect(OutputStream out, String location, String setCookie) throws IOException {
         StringBuilder sb = new StringBuilder();
         sb.append("HTTP/1.1 302 Found\r\n");
@@ -737,6 +737,7 @@ public class HttpAndWebSocketServer {
         if (setCookie != null) {
             sb.append("Set-Cookie: ").append(setCookie).append("\r\n");
         }
+        sb.append("Content-Length: 0\r\n");
         sb.append("Connection: close\r\n\r\n");
 
         out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
