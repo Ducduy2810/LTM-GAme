@@ -8,6 +8,21 @@ if not exist bin mkdir bin
 if not exist lib mkdir lib
 if not exist data mkdir data
 
+:: Kiem tra file .env
+if not exist .env (
+    echo.
+    echo [LOI] Khong tim thay file .env !
+    echo.
+    echo Vui long tao file .env tu file mau .env.example:
+    echo   copy .env.example .env
+    echo.
+    echo Sau do mo .env va dien cac gia tri:
+    echo   - APP_BASE_URL : URL cua server nay (vi du: http://192.168.1.x:3000)
+    echo   - GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET : lay tu Google Console
+    echo.
+    pause
+    exit /b 1
+)
 :: Kiem tra SQLite JDBC JAR
 set SQLITE_JAR=lib\sqlite-jdbc-3.45.3.0.jar
 if not exist %SQLITE_JAR% (

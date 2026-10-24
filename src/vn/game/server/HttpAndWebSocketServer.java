@@ -576,7 +576,7 @@ public class HttpAndWebSocketServer {
                             "<h3>Lỗi: Chưa cấu hình GOOGLE_CLIENT_ID trong file .env!</h3><br><a href='/'>Quay lại trang chủ</a>".getBytes(StandardCharsets.UTF_8), null);
                     return;
                 }
-                String redirectUri = URLEncoder.encode("http://localhost:" + port + "/auth/google/callback", StandardCharsets.UTF_8);
+                String redirectUri = URLEncoder.encode(getBaseUrl() + "/auth/google/callback", StandardCharsets.UTF_8);
                 String scope = URLEncoder.encode("openid email profile", StandardCharsets.UTF_8);
                 String googleAuthUrl = "https://accounts.google.com/o/oauth2/v2/auth" +
                         "?client_id=" + clientId +
@@ -606,7 +606,7 @@ public class HttpAndWebSocketServer {
 
                 String clientId = Env.get("GOOGLE_CLIENT_ID");
                 String clientSecret = Env.get("GOOGLE_CLIENT_SECRET");
-                String redirectUri = "http://localhost:" + port + "/auth/google/callback";
+                String redirectUri = getBaseUrl() + "/auth/google/callback";
 
                 try {
                     // 1. Gửi request POST đổi authorization code lấy access_token
@@ -715,6 +715,19 @@ public class HttpAndWebSocketServer {
         out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
         out.write(body);
         out.flush();
+    }
+
+    /**
+     * Trả về base URL của server từ biến môi trường APP_BASE_URL.
+     * Nếu chưa set thì fallback về localhost.
+     * Người dùng khác cần sửa APP_BASE_URL trong .env thành IP hoặc domain của server.
+     */
+    private String getBaseUrl() {
+        String baseUrl = Env.get("APP_BASE_URL");
+        if (baseUrl != null && !baseUrl.isBlank()) {
+            return baseUrl.stripTrailing().replaceAll("/$", ""); // bỏ dấu / cuối nếu có
+        }
+        return "http://localhost:" + port;
     }
 
     private void sendRedirect(OutputStream out, String location, String setCookie) throws IOException {
