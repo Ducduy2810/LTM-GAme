@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *               nếu mainPlayer sai → mainPlayer thua, đối thủ còn lại thắng.
  *               nếu hết đối thủ → mainPlayer thắng.
  *   - Ba quyền trợ giúp (một lần mỗi loại): TRUST, ASK, SURVEY.
- *   - Điểm tính theo bảng mốc phần trăm đối thủ đã loại.
+ *   - Điểm tăng tại mỗi mốc 5 đối thủ bị loại.
  */
 public class ArenaRoom {
 
@@ -105,8 +105,19 @@ public class ArenaRoom {
 
     private volatile String gameState = "WAITING"; // WAITING, QUESTION, RESULT, END
     private volatile int currentQuestionIndex = 0;
+    private Map<String, Object> lastRoundResult;
     private ScheduledFuture<?> currentTimer = null;
     private volatile long questionStartTime = 0;
+    private volatile boolean mainTurn = false;
+    private final Map<String, PlayerState> disconnectedPlayers = new HashMap<>();
+    private volatile int maxPlayers = 101;
+
+    public void setMaxPlayers(int count) { maxPlayers = Math.max(1, Math.min(101, count)); }
+    public synchronized boolean canJoin(String username) {
+        return players.values().stream().anyMatch(p -> p.username.equalsIgnoreCase(username))
+            || disconnectedPlayers.containsKey(username.toLowerCase())
+            || (("WAITING".equals(gameState) || "END".equals(gameState)) && players.size() < maxPlayers);
+    }
     
     // YÊU CẦU 5: Tạm dừng trận đấu
     private volatile boolean isPaused = false;
@@ -134,10 +145,10 @@ public class ArenaRoom {
         this.hostUsername = hostUsername;
         this.topic = (topic != null) ? topic.toUpperCase() : "ALL";
         this.difficulty = (difficulty != null) ? difficulty.toUpperCase() : "MEDIUM";
-        this.questionCount = questionCount > 0 ? questionCount : 15;
+        this.questionCount = Math.max(1, Math.min(50, questionCount));
         this.timeLimit = 5;
-        this.mainPlayerTimeLimit = 15;
-        this.botCount = botCount >= 0 ? botCount : 0;
+        this.mainPlayerTimeLimit = 60;
+        this.botCount = Math.max(0, Math.min(100, botCount));
         this.userRepository = userRepository;
         this.scheduler = scheduler;
     }
@@ -171,6 +182,10 @@ public class ArenaRoom {
     public synchronized void handleJoin(WebSocketClient client) {
         String username = client.getUsername();
         if (username == null) return;
+        PlayerState previous = disconnectedPlayers.remove(username.toLowerCase());
+        for (PlayerState p : players.values()) {
+            if (p.username.equalsIgnoreCase(username)) previous = p;
+        }
 
         // Xóa kết nối cũ cùng username nếu còn (reconnect/rejoin)
         players.keySet().removeIf(old -> {
@@ -185,13 +200,24 @@ public class ArenaRoom {
         // Chặn người mới hoàn toàn (chưa từng trong phòng) khi đang chơi.
         // Người đã rời phòng vẫn được vào lại xem / reconnect.
         boolean gameActive = !"WAITING".equals(gameState) && !"END".equals(gameState);
-        if (gameActive && !recentlyLeftUsernames.contains(username.toLowerCase())) {
+        if (gameActive && previous == null && !recentlyLeftUsernames.contains(username.toLowerCase())) {
             sendError(client, "Trận đấu đang diễn ra! Không thể vào phòng lúc này.");
             return;
         }
         recentlyLeftUsernames.remove(username.toLowerCase());
 
         PlayerState state = new PlayerState(client, username);
+        if (previous != null) {
+            state.isReady = previous.isReady;
+            state.isAlive = previous.isAlive;
+            state.isMainPlayer = previous.isMainPlayer;
+            state.answer = previous.answer;
+            state.answerTimeMs = previous.answerTimeMs;
+            state.score = previous.score;
+            state.lifeTrustUsed = previous.lifeTrustUsed;
+            state.lifeAskUsed = previous.lifeAskUsed;
+            state.lifeSurveyUsed = previous.lifeSurveyUsed;
+        }
         if (canControl(username)) state.isReady = true;
         players.put(client, state);
 
@@ -211,15 +237,37 @@ public class ArenaRoom {
     }
 
     public synchronized void handleLeave(WebSocketClient client) {
+        handleLeave(client, false);
+    }
+
+    public synchronized void handleDisconnect(WebSocketClient client) {
+        handleLeave(client, true);
+    }
+
+    private void handleLeave(WebSocketClient client, boolean disconnected) {
         String leavingUsername = client.getUsername();
         boolean wasHost = (leavingUsername != null && leavingUsername.equalsIgnoreCase(hostUsername));
+        PlayerState current = players.get(client);
+        boolean active = "QUESTION".equals(gameState) || "RESULT".equals(gameState);
+        if (!disconnected && active && current != null && current.isMainPlayer) {
+            endGame(false, current.username + " đã rời trận đấu.");
+            active = false;
+        }
+        if (!disconnected && active && current != null && current.isAlive) {
+            current.isAlive = false;
+            totalEliminatedOpponents++;
+        }
 
         // Ghi nhận username đã từng trong phòng để cho phép rejoin sau
         if (leavingUsername != null) {
             recentlyLeftUsernames.add(leavingUsername.toLowerCase());
         }
 
-        players.remove(client);
+        PlayerState leaving = players.remove(client);
+        if (leaving != null && active) {
+            disconnectedPlayers.put(leaving.username.toLowerCase(), leaving);
+            if (disconnected && leaving.isAlive && !isPaused && "QUESTION".equals(gameState)) pauseGame("Mất kết nối: " + leaving.username);
+        }
         players.keySet().removeIf(WebSocketClient::isClosed);
 
         if (players.isEmpty()) {
@@ -272,6 +320,10 @@ public class ArenaRoom {
         }
 
         if ("WAITING".equals(gameState) || "END".equals(gameState)) {
+            if (players.size() < 2 && botCount == 0) {
+                sendError(client, "Cần ít nhất một đối thủ thật hoặc bot để bắt đầu.");
+                return;
+            }
             startGame();
         }
     }
@@ -280,6 +332,7 @@ public class ArenaRoom {
         gameState = "WAITING";
         currentQuestionIndex = 0;
         totalEliminatedOpponents = 0;
+        disconnectedPlayers.clear();
         isPaused = false; // YÊU CẦU 5: Reset trạng thái tạm dừng
 
         questions.clear();
@@ -312,8 +365,8 @@ public class ArenaRoom {
         players.get(mainClient).isMainPlayer = true;
 
         bots.clear();
-        for (int i = 0; i < botCount; i++) {
-            bots.add(new BotOpponent("Bot_" + BOT_COUNTER.getAndIncrement()));
+        for (int i = 0; i < Math.min(botCount, 101 - players.size()); i++) {
+            bots.add(new BotOpponent("Bot_" + (i + 1)));
         }
 
         int realOpponents = (int) players.values().stream().filter(p -> !p.isMainPlayer).count();
@@ -329,6 +382,7 @@ public class ArenaRoom {
         startMsg.put("botCount", bots.size());
         startMsg.put("difficulty", difficulty);
         broadcast(startMsg);
+        broadcastPlayers();
 
         if (currentTimer != null) currentTimer.cancel(false);
         currentTimer = scheduler.schedule(this::sendQuestion, 1, TimeUnit.SECONDS);
@@ -349,11 +403,12 @@ public class ArenaRoom {
         }
 
         gameState = "QUESTION";
+        mainTurn = false;
         questionStartTime = System.currentTimeMillis();
         Question q = questions.get(currentQuestionIndex);
 
         // Reset đáp án
-        for (PlayerState p : players.values()) {
+        for (PlayerState p : java.util.stream.Stream.concat(players.values().stream(), disconnectedPlayers.values().stream()).toList()) {
             p.answer = null;
             p.answerTimeMs = Long.MAX_VALUE;
         }
@@ -361,7 +416,7 @@ public class ArenaRoom {
         // Bot tự sinh đáp án
         for (BotOpponent bot : bots) {
             if (bot.isAlive) {
-                bot.generateAnswer(difficulty, q.getCorrect());
+                bot.generateAnswer(q.getDifficulty(), q.getCorrect());
             }
         }
 
@@ -382,43 +437,45 @@ public class ArenaRoom {
             msg.put("totalEliminated", totalEliminatedOpponents);
             msg.put("totalInitialOpponents", totalInitialOpponents);
             
-            // Người chơi chính có 15 giây, người chơi phụ có 5 giây
-            if (ps.isMainPlayer) {
-                msg.put("timeLimit", mainPlayerTimeLimit);
-                msg.put("isMainPlayer", true);
-            } else {
-                msg.put("timeLimit", timeLimit);
-                msg.put("isMainPlayer", false);
-            }
-            
+            msg.put("timeLimit", timeLimit);
+            msg.put("phase", "OPPONENTS");
+            msg.put("isMainPlayer", ps.isMainPlayer);
+            msg.put("isAlive", ps.isAlive);
+            msg.put("lifeTrustUsed", ps.lifeTrustUsed);
+            msg.put("lifeAskUsed", ps.lifeAskUsed);
+            msg.put("lifeSurveyUsed", ps.lifeSurveyUsed);
+
             client.send(JsonUtil.toJson(msg));
         }
 
-        // Timer cho toàn bộ vòng thi (15 giây theo thời gian của người chơi chính)
+        // Khóa lượt đối thủ trước khi mở 60 giây cho người chơi chính.
         if (currentTimer != null) currentTimer.cancel(false);
-        currentTimer = scheduler.schedule(this::processResults, mainPlayerTimeLimit, TimeUnit.SECONDS);
+        currentTimer = scheduler.schedule(this::beginMainTurn, timeLimit, TimeUnit.SECONDS);
+        if (disconnectedPlayers.values().stream().anyMatch(p -> p.isAlive)) pauseGame("Đang chờ người chơi kết nối lại");
     }
 
     // ─── 9. GỬI ĐÁP ÁN ──────────────────────────────────────────────────────
 
-    public void handleSubmitAnswer(WebSocketClient client, int answerIndex) {
+    private synchronized void beginMainTurn() {
+        if (isPaused || !"QUESTION".equals(gameState) || mainTurn) return;
+        mainTurn = true;
+        questionStartTime = System.currentTimeMillis();
+        broadcast(Map.of("type", "arena_main_player_turn", "timeLimit", mainPlayerTimeLimit,
+                "message", "Người chơi phụ đã khóa đáp án. Người chơi chính có 60 giây trả lời và dùng trợ giúp."));
+        currentTimer = scheduler.schedule(this::processResults, mainPlayerTimeLimit, TimeUnit.SECONDS);
+    }
+
+    public synchronized void handleSubmitAnswer(WebSocketClient client, int answerIndex) {
         PlayerState state = players.get(client);
-        if (state != null && state.isAlive && "QUESTION".equals(gameState)) {
-            // Đối thủ chỉ được trả lời trong 5 giây (+ 1.5s độ trễ mạng)
-            if (!state.isMainPlayer) {
-                long elapsed = System.currentTimeMillis() - questionStartTime;
-                if (elapsed > (timeLimit * 1000L + 1500L)) {
-                    return; // Đã quá 5s của đối thủ
-                }
-            }
-            
-            if (state.answer == null) {
-                state.answer = answerIndex;
-                state.answerTimeMs = Math.max(1, System.currentTimeMillis() - questionStartTime);
-                
-                // QUAN TRỌNG: Xóa logic skip thời gian thừa!
-                // Người chơi chính trả lời xong chỉ lưu lại đáp án,
-                // câu hỏi vẫn chạy đủ 15 giây rồi mới tổng kết kết quả.
+        if (isPaused || answerIndex < 0 || answerIndex > 3 || state == null || !state.isAlive
+                || !"QUESTION".equals(gameState) || state.isMainPlayer != mainTurn) return;
+        if (System.currentTimeMillis() - questionStartTime >= (mainTurn ? mainPlayerTimeLimit : timeLimit) * 1000L) return;
+        if (state.answer == null) {
+            state.answer = answerIndex;
+            state.answerTimeMs = Math.max(1, System.currentTimeMillis() - questionStartTime);
+            if (mainTurn) {
+                if (currentTimer != null) currentTimer.cancel(false);
+                processResults();
             }
         }
     }
@@ -426,6 +483,7 @@ public class ArenaRoom {
     // ─── 10. XỬ LÝ KẾT QUẢ VÒNG ─────────────────────────────────────────────
 
     private synchronized void processResults() {
+        if (isPaused || !"QUESTION".equals(gameState)) return;
         gameState = "RESULT";
         Question q = questions.get(currentQuestionIndex);
         int correctIndex = q.getCorrect();
@@ -449,6 +507,7 @@ public class ArenaRoom {
             }
         }
 
+        int previouslyEliminated = totalEliminatedOpponents - eliminatedBotNames.size();
         List<String> eliminatedRealOpponents = new ArrayList<>();
         int realOpponentAlive = 0;
         int realOpponentCorrect = 0;
@@ -476,7 +535,7 @@ public class ArenaRoom {
         // YÊU CẦU 6: Gửi thông tin các mốc điểm
         List<Map<String, Object>> milestones = new ArrayList<>();
         for (Leaderboard.MilestoneInfo m : Leaderboard.getMilestones(totalEliminatedOpponents, totalInitialOpponents)) {
-            milestones.add(m.toMap());
+            if (m.eliminated > previouslyEliminated) milestones.add(m.toMap());
         }
 
         Map<String, Object> resultMsg = new HashMap<>();
@@ -492,7 +551,9 @@ public class ArenaRoom {
         resultMsg.put("currentScore", mainState != null ? mainState.score : 0);
         resultMsg.put("milestones", milestones); // YÊU CẦU 6
         resultMsg.put("roundSurvivorsInfo", buildSurvivorsInfo(botAliveCount - eliminatedBotNames.size(), realOpponentAlive - eliminatedRealOpponents.size(), botCorrectCount, realOpponentCorrect));
+        lastRoundResult = resultMsg;
         broadcast(resultMsg);
+        broadcastPlayers();
 
         currentQuestionIndex++;
 
@@ -509,7 +570,7 @@ public class ArenaRoom {
                     sendQuestion();
                 }
             }
-        }, 5, TimeUnit.SECONDS);
+        }, Math.max(5, 3 + milestones.size() / 4), TimeUnit.SECONDS);
     }
 
     private Map<String, Object> buildSurvivorsInfo(int botAlive, int realOpponentAlive, int botCorrect, int realOpponentCorrect) {
@@ -557,14 +618,6 @@ public class ArenaRoom {
         endMsg.put("leaderboard", Leaderboard.getTop(10));
         broadcast(endMsg);
 
-        // Reset về WAITING để có thể chơi lại
-        scheduler.schedule(() -> {
-            synchronized (ArenaRoom.this) {
-                gameState = "WAITING";
-                mainPlayerUsername = null;
-                bots.clear();
-            }
-        }, 1, TimeUnit.SECONDS);
     }
 
     // ─── 12. BA QUYỀN TRỢ GIÚP ───────────────────────────────────────────────
@@ -574,13 +627,13 @@ public class ArenaRoom {
      */
     public synchronized void handleLifeTrust(WebSocketClient client) {
         PlayerState mainState = players.get(client);
-        if (mainState == null || !mainState.isMainPlayer || !"QUESTION".equals(gameState)) return;
+        if (mainState == null || !mainState.isMainPlayer || isPaused || !mainTurn || mainState.answer != null || !"QUESTION".equals(gameState)) return;
         if (mainState.lifeTrustUsed) { sendError(client, "Bạn đã dùng quyền Tin Người Chơi rồi!"); return; }
-        mainState.lifeTrustUsed = true;
 
         // Tìm 1 đối thủ thật đã trả lời
         for (PlayerState p : players.values()) {
             if (!p.isMainPlayer && p.isAlive && p.answer != null) {
+                mainState.lifeTrustUsed = true;
                 Map<String, Object> msg = new HashMap<>();
                 msg.put("type", "arena_life_trust");
                 msg.put("opponentUsername", p.username);
@@ -592,6 +645,7 @@ public class ArenaRoom {
         // Không tìm được đối thủ thật đã trả lời → lấy từ bot
         for (BotOpponent bot : bots) {
             if (bot.isAlive && bot.answer >= 0) {
+                mainState.lifeTrustUsed = true;
                 Map<String, Object> msg = new HashMap<>();
                 msg.put("type", "arena_life_trust");
                 msg.put("opponentUsername", bot.name);
@@ -608,12 +662,12 @@ public class ArenaRoom {
      */
     public synchronized void handleLifeAsk(WebSocketClient client, String targetUsername) {
         PlayerState mainState = players.get(client);
-        if (mainState == null || !mainState.isMainPlayer || !"QUESTION".equals(gameState)) return;
+        if (mainState == null || !mainState.isMainPlayer || isPaused || !mainTurn || mainState.answer != null || !"QUESTION".equals(gameState)) return;
         if (mainState.lifeAskUsed) { sendError(client, "Bạn đã dùng quyền Hỏi Người Chơi rồi!"); return; }
-        mainState.lifeAskUsed = true;
 
         for (PlayerState p : players.values()) {
-            if (p.username.equalsIgnoreCase(targetUsername) && p.isAlive && p.answer != null) {
+            if (!p.isMainPlayer && p.username.equalsIgnoreCase(targetUsername) && p.isAlive && p.answer != null) {
+                mainState.lifeAskUsed = true;
                 Map<String, Object> msg = new HashMap<>();
                 msg.put("type", "arena_life_ask");
                 msg.put("opponentUsername", p.username);
@@ -630,7 +684,7 @@ public class ArenaRoom {
      */
     public synchronized void handleLifeSurvey(WebSocketClient client) {
         PlayerState mainState = players.get(client);
-        if (mainState == null || !mainState.isMainPlayer || !"QUESTION".equals(gameState)) return;
+        if (mainState == null || !mainState.isMainPlayer || isPaused || !mainTurn || mainState.answer != null || !"QUESTION".equals(gameState)) return;
         if (mainState.lifeSurveyUsed) { sendError(client, "Bạn đã dùng quyền Khảo Sát rồi!"); return; }
         mainState.lifeSurveyUsed = true;
 
@@ -665,9 +719,17 @@ public class ArenaRoom {
     // ─── 13. THÔNG TIN PHÒNG & BROADCAST ────────────────────────────────────
 
     private void sendCurrentGameState(WebSocketClient client) {
+        if ("QUESTION".equals(gameState) || "RESULT".equals(gameState)) {
+            client.send(JsonUtil.toJson(Map.of("type", "arena_game_started", "mainPlayer", mainPlayerUsername,
+                    "totalOpponents", totalInitialOpponents, "botCount", bots.size(), "difficulty", difficulty)));
+        }
+        if ("RESULT".equals(gameState) && lastRoundResult != null) {
+            client.send(JsonUtil.toJson(lastRoundResult));
+            return;
+        }
         // Gửi trạng thái game hiện tại cho người vừa join
-        if ("QUESTION".equals(gameState) && currentQuestionIndex > 0 && currentQuestionIndex <= questions.size()) {
-            Question q = questions.get(currentQuestionIndex - 1);
+        if ("QUESTION".equals(gameState) && currentQuestionIndex >= 0 && currentQuestionIndex < questions.size()) {
+            Question q = questions.get(currentQuestionIndex);
             long aliveOpponents = countAliveOpponents();
             
             PlayerState state = players.get(client);
@@ -675,7 +737,7 @@ public class ArenaRoom {
             
             Map<String, Object> msg = new HashMap<>();
             msg.put("type", "arena_new_question");
-            msg.put("questionId", currentQuestionIndex);
+            msg.put("questionId", currentQuestionIndex + 1);
             msg.put("totalQuestions", questions.size());
             msg.put("text", q.getText());
             msg.put("options", q.getOptions());
@@ -684,9 +746,18 @@ public class ArenaRoom {
             msg.put("aliveOpponents", aliveOpponents);
             msg.put("totalEliminated", totalEliminatedOpponents);
             msg.put("totalInitialOpponents", totalInitialOpponents);
-            msg.put("timeLimit", isMainPlayer ? mainPlayerTimeLimit : timeLimit);
+            PlayerState main = findMainPlayerState();
+            msg.put("currentScore", main != null ? main.score : 0);
+            long elapsed = (isPaused ? pauseStartTime : System.currentTimeMillis()) - questionStartTime;
+            msg.put("timeLimit", Math.max(0, (int) Math.ceil(((mainTurn ? mainPlayerTimeLimit : timeLimit) * 1000L - elapsed) / 1000.0)));
+            msg.put("phase", mainTurn ? "MAIN" : "OPPONENTS");
+            msg.put("isAlive", state != null && state.isAlive);
+            msg.put("answer", state != null && state.answer != null ? state.answer : -1);
+            msg.put("lifeTrustUsed", state != null && state.lifeTrustUsed);
+            msg.put("lifeAskUsed", state != null && state.lifeAskUsed);
+            msg.put("lifeSurveyUsed", state != null && state.lifeSurveyUsed);
             msg.put("isMainPlayer", isMainPlayer);
-            msg.put("spectatorMode", true);
+            msg.put("paused", isPaused);
             client.send(JsonUtil.toJson(msg));
         }
     }
@@ -694,6 +765,7 @@ public class ArenaRoom {
     public void sendRoomInfo(WebSocketClient client) {
         Map<String, Object> info = new HashMap<>();
         info.put("type", "room_info");
+        info.put("gameState", gameState);
         info.put("roomCode", roomCode);
         info.put("roomName", roomName);
         info.put("hostUsername", hostUsername);
@@ -705,6 +777,7 @@ public class ArenaRoom {
         info.put("timeLimit", timeLimit);
         info.put("mainPlayerTimeLimit", mainPlayerTimeLimit);
         info.put("botCount", botCount);
+        info.put("maxPlayers", maxPlayers);
         info.put("isHost", isHost(client.getUsername()));
         info.put("isSuperAdmin", isSuperAdmin(client.getUsername()));
         client.send(JsonUtil.toJson(info));
@@ -741,10 +814,10 @@ public class ArenaRoom {
         }
 
         // Thêm bot vào danh sách để hiển thị trên khán đài (phòng chờ)
-        for (int i = 1; i <= botCount; i++) {
+        for (int i = 1; i <= (bots.isEmpty() ? Math.min(botCount, 101 - players.size()) : bots.size()); i++) {
             Map<String, Object> botMap = new HashMap<>();
             botMap.put("username", "Bot_" + i);
-            botMap.put("isAlive", true);
+            botMap.put("isAlive", bots.isEmpty() || i > bots.size() || bots.get(i - 1).isAlive);
             botMap.put("isReady", true);
             botMap.put("isHost", false);
             botMap.put("isSuperAdmin", false);
@@ -779,6 +852,7 @@ public class ArenaRoom {
         map.put("mainPlayerTimeLimit", mainPlayerTimeLimit);
         map.put("botCount", botCount);
         map.put("playerCount", players.size());
+        map.put("maxPlayers", maxPlayers);
         map.put("gameState", gameState);
         return map;
     }
@@ -810,12 +884,16 @@ public class ArenaRoom {
             return;
         }
         
+        pauseGame(username);
+    }
+
+    private void pauseGame(String username) {
         isPaused = true;
         pauseStartTime = System.currentTimeMillis();
         
-        // Tính thời gian còn lại của vòng thi 15s
+        // Giữ thời gian còn lại của lượt đang diễn ra.
         long elapsed = System.currentTimeMillis() - questionStartTime;
-        remainingTimeBeforePause = (mainPlayerTimeLimit * 1000L) - elapsed;
+        remainingTimeBeforePause = ((mainTurn ? mainPlayerTimeLimit : timeLimit) * 1000L) - elapsed;
         if (remainingTimeBeforePause < 0) remainingTimeBeforePause = 0;
         
         // Hủy timer hiện tại
@@ -839,6 +917,10 @@ public class ArenaRoom {
             sendError(client, "Trận đấu chưa bị tạm dừng!");
             return;
         }
+        if (disconnectedPlayers.values().stream().anyMatch(p -> p.isAlive)) {
+            sendError(client, "Chờ người chơi mất kết nối vào lại phòng trước khi tiếp tục.");
+            return;
+        }
         
         isPaused = false;
         
@@ -846,20 +928,16 @@ public class ArenaRoom {
         long pauseDuration = System.currentTimeMillis() - pauseStartTime;
         questionStartTime += pauseDuration;
         
-        // Khởi động lại timer với thời gian còn lại
-        if (remainingTimeBeforePause > 0) {
-            long remainingSeconds = Math.max(1, remainingTimeBeforePause / 1000);
-            if (currentTimer != null) currentTimer.cancel(false);
-            currentTimer = scheduler.schedule(this::processResults, remainingSeconds, TimeUnit.SECONDS);
-        } else {
-            processResults();
-        }
-        
+        if (currentTimer != null) currentTimer.cancel(false);
+        currentTimer = scheduler.schedule(mainTurn ? this::processResults : this::beginMainTurn,
+                Math.max(1, remainingTimeBeforePause), TimeUnit.MILLISECONDS);
+
         Map<String, Object> msg = new HashMap<>();
         msg.put("type", "arena_game_resumed");
         msg.put("message", "▶️ Trận đấu tiếp tục!");
         msg.put("resumedBy", username);
-        msg.put("remainingTime", remainingTimeBeforePause / 1000);
+        msg.put("remainingTime", (remainingTimeBeforePause + 999) / 1000);
+        msg.put("phase", mainTurn ? "MAIN" : "OPPONENTS");
         broadcast(msg);
     }
 
@@ -867,11 +945,12 @@ public class ArenaRoom {
         for (PlayerState p : players.values()) {
             if (p.isMainPlayer) return p;
         }
+        for (PlayerState p : disconnectedPlayers.values()) if (p.isMainPlayer) return p;
         return null;
     }
 
     private long countAliveOpponents() {
-        long realAlive = players.values().stream().filter(p -> !p.isMainPlayer && p.isAlive).count();
+        long realAlive = java.util.stream.Stream.concat(players.values().stream(), disconnectedPlayers.values().stream()).filter(p -> !p.isMainPlayer && p.isAlive).count();
         long botAlive = bots.stream().filter(b -> b.isAlive).count();
         return realAlive + botAlive;
     }
@@ -891,6 +970,7 @@ public class ArenaRoom {
     }
 
     public static String getDifficultyDisplayName(String code) {
+        if ("MIX".equalsIgnoreCase(code) || "ALL".equalsIgnoreCase(code)) return "Tăng dần: Dễ → Trung bình → Khó";
         if ("EASY".equalsIgnoreCase(code))  return "Dễ (Bot đúng ~75%)";
         if ("HARD".equalsIgnoreCase(code))  return "Khó (Bot đúng ~35%)";
         return "Trung Bình (Bot đúng ~55%)";

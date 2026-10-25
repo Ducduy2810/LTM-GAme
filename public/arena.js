@@ -60,6 +60,17 @@ let lifeSurveyUsed  = false;
 let realOpponentsList = []; // [{username, isAlive}]
 
 let countdownInterval = null;
+let answerPhase = 'OPPONENTS';
+let gamePaused = false;
+let answerLocked = false;
+let scoreAnimation = null;
+let pendingResultTimeout = null;
+
+function refreshAnswerControls() {
+    const allowed = amIAlive && !gamePaused && !answerLocked && (amIMainPlayer === (answerPhase === 'MAIN'));
+    document.querySelectorAll('.answer-btn').forEach(b => b.disabled = !allowed);
+    updateLifelineButtons();
+}
 
 const eliminatedSet  = new Set();
 const playerSeatMap  = new Map(); // username -> seat number (1..100)
@@ -99,6 +110,8 @@ function initPodiumsGrid() {
 initPodiumsGrid();
 
 function renderPodiums(players = []) {
+    const hasMainPlayer = players.some(p => p.isMainPlayer);
+    players = players.filter(p => !p.isMainPlayer && (hasMainPlayer || !p.isHost || p.isBot));
     initPodiumsGrid();
     const activeUsernames = new Set(players.map(p => p.username));
     for (const [username] of playerSeatMap.entries()) {
@@ -175,7 +188,19 @@ socket.onopen = () => {
     }
 };
 
-socket.onclose = () => console.log('WebSocket đóng kết nối');
+socket.onclose = () => {
+    clearInterval(countdownInterval);
+    gamePaused = true;
+    refreshAnswerControls();
+    const feedback = document.getElementById('feedback-msg');
+    if (feedback) {
+        feedback.innerText = 'Mất kết nối máy chủ. Vào lại phòng để tiếp tục: ';
+        const link = document.createElement('a');
+        link.href = currentRoomCode ? `arena.html?room=${encodeURIComponent(currentRoomCode)}` : 'arena.html';
+        link.textContent = 'Kết nối lại'; link.style.color = '#7dd3fc';
+        feedback.appendChild(link);
+    }
+};
 
 socket.onmessage = (event) => {
     const data = JSON.parse(event.data);
@@ -205,9 +230,9 @@ socket.onmessage = (event) => {
             document.getElementById('room-code-badge').innerText = data.roomCode;
             document.getElementById('room-name-display').innerText = data.roomName;
             document.getElementById('room-settings-summary').innerText =
-                `[${data.topicName || data.topic}] • [${data.difficultyName || data.difficulty}] • ${data.questionCount} câu • ⏱️ Phụ 5s / Chính 15s • Bot: ${data.botCount}`;
+                `[${data.topicName || data.topic}] • [${data.difficultyName || data.difficulty}] • ${data.questionCount} câu • Phụ ${data.timeLimit}s trước → Chính ${data.mainPlayerTimeLimit}s • Tối đa ${data.maxPlayers} người thật • Bot: ${data.botCount}`;
 
-            showScreen('waiting');
+            if (!data.gameState || data.gameState === 'WAITING' || data.gameState === 'END') showScreen('waiting');
             break;
         }
 
@@ -248,10 +273,15 @@ socket.onmessage = (event) => {
         // ── KẾT QUẢ QUYỀN TRỢ GIÚP ──────────────────────────────
         case 'arena_life_trust':
         case 'arena_life_ask':
+            if (data.type === 'arena_life_trust') lifeTrustUsed = true;
+            else lifeAskUsed = true;
+            updateLifelineButtons();
             showLifelineResult(`👁 ${data.opponentUsername} đã chọn đáp án: <strong>${'ABCD'[data.opponentAnswer]}</strong>`);
             break;
 
         case 'arena_life_survey':
+            lifeSurveyUsed = true;
+            updateLifelineButtons();
             showLifelineSurvey(data.distribution, data.totalRespondents);
             break;
             
@@ -430,7 +460,18 @@ function handleGameStarted(data) {
 
 // ── 6. HANDLER: CÂU HỎI MỚI ─────────────────────────────────────
 function handleNewQuestion(data) {
+    clearTimeout(pendingResultTimeout);
     showScreen('game');
+    if (scoreAnimation) clearInterval(scoreAnimation);
+    answerPhase = data.phase || 'OPPONENTS';
+    gamePaused = !!data.paused;
+    answerLocked = data.answer !== undefined && data.answer >= 0;
+    if (data.isMainPlayer !== undefined) amIMainPlayer = data.isMainPlayer;
+    if (data.isAlive !== undefined) amIAlive = data.isAlive;
+    if (data.currentScore !== undefined) myCurrentScore = data.currentScore;
+    if (data.lifeTrustUsed !== undefined) lifeTrustUsed = data.lifeTrustUsed;
+    if (data.lifeAskUsed !== undefined) lifeAskUsed = data.lifeAskUsed;
+    if (data.lifeSurveyUsed !== undefined) lifeSurveyUsed = data.lifeSurveyUsed;
 
     aliveOpponents  = data.aliveOpponents  !== undefined ? data.aliveOpponents  : aliveOpponents;
     totalEliminated = data.totalEliminated !== undefined ? data.totalEliminated : totalEliminated;
@@ -455,10 +496,11 @@ function handleNewQuestion(data) {
     data.options.forEach((opt, index) => {
         const btn = document.createElement('button');
         btn.className = 'answer-btn option-btn';
-        btn.innerHTML = `
-            <span class="answer-letter">${letters[index] || ''}</span>
-            <span class="answer-text">${opt}</span>
-        `;
+        const letter = document.createElement('span');
+        letter.className = 'answer-letter'; letter.textContent = letters[index] || '';
+        const text = document.createElement('span');
+        text.className = 'answer-text'; text.textContent = opt;
+        btn.appendChild(letter); btn.appendChild(text);
         if (!canAnswer) btn.disabled = true;
         btn.onclick = () => selectAnswer(index, btn);
         container.appendChild(btn);
@@ -483,7 +525,15 @@ function handleNewQuestion(data) {
         pauseControls.style.display = (isMyHost || isCurrentUserAdmin) ? 'flex' : 'none';
     }
 
-    startTimer(data.timeLimit || 10);
+    document.getElementById('feedback-msg').innerText = gamePaused ? '⏸ Trận đấu đang tạm dừng' :
+        (answerPhase === 'MAIN' ? '👑 Lượt người chơi chính — người chơi phụ đã khóa đáp án.' : '⚔ Người chơi phụ trả lời trước. Người chơi chính chờ lượt.');
+    if (answerLocked) container.children[data.answer]?.classList.add('selected');
+    if (!gamePaused) startTimer(data.timeLimit ?? 5);
+    refreshAnswerControls();
+    const pause = document.getElementById('btn-pause-game');
+    const resume = document.getElementById('btn-resume-game');
+    if (pause) pause.style.display = gamePaused ? 'none' : 'inline-block';
+    if (resume) resume.style.display = gamePaused ? 'inline-block' : 'none';
 }
 
 // ── 7. HANDLER: KẾT QUẢ VÒNG ────────────────────────────────────
@@ -503,8 +553,23 @@ function handleRoundResult(data) {
     // Cập nhật HUD từ dữ liệu server
     aliveOpponents  = data.aliveOpponents  !== undefined ? data.aliveOpponents  : aliveOpponents;
     totalEliminated = data.totalEliminated !== undefined ? data.totalEliminated : totalEliminated;
-    myCurrentScore  = data.currentScore    !== undefined ? data.currentScore    : myCurrentScore;
-    updateHud();
+    const steps = data.milestones || [];
+    if (scoreAnimation) clearInterval(scoreAnimation);
+    const animateScore = () => {
+        if (steps.length) {
+            let i = 0;
+            scoreAnimation = setInterval(() => {
+                const step = steps[i++];
+                myCurrentScore = step.points;
+                updateHud();
+                document.getElementById('current-score-result').innerText = myCurrentScore;
+                const notice = document.getElementById('milestone-notice');
+                if (notice && step.isImportantMilestone) notice.innerText = `🎉 Đạt mốc loại ${step.eliminated} người — ${step.points} điểm!`;
+                if (i >= steps.length) { clearInterval(scoreAnimation); scoreAnimation = null; }
+            }, Math.min(250, 2500 / steps.length));
+        } else myCurrentScore = data.currentScore ?? myCurrentScore;
+        updateHud();
+    };
 
     // Đánh dấu đối thủ thật bị loại
     if (data.eliminatedRealOpponents && Array.isArray(data.eliminatedRealOpponents)) {
@@ -526,8 +591,9 @@ function handleRoundResult(data) {
     }
 
     // Render kết quả sau 2 giây
-    setTimeout(() => {
+    pendingResultTimeout = setTimeout(() => {
         showScreen('result');
+        animateScore();
 
         document.getElementById('survivor-count').innerText       = aliveOpponents;
         document.getElementById('eliminated-round-count').innerText =
@@ -585,6 +651,8 @@ function handleRoundResult(data) {
 
 // ── 8. HANDLER: KẾT THÚC TRẬN ────────────────────────────────────
 function handleEndGame(data) {
+    clearTimeout(pendingResultTimeout);
+    clearInterval(scoreAnimation);
     showScreen('end');
 
     const mainWon = !!data.mainWon;
@@ -640,6 +708,11 @@ function updateLifelineButtons() {
     btnTrust.disabled  = lifeTrustUsed;
     btnAsk.disabled    = lifeAskUsed;
     btnSurvey.disabled = lifeSurveyUsed;
+    [[btnTrust, lifeTrustUsed, '👁 Tin Người Chơi'], [btnAsk, lifeAskUsed, '🙋 Hỏi Người Chơi'], [btnSurvey, lifeSurveyUsed, '📊 Khảo Sát']].forEach(([btn, used, label]) => {
+        btn.innerText = label + (used ? ' (Đã dùng)' : '');
+        btn.style.opacity = used ? '0.4' : '1';
+        btn.disabled = used || gamePaused || answerPhase !== 'MAIN' || answerLocked || !amIMainPlayer;
+    });
     if (lifeTrustUsed)  { btnTrust.innerText  = '👁 Tin Người Chơi (Đã dùng)'; btnTrust.style.opacity  = '0.4'; }
     if (lifeAskUsed)    { btnAsk.innerText    = '🙋 Hỏi Người Chơi (Đã dùng)'; btnAsk.style.opacity    = '0.4'; }
     if (lifeSurveyUsed) { btnSurvey.innerText = '📊 Khảo Sát (Đã dùng)';       btnSurvey.style.opacity = '0.4'; }
@@ -674,7 +747,8 @@ function hideLifelineResult() {
 
 // YÊU CẦU 2: Xử lý lượt người chơi chính
 function handleMainPlayerTurn(data) {
-    playSound('questionBeep');
+    answerPhase = 'MAIN';
+    refreshAnswerControls();
     const feedbackEl = document.getElementById('feedback-msg');
     if (feedbackEl) {
         feedbackEl.style.color = '#fde047';
@@ -688,7 +762,8 @@ function handleMainPlayerTurn(data) {
 
 // YÊU CẦU 5: Xử lý tạm dừng trận đấu
 function handleGamePaused(data) {
-    playSound('notificationSound');
+    gamePaused = true;
+    refreshAnswerControls();
     if (countdownInterval) {
         clearInterval(countdownInterval);
         countdownInterval = null;
@@ -707,7 +782,9 @@ function handleGamePaused(data) {
 
 // YÊU CẦU 5: Xử lý tiếp tục trận đấu
 function handleGameResumed(data) {
-    playSound('notificationSound');
+    gamePaused = false;
+    answerPhase = data.phase || answerPhase;
+    refreshAnswerControls();
     const feedbackEl = document.getElementById('feedback-msg');
     if (feedbackEl) {
         feedbackEl.style.color = '#10b981';
@@ -802,7 +879,7 @@ function renderRoomList(rooms = []) {
                     <span class="room-tag">📚 ${r.topicName}</span>
                     <span class="room-tag">⚡ ${r.difficultyName}</span>
                     <span class="room-tag">🤖 Bot: ${r.botCount}</span>
-                    <span class="room-tag">⏱️ 5s / 15s</span>
+                    <span class="room-tag">⏱️ Phụ 5s → Chính 60s</span>
                 </div>
             </div>
             <div class="room-card-footer">
@@ -830,6 +907,9 @@ window.closeRoomByAdmin = function(code) {
 
 // ── 12. CHỐT ĐÁP ÁN ─────────────────────────────────────────────
 function selectAnswer(index, btn) {
+    if (!amIAlive || gamePaused || answerLocked || amIMainPlayer !== (answerPhase === 'MAIN')) return;
+    answerLocked = true;
+    updateLifelineButtons();
     if (!amIAlive) return;
     if (window.arenaSound) window.arenaSound.playLockAnswer();
 
@@ -887,6 +967,13 @@ function startCountdown(seconds) {
 
 // ── 14. RESET GAME STATE ─────────────────────────────────────────
 function resetGameState() {
+    clearTimeout(pendingResultTimeout);
+    gamePaused = false;
+    answerLocked = false;
+    answerPhase = 'OPPONENTS';
+    if (scoreAnimation) clearInterval(scoreAnimation);
+    const notice = document.getElementById('milestone-notice');
+    if (notice) notice.innerText = '';
     amIMainPlayer         = false;
     amIAlive              = true;
     totalInitialOpponents = 0;
@@ -966,6 +1053,11 @@ document.getElementById('btn-submit-create-room').addEventListener('click', () =
     const roomName = document.getElementById('create-room-name').value.trim();
     if (!roomName) { alert('Vui lòng nhập tên phòng!'); return; }
 
+    const maxPlayers = Number(document.getElementById('create-max-players').value);
+    const bots = Number(document.getElementById('create-bot-count').value);
+    if (!Number.isInteger(maxPlayers) || maxPlayers < 1 || maxPlayers > 101 || !Number.isInteger(bots) || bots < 0 || bots > 100) {
+        alert('Số người thật phải từ 1–101; số bot từ 0–100.'); return;
+    }
     const roomCode     = document.getElementById('create-room-code').value.trim();
     const topic        = document.getElementById('create-topic').value;
     const difficulty   = document.getElementById('create-difficulty').value;
@@ -974,7 +1066,8 @@ document.getElementById('btn-submit-create-room').addEventListener('click', () =
 
     socket.send(JSON.stringify({
         type: 'create_room',
-        roomName, roomCode, topic, difficulty, questionCount, botCount
+        roomName, roomCode, topic, difficulty, questionCount, botCount,
+        maxPlayers: Number(document.getElementById("create-max-players").value)
     }));
     modalCreateRoom.classList.remove('active');
 });
@@ -982,8 +1075,6 @@ document.getElementById('btn-submit-create-room').addEventListener('click', () =
 // Quyền Trợ Giúp – Tin Người Chơi
 document.getElementById('btn-life-trust').addEventListener('click', () => {
     if (lifeTrustUsed) return;
-    lifeTrustUsed = true;
-    updateLifelineButtons();
     socket.send(JSON.stringify({ type: 'arena_life_trust' }));
 });
 
@@ -1005,8 +1096,6 @@ document.getElementById('btn-life-ask').addEventListener('click', () => {
         btn.style.width = '100%';
         btn.innerText   = `👤 ${p.username}`;
         btn.onclick     = () => {
-            lifeAskUsed = true;
-            updateLifelineButtons();
             socket.send(JSON.stringify({ type: 'arena_life_ask', targetUsername: p.username }));
             modalAsk.classList.remove('active');
         };
@@ -1021,8 +1110,6 @@ document.getElementById('btn-close-ask-modal').addEventListener('click', () => {
 // Quyền Trợ Giúp – Khảo Sát
 document.getElementById('btn-life-survey').addEventListener('click', () => {
     if (lifeSurveyUsed) return;
-    lifeSurveyUsed = true;
-    updateLifelineButtons();
     socket.send(JSON.stringify({ type: 'arena_life_survey' }));
 });
 

@@ -417,6 +417,29 @@ public class HttpAndWebSocketServer {
         }
         String body = new String(bodyChars);
 
+        if ("/api/questions".equals(path)) {
+            String username = sessionManager.getUsername(sessionId);
+            if (username == null || !arenaGame.isAdmin(username)) {
+                sendJson(out, 403, Map.of("error", "Chỉ quản trị viên được quản lý kho câu hỏi."), null);
+            } else {
+                try {
+                    if ("POST".equals(method) || "DELETE".equals(method)) {
+                        vn.game.model.QuestionBank.saveQuestion(JsonUtil.parseObject(body), "DELETE".equals(method));
+                    } else if (!"GET".equals(method)) {
+                        throw new IllegalArgumentException("Phương thức không hợp lệ.");
+                    }
+                    sendJson(out, 200, Map.of("questions", vn.game.model.QuestionBank.listQuestions()), null);
+                } catch (IllegalArgumentException e) {
+                    sendJson(out, 400, Map.of("error", e.getMessage()), null);
+                } catch (IOException e) {
+                    System.err.println("Lưu kho câu hỏi thất bại: " + e.getMessage());
+                    sendJson(out, 500, Map.of("error", "Không lưu được kho câu hỏi."), null);
+                }
+            }
+            socket.close();
+            return;
+        }
+
         // --- LEADERBOARD API ---
         if ("GET".equals(method) && "/api/leaderboard".equals(path)) {
             Map<String, Object> lb = new HashMap<>();

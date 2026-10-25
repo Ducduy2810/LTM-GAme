@@ -130,79 +130,105 @@ public class QuestionBank {
      * - Độ khó cụ thể: Lọc theo EASY, MEDIUM, HARD
      * - Chủ đề "ALL" hoặc "MIX" hoặc "RANDOM": Xáo trộn câu hỏi từ tất cả chủ đề
      */
-    public static List<Question> getQuestions(String topic, String difficulty, int count) {
-        String t = (topic != null) ? topic.toUpperCase().trim() : "ALL";
-        String d = (difficulty != null) ? difficulty.toUpperCase().trim() : "ALL";
-
-        // YÊU CẦU 3: Hỗ trợ xáo trộn chủ đề ngẫu nhiên
-        boolean mixTopic = "ALL".equals(t) || "MIX".equals(t) || "RANDOM".equals(t);
-        
-        // YÊU CẦU 1: Hỗ trợ câu hỏi tăng dần độ khó
-        boolean mixDifficulty = "ALL".equals(d) || "MIX".equals(d) || "RANDOM".equals(d);
-
-        List<Question> filtered = new ArrayList<>();
-
-        if (mixTopic && mixDifficulty) {
-            // Xáo trộn cả chủ đề và độ khó → sắp xếp theo độ khó tăng dần
-            filtered.addAll(ALL_QUESTIONS);
-            // Sắp xếp theo độ khó: EASY → MEDIUM → HARD
-            filtered.sort((a, b) -> {
-                int orderA = getDifficultyOrder(a.getDifficulty());
-                int orderB = getDifficultyOrder(b.getDifficulty());
-                return Integer.compare(orderA, orderB);
-            });
-        } else if (mixTopic) {
-            // Xáo trộn chủ đề, giữ độ khó cố định
-            for (Question q : ALL_QUESTIONS) {
-                if (q.getDifficulty().equals(d)) {
-                    filtered.add(q);
-                }
-            }
-        } else if (mixDifficulty) {
-            // Giữ chủ đề, tăng dần độ khó
-            for (Question q : ALL_QUESTIONS) {
-                if (q.getTopic().equals(t)) {
-                    filtered.add(q);
-                }
-            }
-            filtered.sort((a, b) -> {
-                int orderA = getDifficultyOrder(a.getDifficulty());
-                int orderB = getDifficultyOrder(b.getDifficulty());
-                return Integer.compare(orderA, orderB);
-            });
-        } else {
-            // Lọc chính xác theo chủ đề và độ khó
-            for (Question q : ALL_QUESTIONS) {
-                boolean topicMatch = q.getTopic().equals(t);
-                boolean diffMatch = q.getDifficulty().equals(d);
-                if (topicMatch && diffMatch) {
-                    filtered.add(q);
-                }
-            }
-        }
-
-        // Nếu số câu chưa đủ, lấy thêm từ kho chung (giữ nguyên logic cũ)
-        if (filtered.size() < count) {
-            for (Question q : ALL_QUESTIONS) {
-                if (!filtered.contains(q)) {
-                    filtered.add(q);
-                    if (filtered.size() >= count) break;
-                }
-            }
-        }
-
-        // Nếu không phải tăng dần độ khó, trộn ngẫu nhiên
-        if (!mixDifficulty) {
-            Collections.shuffle(filtered);
-        }
-
-        int resultCount = Math.min(count, filtered.size());
+    public static synchronized List<Question> getQuestions(String topic, String difficulty, int count) {
+        String t = topic == null ? "ALL" : topic.toUpperCase().trim();
+        String d = difficulty == null ? "MIX" : difficulty.toUpperCase().trim();
+        boolean mixedTopic = Set.of("ALL", "MIX", "RANDOM").contains(t);
+        boolean progressive = Set.of("ALL", "MIX", "RANDOM").contains(d);
         List<Question> result = new ArrayList<>();
-        for (int i = 0; i < resultCount; i++) {
-            Question src = filtered.get(i);
-            result.add(new Question(i + 1, src.getText(), src.getOptions(), src.getCorrect(), src.getTopic(), src.getDifficulty()));
+        if (progressive) {
+            String[] levels = {"EASY", "MEDIUM", "HARD"};
+            for (int i = 0; i < 3; i++) {
+                int quota = count / 3 + (i < count % 3 ? 1 : 0);
+                result.addAll(getQuestions(t, levels[i], quota));
+            }
+        } else {
+            List<Question> pool = new ArrayList<>();
+            for (Question q : ALL_QUESTIONS) {
+                if ((mixedTopic || q.getTopic().equals(t)) && q.getDifficulty().equals(d)) pool.add(q);
+            }
+            // Never substitute a question from another difficulty or topic.
+            // A small bank repeats only after every matching question has appeared.
+            while (!pool.isEmpty() && result.size() < count) {
+                Collections.shuffle(pool);
+                for (Question q : pool) {
+                    if (result.size() >= count) break;
+                    result.add(q);
+                }
+            }
         }
         return result;
+    }
+
+    public static synchronized List<Map<String, Object>> listQuestions() {
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (Question q : ALL_QUESTIONS) list.add(Map.of("id", q.getId(), "text", q.getText(),
+                "options", q.getOptions(), "correct", q.getCorrect(), "topic", q.getTopic(), "difficulty", q.getDifficulty()));
+        return list;
+    }
+
+    public static synchronized void saveQuestion(Map<String, Object> data, boolean delete) throws java.io.IOException {
+        int id = data.get("id") instanceof Number ? ((Number) data.get("id")).intValue() : 0;
+        List<Question> next = new ArrayList<>(ALL_QUESTIONS);
+        if (delete) {
+            final int deleteId = id;
+            if (!next.removeIf(q -> q.getId() == deleteId)) throw new IllegalArgumentException("Không tìm thấy câu hỏi.");
+        } else {
+            String text = Objects.toString(data.get("text"), "").trim();
+            String topic = Objects.toString(data.get("topic"), "ALL").toUpperCase();
+            String level = Objects.toString(data.get("difficulty"), "").toUpperCase();
+            Object raw = data.get("options");
+            int correct = data.get("correct") instanceof Number ? ((Number) data.get("correct")).intValue() : -1;
+            if (text.isEmpty() || text.length() > 2000 || !(raw instanceof List) || ((List<?>) raw).size() != 4
+                    || correct < 0 || correct > 3 || !Set.of("EASY", "MEDIUM", "HARD").contains(level)
+                    || !Set.of("ALL", "NETWORKING", "SCIENCE", "HISTORY").contains(topic))
+                throw new IllegalArgumentException("Câu hỏi cần nội dung, 4 đáp án, đáp án đúng, chủ đề và độ khó hợp lệ.");
+            List<String> options = new ArrayList<>();
+            for (Object value : (List<?>) raw) {
+                if (!(value instanceof String) || ((String) value).isBlank() || ((String) value).length() > 1000)
+                    throw new IllegalArgumentException("Đáp án không được để trống hoặc quá dài.");
+                options.add(((String) value).trim());
+            }
+            if (id <= 0) id = next.stream().mapToInt(Question::getId).max().orElse(0) + 1;
+            final int questionId = id;
+            next.removeIf(q -> q.getId() == questionId);
+            next.add(new Question(id, text, options, correct, topic, level));
+        }
+        // Keep all difficulty/topic groups usable by the games.
+        for (String topic : List.of("NETWORKING", "SCIENCE", "HISTORY")) {
+            for (String level : List.of("EASY", "MEDIUM", "HARD")) {
+                if (next.stream().noneMatch(q -> q.getTopic().equals(topic) && q.getDifficulty().equals(level)))
+                    throw new IllegalArgumentException("Cần giữ ít nhất một câu cho mỗi chủ đề và độ khó.");
+            }
+        }
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Question q : next) rows.add(Map.of("id", q.getId(), "text", q.getText(), "options", q.getOptions(),
+                "correct", q.getCorrect(), "topic", q.getTopic(), "difficulty", q.getDifficulty()));
+        java.nio.file.Path file = java.nio.file.Path.of("data", "questions.json");
+        java.nio.file.Files.createDirectories(file.getParent());
+        java.nio.file.Path temp = java.nio.file.Files.createTempFile(file.getParent(), "questions-", ".tmp");
+        java.nio.file.Files.writeString(temp, vn.game.util.JsonUtil.toJson(Map.of("questions", rows)), java.nio.charset.StandardCharsets.UTF_8);
+        java.nio.file.Files.move(temp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        ALL_QUESTIONS.clear();
+        ALL_QUESTIONS.addAll(next);
+    }
+
+    static {
+        java.nio.file.Path file = java.nio.file.Path.of("data", "questions.json");
+        if (java.nio.file.Files.exists(file)) {
+            try {
+                Map<String, Object> data = vn.game.util.JsonUtil.parseObject(java.nio.file.Files.readString(file));
+                List<Question> loaded = new ArrayList<>();
+                for (Object item : (List<?>) data.get("questions")) {
+                    Map<?, ?> row = (Map<?, ?>) item;
+                    List<String> options = new ArrayList<>();
+                    for (Object option : (List<?>) row.get("options")) options.add((String) option);
+                    loaded.add(new Question(((Number) row.get("id")).intValue(), (String) row.get("text"), options,
+                            ((Number) row.get("correct")).intValue(), (String) row.get("topic"), (String) row.get("difficulty")));
+                }
+                if (!loaded.isEmpty()) { ALL_QUESTIONS.clear(); ALL_QUESTIONS.addAll(loaded); }
+            } catch (Exception e) { System.err.println("Không thể tải kho câu hỏi: " + e.getMessage()); }
+        }
     }
 
     private static int getDifficultyOrder(String difficulty) {

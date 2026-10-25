@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kho câu hỏi</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#0f172a;color:#e2e8f0;font:16px 'Segoe UI',sans-serif}main{max-width:1100px;margin:40px auto;padding:20px}a{color:#7dd3fc}section{padding:24px;background:#1e293b;border-radius:16px;margin:20px 0}input,textarea,select,button{font:inherit;padding:12px;border-radius:8px;border:1px solid #475569;background:#0f172a;color:inherit}input,textarea{width:100%;margin:8px 0}textarea{min-height:90px}button{cursor:pointer;background:#2563eb}label{display:block;margin-top:12px}.row{display:flex;gap:12px;flex-wrap:wrap}.row>*{flex:1}article{border-bottom:1px solid #475569;padding:18px 0}article button{margin-right:10px}#status{color:#fde047;white-space:pre-wrap}small{color:#94a3b8}
+  </style>
+</head>
+<body><main>
+  <a href="index.html">← Sảnh người chơi</a><h1>Kho quản lý câu hỏi</h1>
+  <p>Quản trị viên có thể thêm, sửa và xóa câu hỏi dùng chung cho Đấu trường 100 và Đấu trường sinh tử.</p>
+  <p id="status" role="status"></p>
+  <section id="editor" hidden>
+    <h2 id="editor-title">Thêm câu hỏi</h2>
+    <form id="question-form">
+      <label>Nội dung câu hỏi<textarea id="text" required maxlength="2000"></textarea></label>
+      <div id="answers"></div>
+      <div class="row">
+        <label>Đáp án đúng<select id="correct"><option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option></select></label>
+        <label>Chủ đề<select id="topic"><option value="NETWORKING">Lập trình & mạng</option><option value="SCIENCE">Khoa học</option><option value="HISTORY">Lịch sử & xã hội</option><option value="ALL">Tổng hợp</option></select></label>
+        <label>Độ khó<select id="difficulty"><option value="EASY">Dễ</option><option value="MEDIUM">Trung bình</option><option value="HARD">Khó</option></select></label>
+      </div>
+      <p><button type="submit">Lưu câu hỏi</button> <button type="button" id="new-question">Tạo câu mới</button></p>
+    </form>
+  </section>
+  <section id="library" hidden>
+    <h2>Danh sách câu hỏi</h2>
+    <div class="row"><input id="search" placeholder="Tìm theo nội dung…" aria-label="Tìm câu hỏi"><select id="filter"><option value="">Mọi độ khó</option><option value="EASY">Dễ</option><option value="MEDIUM">Trung bình</option><option value="HARD">Khó</option></select></div>
+    <p id="count"></p><div id="questions"></div>
+  </section>
+</main><script src="questions.js"></script></body></html>

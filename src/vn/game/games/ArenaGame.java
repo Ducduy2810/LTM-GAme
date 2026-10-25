@@ -32,7 +32,7 @@ public class ArenaGame {
     private void initDefaultRoom() {
         ArenaRoom defaultRoom = new ArenaRoom(
                 DEFAULT_ROOM_CODE, "Sàn Đấu Mặc Định VTV3", "DuyNguyen",
-                "ALL", "MEDIUM", 15, 5, 100,
+                "MIX", "MIX", 15, 5, 100,
                 userRepository, scheduler
         );
         rooms.put(DEFAULT_ROOM_CODE, defaultRoom);
@@ -133,6 +133,7 @@ public class ArenaGame {
                 questionCount, timeLimit, botCount,
                 userRepository, scheduler
         );
+        newRoom.setMaxPlayers(req.get("maxPlayers") instanceof Number ? ((Number) req.get("maxPlayers")).intValue() : 101);
         rooms.put(code, newRoom);
         joinRoomInternal(client, newRoom);
 
@@ -167,6 +168,10 @@ public class ArenaGame {
     }
 
     private synchronized void joinRoomInternal(WebSocketClient client, ArenaRoom room) {
+        if (!room.canJoin(client.getUsername())) {
+            sendError(client, "Phòng đã đủ người hoặc đang thi đấu. Chỉ người chơi cũ được kết nối lại.");
+            return;
+        }
         // Chỉ rời phòng cũ nếu client đang thực sự ở phòng nào đó
         if (clientRoomMap.containsKey(client)) {
             handleLeaveRoom(client);
@@ -294,7 +299,7 @@ public class ArenaGame {
         lobbyClients.remove(client);
         ArenaRoom room = clientRoomMap.remove(client);
         if (room != null) {
-            room.handleLeave(client);
+            room.handleDisconnect(client);
             boolean canDelete = room.isEmpty()
                     && !DEFAULT_ROOM_CODE.equalsIgnoreCase(room.getRoomCode())
                     && ("WAITING".equals(room.getGameState()) || "END".equals(room.getGameState()));

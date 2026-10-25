@@ -61,18 +61,15 @@ public class Leaderboard {
         upsert(s);
     }
 
-    /** Tính điểm theo thang lũy tiến mỗi người bị loại. */
+    /** Tính điểm lũy tiến cho các mốc 5 người đã hoàn thành. */
     public static int calcMilestonePoints(int eliminated, int totalOpponents) {
         if (totalOpponents <= 0) return 0;
         int pts = 0;
-        for (int i = 1; i <= eliminated; i++) {
-            if      (i <=  5) pts += 100;
-            else if (i <= 10) pts += 150;
-            else if (i <= 20) pts += 200;
-            else if (i <= 40) pts += 250;
-            else if (i <= 60) pts += 300;
-            else if (i <= 80) pts += 400;
-            else              pts += 500;
+        int completed = Math.min(Math.max(0, eliminated), totalOpponents) / 5;
+        for (int step = 1; step <= completed; step++) {
+            int i = step * 5;
+            int rate = i <= 5 ? 100 : i <= 10 ? 150 : i <= 20 ? 200 : i <= 40 ? 250 : i <= 60 ? 300 : i <= 80 ? 400 : 500;
+            pts += rate * 5;
         }
         return pts;
     }
@@ -80,18 +77,8 @@ public class Leaderboard {
     /** Danh sách checkpoint điểm để animate tăng dần trên client. */
     public static List<MilestoneInfo> getMilestones(int eliminated, int totalOpponents) {
         List<MilestoneInfo> list = new ArrayList<>();
-        int cum = 0;
-        for (int i = 0; i <= eliminated; i++) {
-            if (i > 0) {
-                if      (i <=  5) cum += 100;
-                else if (i <= 10) cum += 150;
-                else if (i <= 20) cum += 200;
-                else if (i <= 40) cum += 250;
-                else if (i <= 60) cum += 300;
-                else if (i <= 80) cum += 400;
-                else              cum += 500;
-            }
-            list.add(new MilestoneInfo(i, cum, i > 0 && i % 5 == 0));
+        for (int i = 1; i <= Math.min(eliminated, totalOpponents); i++) {
+            list.add(new MilestoneInfo(i, calcMilestonePoints(i, totalOpponents), i % 5 == 0));
         }
         return list;
     }
