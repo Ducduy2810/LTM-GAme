@@ -70,6 +70,16 @@ function refreshAnswerControls() {
     const allowed = amIAlive && !gamePaused && !answerLocked && (amIMainPlayer === (answerPhase === 'MAIN'));
     document.querySelectorAll('.answer-btn').forEach(b => b.disabled = !allowed);
     updateLifelineButtons();
+    refreshPauseControls();
+}
+
+function refreshPauseControls() {
+    const controls = document.getElementById('pause-controls');
+    if (controls) controls.style.display = (isMyHost || isCurrentUserAdmin) ? 'flex' : 'none';
+    const pause = document.getElementById('btn-pause-game');
+    const resume = document.getElementById('btn-resume-game');
+    if (pause) pause.style.display = gamePaused ? 'none' : 'inline-block';
+    if (resume) resume.style.display = gamePaused ? 'inline-block' : 'none';
 }
 
 const eliminatedSet  = new Set();
@@ -88,6 +98,8 @@ fetch('/auth/me').then(r => r.json()).then(data => {
             const clearLbBtn = document.getElementById('btn-admin-clear-leaderboard');
             if (clearLbBtn) clearLbBtn.style.display = 'inline-block';
         }
+        if (currentRoomInfo) isMyHost = currentRoomInfo.hostUsername === currentUsername;
+        refreshPauseControls();
     } else {
         alert('Bạn chưa đăng nhập!');
         window.location.href = 'index.html';
@@ -226,6 +238,10 @@ socket.onmessage = (event) => {
         case 'room_info': {
             currentRoomInfo = data;
             currentRoomCode = data.roomCode;
+            isMyHost = !!data.isHost;
+            if (data.isSuperAdmin !== undefined) isCurrentUserAdmin = !!data.isSuperAdmin;
+            if (data.paused !== undefined) gamePaused = !!data.paused;
+            refreshPauseControls();
 
             document.getElementById('room-code-badge').innerText = data.roomCode;
             document.getElementById('room-name-display').innerText = data.roomName;
@@ -352,7 +368,8 @@ function handleUpdatePlayers(data) {
     // Truyền tất cả (người thật + bot) lên khán đài
     renderPodiums(data.players);
 
-    isMyHost = (data.hostUsername && data.hostUsername === currentUsername);
+    if (currentUsername) isMyHost = (data.hostUsername && data.hostUsername === currentUsername);
+    refreshPauseControls();
     const canIControl = isMyHost || isCurrentUserAdmin;
 
     const btnReady   = document.getElementById('btn-toggle-ready');
@@ -520,20 +537,13 @@ function handleNewQuestion(data) {
     hideLifelineResult();
     
     // YÊU CẦU 5: Hiển thị nút pause/resume cho host/admin
-    const pauseControls = document.getElementById('pause-controls');
-    if (pauseControls) {
-        pauseControls.style.display = (isMyHost || isCurrentUserAdmin) ? 'flex' : 'none';
-    }
+    refreshPauseControls();
 
     document.getElementById('feedback-msg').innerText = gamePaused ? '⏸ Trận đấu đang tạm dừng' :
         (answerPhase === 'MAIN' ? '👑 Lượt người chơi chính — người chơi phụ đã khóa đáp án.' : '⚔ Người chơi phụ trả lời trước. Người chơi chính chờ lượt.');
     if (answerLocked) container.children[data.answer]?.classList.add('selected');
     if (!gamePaused) startTimer(data.timeLimit ?? 5);
     refreshAnswerControls();
-    const pause = document.getElementById('btn-pause-game');
-    const resume = document.getElementById('btn-resume-game');
-    if (pause) pause.style.display = gamePaused ? 'none' : 'inline-block';
-    if (resume) resume.style.display = gamePaused ? 'inline-block' : 'none';
 }
 
 // ── 7. HANDLER: KẾT QUẢ VÒNG ────────────────────────────────────
@@ -773,11 +783,6 @@ function handleGamePaused(data) {
         feedbackEl.style.color = '#ef4444';
         feedbackEl.innerText = data.message || '⏸️ Trận đấu đã tạm dừng';
     }
-    // Hiển thị nút resume, ẩn nút pause
-    const btnPause = document.getElementById('btn-pause-game');
-    const btnResume = document.getElementById('btn-resume-game');
-    if (btnPause) btnPause.style.display = 'none';
-    if (btnResume) btnResume.style.display = 'inline-block';
 }
 
 // YÊU CẦU 5: Xử lý tiếp tục trận đấu
@@ -794,11 +799,6 @@ function handleGameResumed(data) {
     if (data.remainingTime) {
         startCountdown(data.remainingTime);
     }
-    // Hiển thị nút pause, ẩn nút resume
-    const btnPause = document.getElementById('btn-pause-game');
-    const btnResume = document.getElementById('btn-resume-game');
-    if (btnPause) btnPause.style.display = 'inline-block';
-    if (btnResume) btnResume.style.display = 'none';
 }
 
 // ── 10. BẢNG XẾP HẠNG ────────────────────────────────────────────

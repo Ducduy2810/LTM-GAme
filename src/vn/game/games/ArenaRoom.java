@@ -277,7 +277,7 @@ public class ArenaRoom {
                 currentQuestionIndex = 0;
                 if (currentTimer != null) { currentTimer.cancel(false); currentTimer = null; }
             }
-        } else if (wasHost) {
+        } else if (wasHost && !(disconnected && active)) {
             WebSocketClient nextHost = players.keySet().stream().filter(c -> !c.isClosed()).findFirst().orElse(null);
             if (nextHost != null) {
                 PlayerState ps = players.get(nextHost);
@@ -766,6 +766,7 @@ public class ArenaRoom {
         Map<String, Object> info = new HashMap<>();
         info.put("type", "room_info");
         info.put("gameState", gameState);
+        info.put("paused", isPaused);
         info.put("roomCode", roomCode);
         info.put("roomName", roomName);
         info.put("hostUsername", hostUsername);
