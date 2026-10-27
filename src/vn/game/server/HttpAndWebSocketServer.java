@@ -569,6 +569,11 @@ public class HttpAndWebSocketServer {
                 user.setResetExpires(System.currentTimeMillis() + 3600000); // 1 giờ
                 userRepository.update(user);
 
+                String proto = headers.getOrDefault("x-forwarded-proto", "http");
+                String host = headers.getOrDefault("x-forwarded-host", headers.get("host"));
+                if (host == null || host.isEmpty()) host = "localhost:" + port;
+
+                String resetLink = proto + "://" + host + "/reset.html?token=" + token;
                 String resetLink = baseUrl + "/reset.html?token=" + token;
 
                 System.out.println("\n==============================================");
@@ -597,6 +602,26 @@ public class HttpAndWebSocketServer {
                 break;
             }
 
+            // case "/auth/google": {
+            //     String clientId = Env.get("GOOGLE_CLIENT_ID");
+            //     if (clientId.isEmpty()) {
+            //         sendResponse(out, 400, "text/html; charset=utf-8",
+            //                 "<h3>Lỗi: Chưa cấu hình GOOGLE_CLIENT_ID trong file .env!</h3><br><a href='/'>Quay lại trang chủ</a>".getBytes(StandardCharsets.UTF_8), null);
+            //         return;
+            //     }
+            //     String redirectUri = URLEncoder.encode("http://localhost:" + port + "/auth/google/callback", StandardCharsets.UTF_8);
+            //     String scope = URLEncoder.encode("openid email profile", StandardCharsets.UTF_8);
+            //     String googleAuthUrl = "https://accounts.google.com/o/oauth2/v2/auth" +
+            //             "?client_id=" + clientId +
+            //             "&redirect_uri=" + redirectUri +
+            //             "&response_type=code" +
+            //             "&scope=" + scope +
+            //             "&prompt=select_account";
+            //     sendRedirect(out, googleAuthUrl, null);
+            //     break;
+            // }
+
+
             case "/auth/google": {
                 // Google OAuth chỉ hoạt động khi truy cập từ máy chủ (localhost)
                 // vì Google Console chỉ cho phép redirect_uri là localhost
@@ -611,6 +636,11 @@ public class HttpAndWebSocketServer {
                             "<h3>Lỗi: Chưa cấu hình GOOGLE_CLIENT_ID trong file .env!</h3><br><a href='/'>Quay lại trang chủ</a>".getBytes(StandardCharsets.UTF_8), null);
                     return;
                 }
+                
+                // ĐÃ SỬA: Lấy URI động
+                String dynamicUri = getDynamicRedirectUri(headers);
+                String redirectUri = URLEncoder.encode(dynamicUri, StandardCharsets.UTF_8);
+                
                 String redirectUri = URLEncoder.encode(googleCallbackUri, StandardCharsets.UTF_8);
                 String scope = URLEncoder.encode("openid email profile", StandardCharsets.UTF_8);
                 String googleAuthUrl = "https://accounts.google.com/o/oauth2/v2/auth" +
@@ -641,6 +671,9 @@ public class HttpAndWebSocketServer {
 
                 String clientId = Env.get("GOOGLE_CLIENT_ID");
                 String clientSecret = Env.get("GOOGLE_CLIENT_SECRET");
+                // String redirectUri = "http://localhost:" + port + "/auth/google/callback";
+                // ĐÃ SỬA: Lấy URI động
+                String redirectUri = getDynamicRedirectUri(headers);
                 String redirectUri = googleCallbackUri;
 
                 try {
@@ -698,6 +731,16 @@ public class HttpAndWebSocketServer {
                 sendJson(out, 404, Map.of("error", "API endpoint not found"), null);
                 break;
         }
+    }
+
+    // Hàm tự động ghép URL động dựa theo Header của Client / Ngrok
+    private String getDynamicRedirectUri(Map<String, String> headers) {
+        String proto = headers.getOrDefault("x-forwarded-proto", "http");
+        String host = headers.getOrDefault("x-forwarded-host", headers.get("host"));
+        if (host == null || host.isEmpty()) {
+            host = "localhost:" + port;
+        }
+        return proto + "://" + host + "/auth/google/callback";
     }
 
     private void serveStaticFile(OutputStream out, String path) throws IOException {
