@@ -6,6 +6,8 @@ bin/
 out/
 *.class
 
-# Dữ liệu người dùng cục bộ
-data/
-*.db
+# Dữ liệu người dùng cục bộ (không commit DB và JSON thật)
+data/*.json
+data/*.db
+# Giữ thư mục data/ bằng .gitkeep
+!data/.gitkeep

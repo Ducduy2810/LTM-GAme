@@ -219,6 +219,7 @@
                 <div style="margin-top: 12px; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 10px; font-size: 14px;">
                     <span style="color: #ef4444; font-weight: 700;">Danh sách bị loại vòng này:</span>
                     <span id="eliminated-list" style="color: #cbd5e1; margin-left: 8px;"></span>
+                    <p id="milestone-notice" role="status" style="color:#fde047;font-weight:bold"></p>
                 </div>
 
                 <p style="margin-top: 25px; color: #38bdf8; font-style: italic; font-weight: 600;">⏳ Chuẩn bị câu hỏi tiếp theo...</p>
@@ -319,6 +320,9 @@
 
                 <div class="form-row">
                     <div class="form-group" style="flex: 1;">
+                        <label>Số người thật tối đa (gồm người chơi chính):</label>
+                        <input id="create-max-players" class="form-control" type="number" min="1" max="101" value="101">
+                        <small>100 đối thủ gồm người thật và bot; bot được giảm tự động khi đủ 100 đối thủ. Người chơi chính có 60 giây sau lượt người chơi phụ.</small>
                         <label>Số lượng câu hỏi:</label>
                         <select id="create-question-count" class="form-control">
                             <option value="5">5 Câu</option>

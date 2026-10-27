@@ -2,6 +2,7 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Cổng Game Mạng - Java Network Programming</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; text-align: center; margin: 0;}
@@ -20,11 +21,24 @@
         .social-btn { display: flex; align-items: center; justify-content: center; background: white; color: black; border: 1px solid #ccc; font-weight: normal; }
         .social-btn:hover { background: #f1f5f9; }
         .social-btn img { height: 20px; margin-right: 10px; }
+        body {height:auto;min-height:100vh;padding:32px 16px;box-sizing:border-box;background:radial-gradient(ellipse at top,#243765,#0f172a 65%)}
+        .container {box-sizing:border-box;max-width:100%}
+        .welcome {max-width:850px;margin-bottom:28px}
+        .welcome h1 {font-size:clamp(30px,5vw,48px);margin:12px 0;color:#fde047}
+        .welcome p {color:#cbd5e1;line-height:1.7}
+        .steps {display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin:20px 0}
+        .steps span {padding:12px 16px;border:1px solid #475569;border-radius:12px;background:#1e293b}
     </style>
 </head>
 <body>
+    <header class="welcome">
+        <span style="color:#7dd3fc;letter-spacing:3px">SẴN SÀNG THÁCH ĐẤU</span>
+        <h1>Đấu trí cùng bạn bè</h1>
+        <p>Chào mừng đến sảnh người chơi. Chọn trò chơi, tạo phòng theo ý bạn và mời bạn bè bằng mã phòng.</p>
+        <div class="steps"><span>1 · Đăng nhập người chơi</span><span>2 · Chọn game & tạo phòng</span><span>3 · Sẵn sàng & thi đấu</span></div>
+    </header>
     <div id="auth-section" class="container">
-        <h2 style="color:#facc15; margin-top:0;">🔐 Đăng Nhập <span class="badge">Java Backend</span></h2>
+        <h2 style="color:#facc15; margin-top:0;">🔐 Đăng nhập người chơi</h2>
         <p id="auth-msg" style="color:#ef4444; font-size:0.9em; min-height: 1.2em;"></p>
         
         <!-- FORM ĐĂNG NHẬP -->
@@ -70,7 +84,7 @@
         <div style="display:flex; gap:16px; justify-content:center; margin-top:25px; flex-wrap:wrap;">
             <a href="arena.html" class="portal-btn btn-arena" style="flex:1; min-width:180px;">
                 <span style="font-size:2.2rem; margin-bottom:8px;">🏆</span>Đấu Trường 100
-                <small style="font-size: 0.8rem; opacity: 0.8;">(100 Clients - Đồng thời)</small>
+                <small style="font-size: 0.8rem; opacity: 0.8;">1 người chơi chính · tối đa 100 đối thủ</small>
             </a>
             <a href="wheel.html" class="portal-btn btn-wheel" style="flex:1; min-width:180px;">
                 <span style="font-size:2.2rem; margin-bottom:8px;">🎡</span>Chiếc Nón Kỳ Diệu
@@ -81,6 +95,8 @@
                 <small style="font-size: 0.8rem; opacity: 0.8;">(Sinh Tồn - Trừ HP)</small>
             </a>
         </div>
+        <p style="color:#cbd5e1;line-height:1.7">Trong sảnh mỗi game, chọn <strong>Tạo phòng mới</strong> để thiết lập số người và câu hỏi. Đấu trường 100 hỗ trợ bot, xáo trộn chủ đề và độ khó tăng dần.</p>
+        <a id="question-bank-link" class="hidden" href="questions.html" style="color:#7dd3fc">📚 Quản lý kho câu hỏi</a>
     </div>
 
     <script src="auth.js"></script>

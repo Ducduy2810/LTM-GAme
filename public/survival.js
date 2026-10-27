@@ -377,7 +377,7 @@
         if (nameDisplay) nameDisplay.innerText = info.roomName || 'Phòng Đấu Sinh Tử';
         if (summaryText) {
             const topicName = formatTopicName(info.topic || info.topicName);
-            summaryText.innerText = `[${topicName}] • HP: ${info.startingHp || 100} • ${info.totalRounds || 15} Vòng`;
+            summaryText.innerText = `[${topicName}] • HP: ${info.startingHp || 100} • ${info.totalRounds || 15} Vòng • Tối đa ${info.maxPlayers || 20} người • Dễ → Trung bình → Khó`;
         }
     }
 
@@ -754,7 +754,7 @@
         // YÊU CẦU 1: Lấy thông tin đáp án của bản thân từ playerAnswerResults
         const playerAnswerResults = data.playerAnswerResults || {};
         const myAnswerResult = playerAnswerResults[currentUsername];
-        const myAnswer = myAnswerResult ? myAnswerResult.answer : null;
+        const myAnswer = myAnswerResult ? myAnswerResult.answer : -1;
         const myIsCorrect = myAnswerResult ? myAnswerResult.isCorrect : false;
 
         // Tìm trạng thái của bản thân trong vòng này
@@ -794,9 +794,11 @@
         const resultInfo = document.getElementById('result-info');
         if (resultInfo) {
             let statusText = '';
-            const myAnswerLetter = (myAnswer >= 0 && myAnswer < 4) ? letters[myAnswer] : 'Không trả lời';
+            const myAnswerLetter = (Number.isInteger(myAnswer) && myAnswer >= 0 && myAnswer < 4) ? letters[myAnswer] : 'Không trả lời';
 
-            if (myIsCorrect) {
+            if (!myAnswerResult) {
+                statusText = '<span>Bạn đang theo dõi vòng đấu.</span>';
+            } else if (myIsCorrect) {
                 statusText = `<span style="color:#10b981;">✅ Bạn chọn <strong>[${myAnswerLetter}]</strong> - CHÍNH XÁC! Bảo toàn Máu và nhận điểm thưởng.</span>`;
                 if (sound) sound.playCorrect();
             } else {
@@ -814,6 +816,10 @@
                 <div>Đáp án chính xác: <strong style="color:#38bdf8; font-size:1.3rem;">[${correctLetter}]</strong></div>
                 <div style="margin-top:6px;">${statusText}</div>
             `;
+            const detail = document.createElement('p');
+            detail.textContent = `Đáp án đúng: ${data.correctAnswerText || correctLetter}.` +
+                (myAnswerResult ? ` Bạn đã chọn: ${myAnswerResult.answerText || 'Không trả lời'}.` : '');
+            resultInfo.appendChild(detail);
         }
 
         // Thống kê 4 ô
@@ -1113,7 +1119,8 @@
                 roomCode: roomCode,
                 topic: topic,
                 startingHp: startingHp,
-                totalRounds: totalRounds
+                totalRounds: totalRounds,
+                maxPlayers: Number(document.getElementById('create-max-players').value)
             }));
 
             closeModal();

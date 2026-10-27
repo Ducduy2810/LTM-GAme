@@ -132,6 +132,7 @@ public class SurvivalGame {
                 topic, startingHp, totalRounds,
                 userRepository, scheduler
         );
+        newRoom.setMaxPlayers(req.get("maxPlayers") instanceof Number ? ((Number) req.get("maxPlayers")).intValue() : 20);
         rooms.put(code, newRoom);
         joinRoomInternal(client, newRoom);
 
@@ -166,6 +167,10 @@ public class SurvivalGame {
     }
 
     private synchronized void joinRoomInternal(WebSocketClient client, SurvivalRoom room) {
+        if (!room.canJoin(client.getUsername())) {
+            sendError(client, "Phòng đã đủ người hoặc đang thi đấu.");
+            return;
+        }
         // Chỉ rời phòng cũ nếu client đang thực sự ở phòng nào đó
         if (clientRoomMap.containsKey(client)) {
             SurvivalRoom currentRoom = clientRoomMap.remove(client);

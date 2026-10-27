@@ -7,9 +7,9 @@ Dự án triển khai một Cổng Trò Chơi Mạng đa nền tảng với **Ba
 ## 📌 1. Các Tính Năng Cốt Lõi
 
 ### Trò chơi 1: Đấu Trường 100 (Arena 100)
-- **Mô hình Đồng thời (Simultaneous Concurrency):** Cho phép tới 100 client kết nối và gửi câu trả lời cùng lúc.
-- **Server Timer 10 giây độc lập:** Máy chủ chịu trách nhiệm bấm giờ 10 giây (dùng `ScheduledExecutorService`). Sau 10 giây, máy chủ khóa cổng thu nhận đáp án để chống gian lận/delay.
-- **Chấm điểm & Loại trừ (Elimination):** Người trả lời đúng được vào vòng trong; người trả lời sai hoặc không kịp nộp bị loại ngay lập tức.
+- **Một người chơi chính và tối đa 100 đối thủ:** Người thật và bot cùng chiếm số chỗ đối thủ; bot tự giảm nếu đủ chỗ.
+- **Hai lượt trả lời:** Người chơi phụ có 5 giây trước, sau đó người chơi chính có 60 giây riêng để trả lời và dùng trợ giúp. Máy chủ kiểm soát lượt và thời hạn.
+- **Chấm điểm & Loại trừ:** Khi người chơi chính trả lời đúng, các đối thủ sai bị loại. Điểm tăng tại mỗi mốc 5 người bị loại, kèm hiệu ứng thông báo từng mốc; loại 13 người chỉ đạt mốc 5 và 10.
 - **Đồng bộ trạng thái:** Tự động phát kết quả vòng thi và số lượng người còn sống sót cho toàn bộ client.
 
 ### Trò chơi 2: Chiếc Nón Kỳ Diệu (Wheel of Fortune)
@@ -65,3 +65,16 @@ java -cp bin vn.game.Main
 2. **Cho bạn bè cùng mạng Wi-Fi (LAN) tham gia:** Họ chỉ cần vào trình duyệt và nhập:
    👉 `http://192.168.1.203:3000` (hoặc IP hiển thị trên màn hình Console)
 3. Đăng ký tài khoản, đăng nhập và chọn một trong hai game để bắt đầu đấu trường!
+
+### Thiết lập phòng và quản lý câu hỏi
+
+- Trong sảnh game, chọn **Tạo phòng mới** để đặt giới hạn người chơi và chủ đề. Đấu trường 100 có thêm số bot, số câu và độ khó cố định hoặc tăng dần. Chọn **Xáo trộn tất cả chủ đề** để trộn câu hỏi giữa các chủ đề.
+- Sinh tử dùng các vòng 1–5 Dễ, 6–10 Trung bình và từ vòng 11 Khó. Các giai đoạn cuối tăng phạt HP và giảm thời gian.
+- Admin mở **Quản lý kho câu hỏi** trong sảnh người chơi (`/questions.html`) để thêm, sửa, xóa và tìm câu hỏi. Kho được lưu ở `data/questions.json`, áp dụng từ trận mới; đáp án đúng chỉ được trả qua API cho admin.
+- Nếu một nhóm chủ đề/độ khó chưa đủ câu, trò chơi dùng hết nhóm rồi mới lặp lại, không lấy bù câu sai độ khó. Không được xóa câu cuối cùng của mỗi nhóm chủ đề/độ khó chính.
+- Chủ phòng/admin có thể tạm dừng Đấu trường 100 trong lượt hỏi. Mất kết nối của người đang thi đấu tự tạm dừng; vào lại cùng tài khoản và mã phòng, rồi chủ phòng/admin bấm tiếp tục. Vai trò, đáp án đã khóa và trợ giúp được giữ nguyên. Rời phòng chủ động không chặn trận như mất mạng.
+- Trợ giúp được khôi phục khi bắt đầu trận mới.
+
+### Kiểm thử thay đổi luật chơi
+
+Sau khi biên dịch mã Java, biên dịch `scratch/GameRulesTest.java` và `scratch/QuestionBankTest.java` với classpath `bin;lib/*`. Chạy `GameRulesTest` để kiểm tra luật và `node scratch/test_arena_ui.mjs` để kiểm tra trạng thái giao diện. `QuestionBankTest` phải chạy từ một thư mục tạm trống, sau đó chạy lại với tham số `reload` trong cùng thư mục để kiểm tra lưu/nạp kho câu hỏi mà không sửa dữ liệu thật.

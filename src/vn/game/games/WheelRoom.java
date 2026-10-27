@@ -306,9 +306,12 @@ public class WheelRoom {
         broadcastChat("🚪 [" + removedUsername + "] đã rời phòng.");
 
         if (players.isEmpty()) {
-            gameState = "WAITING";
-            cancelTimer();
-            orderedPlayers.clear(); // Xóa luôn bot
+            // Chỉ reset khi không đang chơi — giữ nguyên để phòng tồn tại cho rejoin
+            if (!"PLAYING".equals(gameState)) {
+                gameState = "WAITING";
+                cancelTimer();
+                orderedPlayers.clear();
+            }
             return;
         }
 

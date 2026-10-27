@@ -417,6 +417,29 @@ public class HttpAndWebSocketServer {
         }
         String body = new String(bodyChars);
 
+        if ("/api/questions".equals(path)) {
+            String username = sessionManager.getUsername(sessionId);
+            if (username == null || !arenaGame.isAdmin(username)) {
+                sendJson(out, 403, Map.of("error", "Chỉ quản trị viên được quản lý kho câu hỏi."), null);
+            } else {
+                try {
+                    if ("POST".equals(method) || "DELETE".equals(method)) {
+                        vn.game.model.QuestionBank.saveQuestion(JsonUtil.parseObject(body), "DELETE".equals(method));
+                    } else if (!"GET".equals(method)) {
+                        throw new IllegalArgumentException("Phương thức không hợp lệ.");
+                    }
+                    sendJson(out, 200, Map.of("questions", vn.game.model.QuestionBank.listQuestions()), null);
+                } catch (IllegalArgumentException e) {
+                    sendJson(out, 400, Map.of("error", e.getMessage()), null);
+                } catch (IOException e) {
+                    System.err.println("Lưu kho câu hỏi thất bại: " + e.getMessage());
+                    sendJson(out, 500, Map.of("error", "Không lưu được kho câu hỏi."), null);
+                }
+            }
+            socket.close();
+            return;
+        }
+
         // --- LEADERBOARD API ---
         if ("GET".equals(method) && "/api/leaderboard".equals(path)) {
             Map<String, Object> lb = new HashMap<>();
@@ -458,6 +481,11 @@ public class HttpAndWebSocketServer {
 
     private void handleAuthApi(OutputStream out, String method, String path, String query, String body, String sessionId, Map<String, String> headers) throws IOException {
         Map<String, Object> req = JsonUtil.parseObject(body);
+        // Xây baseUrl từ Host header để hoạt động đúng cả khi truy cập qua LAN
+        String host = headers.getOrDefault("host", "localhost:" + port);
+        String baseUrl = "http://" + host;
+        // Google OAuth luôn dùng localhost vì Google Console chỉ cho phép redirect về localhost
+        String googleCallbackUri = "http://localhost:" + port + "/auth/google/callback";
 
         switch (path) {
             case "/auth/register": {
@@ -546,6 +574,7 @@ public class HttpAndWebSocketServer {
                 if (host == null || host.isEmpty()) host = "localhost:" + port;
 
                 String resetLink = proto + "://" + host + "/reset.html?token=" + token;
+                String resetLink = baseUrl + "/reset.html?token=" + token;
 
                 System.out.println("\n==============================================");
                 System.out.println("[JAVA SERVER] YÊU CẦU ĐỔI MẬT KHẨU CHO EMAIL: " + email);
@@ -594,6 +623,13 @@ public class HttpAndWebSocketServer {
 
 
             case "/auth/google": {
+                // Google OAuth chỉ hoạt động khi truy cập từ máy chủ (localhost)
+                // vì Google Console chỉ cho phép redirect_uri là localhost
+                boolean isLocalhost = host.startsWith("localhost") || host.startsWith("127.0.0.1");
+                if (!isLocalhost) {
+                    sendJson(out, 400, Map.of("error", "Đăng nhập bằng Google chỉ khả dụng khi truy cập từ máy chủ (localhost). Vui lòng dùng tài khoản thường khi chơi qua mạng LAN."), null);
+                    return;
+                }
                 String clientId = Env.get("GOOGLE_CLIENT_ID");
                 if (clientId.isEmpty()) {
                     sendResponse(out, 400, "text/html; charset=utf-8",
@@ -605,6 +641,7 @@ public class HttpAndWebSocketServer {
                 String dynamicUri = getDynamicRedirectUri(headers);
                 String redirectUri = URLEncoder.encode(dynamicUri, StandardCharsets.UTF_8);
                 
+                String redirectUri = URLEncoder.encode(googleCallbackUri, StandardCharsets.UTF_8);
                 String scope = URLEncoder.encode("openid email profile", StandardCharsets.UTF_8);
                 String googleAuthUrl = "https://accounts.google.com/o/oauth2/v2/auth" +
                         "?client_id=" + clientId +
@@ -637,6 +674,7 @@ public class HttpAndWebSocketServer {
                 // String redirectUri = "http://localhost:" + port + "/auth/google/callback";
                 // ĐÃ SỬA: Lấy URI động
                 String redirectUri = getDynamicRedirectUri(headers);
+                String redirectUri = googleCallbackUri;
 
                 try {
                     // 1. Gửi request POST đổi authorization code lấy access_token
@@ -738,9 +776,10 @@ public class HttpAndWebSocketServer {
         String statusText = switch (status) {
             case 200 -> "OK";
             case 400 -> "Bad Request";
+            case 403 -> "Forbidden";
             case 404 -> "Not Found";
             case 405 -> "Method Not Allowed";
-            default -> "OK";
+            default -> "Internal Server Error";
         };
 
         StringBuilder sb = new StringBuilder();
@@ -764,6 +803,7 @@ public class HttpAndWebSocketServer {
         if (setCookie != null) {
             sb.append("Set-Cookie: ").append(setCookie).append("\r\n");
         }
+        sb.append("Content-Length: 0\r\n");
         sb.append("Connection: close\r\n\r\n");
 
         out.write(sb.toString().getBytes(StandardCharsets.UTF_8));

@@ -131,6 +131,12 @@ public class SurvivalRoom {
     public int getStartingHp()      { return startingHp; }
     public int getTotalRounds()     { return totalRounds; }
     public int getMaxPlayers()      { return maxPlayers; }
+    public void setMaxPlayers(int count) { maxPlayers = Math.max(2, Math.min(100, count)); }
+    public synchronized boolean canJoin(String username) {
+        if (players.values().stream().anyMatch(p -> p.username.equalsIgnoreCase(username))) return true;
+        boolean active = !"WAITING".equals(gameState) && !"END".equals(gameState);
+        return active ? recentlyLeftUsernames.contains(username.toLowerCase()) : players.size() < maxPlayers;
+    }
     public String getGameState()    { return gameState; }
     public int getCurrentRound()    { return currentRound; }
     public int getPlayerCount()     { return players.size(); }
@@ -436,9 +442,11 @@ public class SurvivalRoom {
 
     // ─── 10. NHẬN ĐÁP ÁN TỪ NGƯỜI CHƠI ──────────────────────────────────────
 
-    public void handleSubmitAnswer(WebSocketClient client, int answerIndex) {
+    public synchronized void handleSubmitAnswer(WebSocketClient client, int answerIndex) {
+        if (answerIndex < 0 || answerIndex > 3) return;
         PlayerState state = players.get(client);
         if (state != null && state.isAlive && "QUESTION".equals(gameState)) {
+            if (System.currentTimeMillis() - questionStartTime >= getPhaseConfig(currentRound).timeLimit * 1000L) return;
             if (state.answer == null) {
                 state.answer = answerIndex;
                 state.answerTimeMs = Math.max(1, System.currentTimeMillis() - questionStartTime);
@@ -471,6 +479,7 @@ public class SurvivalRoom {
             Map<String, Object> answerInfo = new HashMap<>();
             answerInfo.put("answer", p.answer != null ? p.answer : -1);
             answerInfo.put("isCorrect", isCorrect);
+            answerInfo.put("answerText", p.answer != null && p.answer >= 0 && p.answer < 4 ? q.getOptions().get(p.answer) : "Không trả lời");
             playerAnswerResults.put(p.username, answerInfo);
 
             if (isCorrect) {
@@ -539,6 +548,7 @@ public class SurvivalRoom {
         Map<String, Object> resultMsg = new HashMap<>();
         resultMsg.put("type", "survival_round_result");
         resultMsg.put("correctAnswerIndex", correctIndex);
+        resultMsg.put("correctAnswerText", q.getOptions().get(correctIndex));
         resultMsg.put("playerAnswerResults", playerAnswerResults); // YÊU CẦU 1: Gửi thông tin đáp án của người chơi
         resultMsg.put("round", currentRound);
         resultMsg.put("eliminatedThisRound", eliminatedThisRound);

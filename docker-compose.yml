@@ -1,0 +1,13 @@
+services:
+  game-server:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount thư mục data ra ngoài để SQLite không mất khi rebuild
+      - ./data:/app/data
+    environment:
+      # Đặt các biến môi trường tại đây hoặc dùng file .env
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+    restart: unless-stopped

@@ -132,6 +132,7 @@ async function checkAuth() {
             document.getElementById('portal-section').classList.remove('hidden');
             const roleBadge = data.user.isAdmin ? ' 👑 (Admin)' : '';
             document.getElementById('display-name').innerText = data.user.username + roleBadge;
+            document.getElementById('question-bank-link').classList.toggle('hidden', !data.user.isAdmin && !['admin', 'DuyNguyen'].includes(data.user.username));
         } else {
             document.getElementById('portal-section').classList.add('hidden');
             document.getElementById('auth-section').classList.remove('hidden');
