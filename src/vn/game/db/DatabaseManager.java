@@ -84,6 +84,19 @@ public class DatabaseManager {
             st.execute("CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id)");
             st.execute("CREATE INDEX IF NOT EXISTS idx_users_reset_token ON users(reset_token)");
 
+            st.execute("""
+                CREATE TABLE IF NOT EXISTS pending_registrations (
+                    email         TEXT PRIMARY KEY COLLATE NOCASE,
+                    username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                    password_hash TEXT NOT NULL,
+                    salt          TEXT NOT NULL,
+                    token_hash    TEXT NOT NULL UNIQUE,
+                    expires       INTEGER NOT NULL,
+                    sent_at       INTEGER NOT NULL
+                )
+            """);
+
+
             // Bảng leaderboard
             st.execute("""
                 CREATE TABLE IF NOT EXISTS leaderboard (
@@ -98,7 +111,20 @@ public class DatabaseManager {
 
             st.execute("CREATE INDEX IF NOT EXISTS idx_lb_rank ON leaderboard(rank_points DESC)");
         }
+        // Nâng cấp DB cũ tại chỗ, giữ nguyên tài khoản và bảng xếp hạng.
+        addUserColumnIfMissing("reset_attempts", "INTEGER NOT NULL DEFAULT 0");
+        addUserColumnIfMissing("reset_sent_at", "INTEGER NOT NULL DEFAULT 0");
         System.out.println("📋 Bảng SQLite đã sẵn sàng (users, leaderboard)");
+    }
+
+    private void addUserColumnIfMissing(String name, String definition) throws SQLException {
+        try (Statement st = connection.createStatement();
+             ResultSet rs = st.executeQuery("PRAGMA table_info(users)")) {
+            while (rs.next()) if (name.equals(rs.getString("name"))) return;
+        }
+        try (Statement st = connection.createStatement()) {
+            st.execute("ALTER TABLE users ADD COLUMN " + name + " " + definition);
+        }
     }
 
     // ── Truy cập connection ───────────────────────────────────────────────────

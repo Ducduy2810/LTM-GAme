@@ -32,7 +32,7 @@ public class Main {
 
         System.out.println("===============================================================");
         System.out.println("   🎮 HE THONG GAME PORTAL - JAVA PURE NETWORK PROGRAMMING   ");
-        System.out.println("   - Game 1: Dau Truong 100 (100 Clients dong thoi, Timer 10s) ");
+        System.out.println("   - Game 1: Dau Truong 100 (luot phu -> luot chinh, timer rieng) ");
         System.out.println("   - Game 2: Chiec Non Ky Dieu (4 Nguoi choi theo luot, 10s)   ");
         System.out.println("   - Game 3: Dau Truong Sinh Tu (HP giam dan, Thuong moc loai) ");
         System.out.println("   - Xac thuc & Bao mat: Session Cookie + SHA-256 Hash + Salt  ");

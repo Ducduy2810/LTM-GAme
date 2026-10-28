@@ -205,6 +205,49 @@ public class QuestionBank {
         return result;
     }
 
+    /** Bộ chọn riêng cho ĐT100: không lấy bù sai chủ đề/độ khó. */
+    public static List<Question> getArenaQuestions(String topic, String difficulty, int count) {
+        String t = topic == null ? "ALL" : topic.trim().toUpperCase(Locale.ROOT);
+        String d = difficulty == null ? "MIX" : difficulty.trim().toUpperCase(Locale.ROOT);
+        if (!Set.of("ALL", "MIX", "RANDOM", "NETWORKING", "SCIENCE", "HISTORY").contains(t)
+                || !Set.of("ALL", "MIX", "RANDOM", "EASY", "MEDIUM", "HARD").contains(d) || count <= 0) {
+            throw new IllegalArgumentException("Chủ đề, độ khó hoặc số câu hỏi không hợp lệ.");
+        }
+        boolean allTopics = Set.of("ALL", "MIX", "RANDOM").contains(t);
+        boolean progressive = Set.of("ALL", "MIX", "RANDOM").contains(d);
+        List<List<Question>> buckets = new ArrayList<>();
+        for (String level : List.of("EASY", "MEDIUM", "HARD")) {
+            List<Question> bucket = new ArrayList<>();
+            for (Question q : ALL_QUESTIONS) {
+                if ((allTopics || t.equals(q.getTopic())) && level.equals(q.getDifficulty())
+                        && (progressive || d.equals(level))) bucket.add(q);
+            }
+            Collections.shuffle(bucket);
+            buckets.add(bucket);
+        }
+        int available = buckets.stream().mapToInt(List::size).sum();
+        int target = Math.min(count, available);
+        int[] sizes = new int[3];
+        if (progressive) {
+            for (int i = 0; i < 3; i++) sizes[i] = Math.min(buckets.get(i).size(), target / 3 + (i < target % 3 ? 1 : 0));
+            int remaining = target - Arrays.stream(sizes).sum();
+            while (remaining > 0) {
+                for (int i = 0; i < 3 && remaining > 0; i++) {
+                    if (sizes[i] < buckets.get(i).size()) { sizes[i]++; remaining--; }
+                }
+            }
+        } else {
+            for (int i = 0; i < 3; i++) sizes[i] = Math.min(target, buckets.get(i).size());
+        }
+        List<Question> result = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            for (Question q : buckets.get(i).subList(0, sizes[i])) {
+                result.add(new Question(result.size() + 1, q.getText(), q.getOptions(), q.getCorrect(), q.getTopic(), q.getDifficulty()));
+            }
+        }
+        return result;
+    }
+
     private static int getDifficultyOrder(String difficulty) {
         if ("EASY".equals(difficulty)) return 1;
         if ("MEDIUM".equals(difficulty)) return 2;

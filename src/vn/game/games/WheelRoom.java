@@ -288,6 +288,15 @@ public class WheelRoom {
     }
 
     public synchronized void removePlayer(WebSocketClient client) {
+        removePlayer(client, false);
+    }
+
+    public synchronized void handleDisconnect(WebSocketClient client) {
+        removePlayer(client, true);
+    }
+
+    private void removePlayer(WebSocketClient client, boolean disconnected) {
+        boolean wasHost = isHost(client.getUsername());
         WheelPlayerState removed = players.remove(client);
         if (removed == null) return;
 
@@ -302,8 +311,11 @@ public class WheelRoom {
         if (removeIdx >= 0) orderedPlayers.remove(removeIdx);
 
         String removedUsername = removed.username;
-        boolean wasHost = isHost(removedUsername);
-        broadcastChat("🚪 [" + removedUsername + "] đã rời phòng.");
+        if (disconnected) {
+            broadcast(Map.of("type", "player_disconnected", "username", removedUsername,
+                    "roomCode", roomCode, "message", "Người chơi [" + removedUsername + "] đã mất kết nối."));
+            broadcastChat("📡 [" + removedUsername + "] đã mất kết nối.");
+        } else broadcastChat("🚪 [" + removedUsername + "] đã rời phòng.");
 
         if (players.isEmpty()) {
             gameState = "WAITING";
@@ -639,6 +651,13 @@ public class WheelRoom {
                 nextTurn();
             }
         }, timeLimit, TimeUnit.SECONDS);
+    }
+
+    public synchronized void close() {
+        gameState = "CLOSED";
+        cancelTimer();
+        players.clear();
+        orderedPlayers.clear();
     }
 
     private void cancelTimer() {

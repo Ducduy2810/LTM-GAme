@@ -6,6 +6,9 @@ import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+import java.util.Arrays;
+import java.nio.ByteBuffer;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Đại diện cho một kết nối WebSocket client theo chuẩn RFC 6455.
@@ -18,6 +21,10 @@ public class WebSocketClient {
     private final Object writeLock = new Object();
     private String username;
     private volatile boolean closed = false;
+    private final Object heartbeatLock = new Object();
+    private long lastHeartbeatNanos = System.nanoTime();
+    private long pingSentNanos;
+    private byte[] pendingPing;
 
     public WebSocketClient(Socket socket, InputStream in, OutputStream out, String username) {
         this.id = UUID.randomUUID().toString();
@@ -48,11 +55,15 @@ public class WebSocketClient {
      * Đồng bộ hóa (Thread-Safe) để tránh xung đột dữ liệu khi nhiều luồng cùng gửi tin nhắn.
      */
     public void send(String text) {
+        sendFrame(0x1, text.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** Tất cả frame dùng chung khóa ghi để Ping/Pong không chen giữa frame JSON. */
+    private void sendFrame(int opcode, byte[] payload) {
         if (closed || socket.isClosed()) return;
         synchronized (writeLock) {
             try {
-                byte[] payload = text.getBytes(StandardCharsets.UTF_8);
-                out.write(0x81); // FIN (0x80) | Text Opcode (0x01)
+                out.write(0x80 | opcode);
 
                 int len = payload.length;
                 if (len < 126) {
@@ -64,7 +75,7 @@ public class WebSocketClient {
                 } else {
                     out.write(127);
                     for (int i = 7; i >= 0; i--) {
-                        out.write((int) ((len >> (8 * i)) & 0xFF));
+                        out.write((int) (((long) len >> (8 * i)) & 0xFF));
                     }
                 }
 
@@ -75,6 +86,33 @@ public class WebSocketClient {
             }
         }
     }
+
+    public byte[] prepareHeartbeat(long nowNanos, long intervalMs) {
+        synchronized (heartbeatLock) {
+            if (isClosed() || pendingPing != null || nowNanos - lastHeartbeatNanos < TimeUnit.MILLISECONDS.toNanos(intervalMs)) return null;
+            pendingPing = ByteBuffer.allocate(8).putLong(nowNanos).array();
+            pingSentNanos = nowNanos;
+            return pendingPing.clone();
+        }
+    }
+
+    public boolean heartbeatExpired(long nowNanos, long timeoutMs) {
+        synchronized (heartbeatLock) {
+            return pendingPing != null && nowNanos - pingSentNanos >= TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+        }
+    }
+
+    public void receivePong(byte[] payload) {
+        synchronized (heartbeatLock) {
+            if (pendingPing != null && Arrays.equals(pendingPing, payload)) {
+                pendingPing = null;
+                lastHeartbeatNanos = System.nanoTime();
+            }
+        }
+    }
+
+    public void sendPing(byte[] payload) { sendFrame(0x9, payload); }
+    public void sendPong(byte[] payload) { if (payload.length <= 125) sendFrame(0xA, payload); }
 
     public void close() {
         if (closed) return;

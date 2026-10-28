@@ -60,6 +60,30 @@ let lifeSurveyUsed  = false;
 let realOpponentsList = []; // [{username, isAlive}]
 
 let countdownInterval = null;
+let currentMainPlayerUsername = '';
+let podiumPlayers = [];
+
+function setMainPlayer(username) {
+    currentMainPlayerUsername = username || '';
+    document.getElementById('arena-main-player-label').textContent = `👑 Người chơi chính: ${currentMainPlayerUsername || 'Chưa bắt đầu'}`;
+}
+let currentPhase = 'NONE';
+let gamePaused = false;
+let answerLocked = false;
+let answerWindowOpen = false;
+
+function canAnswerNow() {
+    return amIAlive && !gamePaused && !answerLocked && answerWindowOpen
+        && (amIMainPlayer ? currentPhase === 'MAIN' : currentPhase === 'OPPONENTS');
+}
+
+function refreshAnswerControls() {
+    document.querySelectorAll('.answer-btn').forEach(button => { button.disabled = !canAnswerNow(); });
+    updateLifelineButtons();
+    const label = document.getElementById('answer-phase-label');
+    if (label) label.textContent = gamePaused ? 'Đang tạm dừng'
+        : currentPhase === 'OPPONENTS' ? 'Lượt người chơi phụ' : currentPhase === 'MAIN' ? 'Lượt người chơi chính' : '';
+}
 
 const eliminatedSet  = new Set();
 const playerSeatMap  = new Map(); // username -> seat number (1..100)
@@ -99,6 +123,7 @@ function initPodiumsGrid() {
 initPodiumsGrid();
 
 function renderPodiums(players = []) {
+    podiumPlayers = players;
     initPodiumsGrid();
     const activeUsernames = new Set(players.map(p => p.username));
     for (const [username] of playerSeatMap.entries()) {
@@ -126,7 +151,7 @@ function renderPodiums(players = []) {
             const p = players.find(x => x.username === username);
             const isMe          = username === currentUsername;
             const isEliminated  = eliminatedSet.has(username);
-            const isMainPlayer  = p && p.isMainPlayer;
+            const isMainPlayer  = p && !p.isBot && username === currentMainPlayerUsername;
             const isBot         = p && p.isBot;
             let classes = ['podium-seat', 'active-player'];
             if (isMe)         classes.push('is-me');
@@ -142,7 +167,14 @@ function renderPodiums(players = []) {
             seat.title = title;
             const shortName = username.length > 5 ? username.substring(0, 4) + '..' : username;
             const icon = isMainPlayer ? '👑' : (isBot ? '🤖' : '#' + i);
-            seat.innerHTML = `<span class="seat-idx">${icon}</span><span class="seat-name">${shortName}</span>`;
+            seat.innerHTML = '';
+            const iconElement = document.createElement('span');
+            iconElement.className = isMainPlayer ? 'seat-idx main-player-crown' : 'seat-idx'; iconElement.textContent = icon;
+            const nameElement = document.createElement('span'); nameElement.className = 'seat-name'; nameElement.textContent = shortName;
+            seat.appendChild(iconElement); seat.appendChild(nameElement);
+            if (isMainPlayer) {
+                const role = document.createElement('span'); role.className = 'main-player-seat-label'; role.textContent = 'CHÍNH'; seat.appendChild(role);
+            }
         } else {
             seat.className = 'podium-seat';
             seat.title = `Bục thi đấu số ${i}`;
@@ -187,6 +219,9 @@ socket.onmessage = (event) => {
     }
 
     switch (data.type) {
+        case 'player_disconnected':
+            if (data.roomCode === currentRoomCode) window.RoomNotices?.show(data);
+            break;
 
         // ── SẢNH ─────────────────────────────────────────────────
         case 'room_list':
@@ -201,23 +236,37 @@ socket.onmessage = (event) => {
         case 'room_info': {
             currentRoomInfo = data;
             currentRoomCode = data.roomCode;
+            if (Object.hasOwn(data, 'mainPlayer')) setMainPlayer(data.mainPlayer);
 
             document.getElementById('room-code-badge').innerText = data.roomCode;
             document.getElementById('room-name-display').innerText = data.roomName;
             document.getElementById('room-settings-summary').innerText =
-                `[${data.topicName || data.topic}] • [${data.difficultyName || data.difficulty}] • ${data.questionCount} câu • ⏱️ Phụ 5s / Chính 15s • Bot: ${data.botCount}`;
+                `[${data.topicName || data.topic}] • [${data.difficultyName || data.difficulty}] • ${data.questionCount} câu • ⏱️ Phụ ${data.timeLimit}s → Chính ${data.mainPlayerTimeLimit}s • Bot: ${data.botCount}`;
 
-            showScreen('waiting');
+            isMyHost = Boolean(data.isHost);
+            const mayDelete = (isMyHost || isCurrentUserAdmin) && data.roomCode !== 'DT100';
+            document.getElementById('btn-delete-room').style.display = mayDelete ? 'inline-block' : 'none';
+            document.getElementById('btn-delete-room-game').style.display = mayDelete ? 'inline-block' : 'none';
+            if (data.gameState === 'WAITING' || data.gameState === 'END') showScreen('waiting');
             break;
         }
 
         // ── RỜI PHÒNG THÀNH CÔNG ─────────────────────────────────
+        case 'arena_room_closed':
+            alert(data.message);
         case 'left_room_success':
             currentRoomCode = '';
             currentRoomInfo = null;
             resetGameState();
             showScreen('lobby');
             socket.send(JSON.stringify({ type: 'get_rooms' }));
+            break;
+        case 'create_room_success':
+            if (data.warning) alert(data.warning);
+            break;
+        case 'arena_answer_locked':
+            answerLocked = true;
+            refreshAnswerControls();
             break;
 
         // ── CẬP NHẬT DANH SÁCH NGƯỜI CHƠI PHÒNG CHỜ ─────────────
@@ -247,11 +296,19 @@ socket.onmessage = (event) => {
 
         // ── KẾT QUẢ QUYỀN TRỢ GIÚP ──────────────────────────────
         case 'arena_life_trust':
+            lifeTrustUsed = true;
+            updateLifelineButtons();
+            showLifelineResult(`👁 ${data.opponentUsername} đã chọn đáp án: <strong>${'ABCD'[data.opponentAnswer]}</strong>`);
+            break;
         case 'arena_life_ask':
+            lifeAskUsed = true;
+            updateLifelineButtons();
             showLifelineResult(`👁 ${data.opponentUsername} đã chọn đáp án: <strong>${'ABCD'[data.opponentAnswer]}</strong>`);
             break;
 
         case 'arena_life_survey':
+            lifeSurveyUsed = true;
+            updateLifelineButtons();
             showLifelineSurvey(data.distribution, data.totalRespondents);
             break;
             
@@ -277,6 +334,7 @@ socket.onmessage = (event) => {
 
 // ── 4. HANDLER: CẬP NHẬT NGƯỜI CHƠI PHÒNG CHỜ ───────────────────
 function handleUpdatePlayers(data) {
+    if (Object.hasOwn(data, 'mainPlayer')) setMainPlayer(data.mainPlayer);
     // Phân tách người thật và bot
     const realPlayers = data.players.filter(p => !p.isBot);
     const botPlayers = data.players.filter(p => p.isBot);
@@ -324,6 +382,22 @@ function handleUpdatePlayers(data) {
 
     isMyHost = (data.hostUsername && data.hostUsername === currentUsername);
     const canIControl = isMyHost || isCurrentUserAdmin;
+    const mainMode = document.getElementById('waiting-main-mode');
+    const mainPlayer = document.getElementById('waiting-main-player');
+    document.getElementById('main-selection-controls').style.display = canIControl ? 'block' : 'none';
+    mainMode.value = data.mainSelectionMode || 'MANUAL';
+    mainPlayer.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = ''; placeholder.textContent = 'Chọn người chơi chính'; mainPlayer.appendChild(placeholder);
+    realPlayers.forEach(player => {
+        const option = document.createElement('option'); option.value = player.username; option.textContent = player.username;
+        mainPlayer.appendChild(option);
+    });
+    mainPlayer.value = data.selectedMainPlayer || '';
+    mainPlayer.disabled = mainMode.value === 'RANDOM';
+    document.getElementById('main-selection-summary').textContent = mainMode.value === 'RANDOM'
+        ? 'Người chơi chính: chọn ngẫu nhiên trong số người chơi thật khi bắt đầu.'
+        : `Người chơi chính đã chọn: ${data.selectedMainPlayer || 'Chưa chọn'}`;
 
     const btnReady   = document.getElementById('btn-toggle-ready');
     const btnStart   = document.getElementById('btn-start');
@@ -391,6 +465,8 @@ function handleGameStarted(data) {
     totalInitialOpponents = data.totalOpponents || 0;
     aliveOpponents        = totalInitialOpponents;
     amIMainPlayer         = (data.mainPlayer === currentUsername);
+    setMainPlayer(data.mainPlayer);
+    renderPodiums(podiumPlayers);
     amIAlive              = true;
 
     updateHud();
@@ -430,6 +506,16 @@ function handleGameStarted(data) {
 
 // ── 6. HANDLER: CÂU HỎI MỚI ─────────────────────────────────────
 function handleNewQuestion(data) {
+    if (Object.hasOwn(data, 'mainPlayer')) { setMainPlayer(data.mainPlayer); renderPodiums(podiumPlayers); }
+    currentPhase = data.phase || 'OPPONENTS';
+    gamePaused = Boolean(data.isPaused);
+    answerLocked = Boolean(data.hasAnswered);
+    answerWindowOpen = Boolean(data.canAnswer);
+    amIMainPlayer = Boolean(data.isMainPlayer);
+    if (data.isAlive !== undefined) amIAlive = Boolean(data.isAlive);
+    if (data.lifeTrustUsed !== undefined) lifeTrustUsed = data.lifeTrustUsed;
+    if (data.lifeAskUsed !== undefined) lifeAskUsed = data.lifeAskUsed;
+    if (data.lifeSurveyUsed !== undefined) lifeSurveyUsed = data.lifeSurveyUsed;
     showScreen('game');
 
     aliveOpponents  = data.aliveOpponents  !== undefined ? data.aliveOpponents  : aliveOpponents;
@@ -450,7 +536,7 @@ function handleNewQuestion(data) {
     container.innerHTML = '';
     const letters = ['A', 'B', 'C', 'D'];
 
-    const canAnswer = amIAlive; // cả main player lẫn đối thủ còn sống đều trả lời
+    const canAnswer = canAnswerNow();
 
     data.options.forEach((opt, index) => {
         const btn = document.createElement('button');
@@ -482,12 +568,20 @@ function handleNewQuestion(data) {
     if (pauseControls) {
         pauseControls.style.display = (isMyHost || isCurrentUserAdmin) ? 'flex' : 'none';
     }
+    document.getElementById('btn-pause-game').style.display = gamePaused ? 'none' : 'inline-block';
+    document.getElementById('btn-resume-game').style.display = gamePaused ? 'inline-block' : 'none';
 
-    startTimer(data.timeLimit || 10);
+    if (amIMainPlayer && currentPhase === 'OPPONENTS') document.getElementById('feedback-msg').innerText = 'Chờ người chơi phụ trả lời. Chưa đến lượt trả lời hoặc sử dụng trợ giúp của bạn.';
+    if (gamePaused) document.getElementById('time-left').innerText = Math.ceil(data.timeLimit);
+    else startTimer(data.timeLimit);
+    refreshAnswerControls();
 }
 
 // ── 7. HANDLER: KẾT QUẢ VÒNG ────────────────────────────────────
 function handleRoundResult(data) {
+    currentPhase = 'NONE';
+    answerWindowOpen = false;
+    refreshAnswerControls();
     clearInterval(countdownInterval);
     const dial = document.getElementById('timer-dial');
     if (dial) dial.classList.remove('danger');
@@ -632,17 +726,18 @@ function handleEndGame(data) {
 
 // ── 9. QUYỀN TRỢ GIÚP ────────────────────────────────────────────
 function updateLifelineButtons() {
-    const btnTrust   = document.getElementById('btn-life-trust');
-    const btnAsk     = document.getElementById('btn-life-ask');
-    const btnSurvey  = document.getElementById('btn-life-survey');
-    if (!btnTrust) return;
-
-    btnTrust.disabled  = lifeTrustUsed;
-    btnAsk.disabled    = lifeAskUsed;
-    btnSurvey.disabled = lifeSurveyUsed;
-    if (lifeTrustUsed)  { btnTrust.innerText  = '👁 Tin Người Chơi (Đã dùng)'; btnTrust.style.opacity  = '0.4'; }
-    if (lifeAskUsed)    { btnAsk.innerText    = '🙋 Hỏi Người Chơi (Đã dùng)'; btnAsk.style.opacity    = '0.4'; }
-    if (lifeSurveyUsed) { btnSurvey.innerText = '📊 Khảo Sát (Đã dùng)';       btnSurvey.style.opacity = '0.4'; }
+    const enabled = amIMainPlayer && currentPhase === 'MAIN' && canAnswerNow();
+    for (const [id, used, label] of [
+        ['btn-life-trust', lifeTrustUsed, '👁 Tin Người Chơi'],
+        ['btn-life-ask', lifeAskUsed, '🙋 Hỏi Người Chơi'],
+        ['btn-life-survey', lifeSurveyUsed, '📊 Khảo Sát']
+    ]) {
+        const button = document.getElementById(id);
+        if (!button) continue;
+        button.disabled = !enabled || used;
+        button.innerText = label + (used ? ' (Đã dùng)' : '');
+        button.style.opacity = button.disabled ? '0.4' : '1';
+    }
 }
 
 function showLifelineResult(html) {
@@ -674,54 +769,36 @@ function hideLifelineResult() {
 
 // YÊU CẦU 2: Xử lý lượt người chơi chính
 function handleMainPlayerTurn(data) {
-    playSound('questionBeep');
-    const feedbackEl = document.getElementById('feedback-msg');
-    if (feedbackEl) {
-        feedbackEl.style.color = '#fde047';
-        feedbackEl.innerText = '⏰ ' + data.message;
-    }
-    // Cập nhật timer với thời gian mới
-    if (data.timeLimit) {
-        startCountdown(data.timeLimit);
-    }
+    currentPhase = 'MAIN';
+    gamePaused = false;
+    answerWindowOpen = amIMainPlayer && amIAlive;
+    if (amIMainPlayer) answerLocked = false;
+    document.getElementById('feedback-msg').innerText = amIMainPlayer
+        ? data.message : 'Đã khóa đáp án người chơi phụ. Đang chờ người chơi chính trả lời.';
+    document.getElementById('modal-ask-player').classList.remove('active');
+    startTimer(data.timeLimit);
+    refreshAnswerControls();
 }
 
-// YÊU CẦU 5: Xử lý tạm dừng trận đấu
 function handleGamePaused(data) {
-    playSound('notificationSound');
-    if (countdownInterval) {
-        clearInterval(countdownInterval);
-        countdownInterval = null;
-    }
-    const feedbackEl = document.getElementById('feedback-msg');
-    if (feedbackEl) {
-        feedbackEl.style.color = '#ef4444';
-        feedbackEl.innerText = data.message || '⏸️ Trận đấu đã tạm dừng';
-    }
-    // Hiển thị nút resume, ẩn nút pause
-    const btnPause = document.getElementById('btn-pause-game');
-    const btnResume = document.getElementById('btn-resume-game');
-    if (btnPause) btnPause.style.display = 'none';
-    if (btnResume) btnResume.style.display = 'inline-block';
+    gamePaused = true;
+    clearInterval(countdownInterval);
+    document.getElementById('feedback-msg').innerText = data.message;
+    document.getElementById('time-left').innerText = Math.ceil(data.remainingTime);
+    document.getElementById('btn-pause-game').style.display = 'none';
+    document.getElementById('btn-resume-game').style.display = 'inline-block';
+    refreshAnswerControls();
 }
 
-// YÊU CẦU 5: Xử lý tiếp tục trận đấu
 function handleGameResumed(data) {
-    playSound('notificationSound');
-    const feedbackEl = document.getElementById('feedback-msg');
-    if (feedbackEl) {
-        feedbackEl.style.color = '#10b981';
-        feedbackEl.innerText = data.message || '▶️ Trận đấu tiếp tục!';
-    }
-    // Khởi động lại đếm ngược với thời gian còn lại
-    if (data.remainingTime) {
-        startCountdown(data.remainingTime);
-    }
-    // Hiển thị nút pause, ẩn nút resume
-    const btnPause = document.getElementById('btn-pause-game');
-    const btnResume = document.getElementById('btn-resume-game');
-    if (btnPause) btnPause.style.display = 'inline-block';
-    if (btnResume) btnResume.style.display = 'none';
+    gamePaused = false;
+    currentPhase = data.phase;
+    answerWindowOpen = (amIMainPlayer ? currentPhase === 'MAIN' : currentPhase === 'OPPONENTS');
+    document.getElementById('feedback-msg').innerText = data.message;
+    document.getElementById('btn-pause-game').style.display = 'inline-block';
+    document.getElementById('btn-resume-game').style.display = 'none';
+    startTimer(data.remainingTime);
+    refreshAnswerControls();
 }
 
 // ── 10. BẢNG XẾP HẠNG ────────────────────────────────────────────
@@ -781,12 +858,12 @@ function renderRoomList(rooms = []) {
         const card = document.createElement('div');
         card.className = 'room-card';
 
-        const isPlaying   = (r.gameState === 'QUESTION' || r.gameState === 'RESULT');
+        const isPlaying   = (r.gameState === 'STARTING' || r.gameState === 'QUESTION' || r.gameState === 'RESULT');
         const statusClass = isPlaying ? 'playing' : 'waiting';
         const statusText  = isPlaying ? 'Đang Đấu'  : 'Đang Chờ';
 
         let adminDeleteBtn = '';
-        if (isCurrentUserAdmin && r.roomCode !== 'DT100') {
+        if ((isCurrentUserAdmin || r.hostUsername.toLowerCase() === currentUsername.toLowerCase()) && r.roomCode !== 'DT100') {
             adminDeleteBtn = `<button class="btn-join-card" style="background:#ef4444; border-color:#dc2626; margin-left:6px;" onclick="closeRoomByAdmin('${r.roomCode}')">Đóng</button>`;
         }
 
@@ -802,7 +879,7 @@ function renderRoomList(rooms = []) {
                     <span class="room-tag">📚 ${r.topicName}</span>
                     <span class="room-tag">⚡ ${r.difficultyName}</span>
                     <span class="room-tag">🤖 Bot: ${r.botCount}</span>
-                    <span class="room-tag">⏱️ 5s / 15s</span>
+                    <span class="room-tag">⏱️ Phụ ${r.timeLimit}s → Chính ${r.mainPlayerTimeLimit}s</span>
                 </div>
             </div>
             <div class="room-card-footer">
@@ -824,19 +901,20 @@ window.joinRoomByCode = function(code) {
 
 window.closeRoomByAdmin = function(code) {
     if (confirm(`Bạn có chắc chắn muốn đóng phòng [${code}]?`)) {
-        socket.send(JSON.stringify({ type: 'admin_close_room', roomCode: code }));
+        socket.send(JSON.stringify({ type: 'close_arena_room', roomCode: code }));
     }
 };
 
 // ── 12. CHỐT ĐÁP ÁN ─────────────────────────────────────────────
 function selectAnswer(index, btn) {
-    if (!amIAlive) return;
+    if (!canAnswerNow()) return;
+    answerLocked = true;
     if (window.arenaSound) window.arenaSound.playLockAnswer();
 
     const btns = document.querySelectorAll('.answer-btn');
     btns.forEach(b => { b.classList.remove('selected'); b.disabled = true; });
     btn.classList.add('selected');
-    btn.disabled = false;
+    refreshAnswerControls();
 
     socket.send(JSON.stringify({ type: 'submit_arena_answer', answer: index }));
     document.getElementById('feedback-msg').innerText = '🔒 Đã chốt đáp án! Hồi hộp chờ kết quả từ trường quay...';
@@ -845,39 +923,28 @@ function selectAnswer(index, btn) {
 // ── 13. ĐỒNG HỒ ĐẾM NGƯỢC ───────────────────────────────────────
 function startTimer(seconds) {
     clearInterval(countdownInterval);
-    const timeDisplay    = document.getElementById('time-left');
-    const timerDial      = document.getElementById('timer-dial');
-    const timerProgress  = document.getElementById('timer-progress');
-    const totalCircumference = 219.91;
-    const maxSeconds     = seconds;
-
-    timeDisplay.innerText = seconds;
-    if (timerDial) timerDial.classList.remove('danger');
-    if (timerProgress) {
-        timerProgress.style.strokeDasharray  = `${totalCircumference}`;
-        timerProgress.style.strokeDashoffset = '0';
-    }
-    if (window.arenaSound) window.arenaSound.playTick(false);
-
-    countdownInterval = setInterval(() => {
-        seconds--;
-        timeDisplay.innerText = Math.max(0, seconds);
-
-        if (timerProgress) {
-            const offset = totalCircumference * Math.min(1, Math.max(0, (maxSeconds - seconds) / maxSeconds));
-            timerProgress.style.strokeDashoffset = `${offset}`;
+    const durationMs = Math.max(0, Number(seconds) || 0) * 1000;
+    const deadline = performance.now() + durationMs;
+    const timeDisplay = document.getElementById('time-left');
+    const dial = document.getElementById('timer-dial');
+    const progress = document.getElementById('timer-progress');
+    function tick() {
+        const remainingMs = Math.max(0, deadline - performance.now());
+        const remainingSeconds = Math.ceil(remainingMs / 1000);
+        timeDisplay.innerText = remainingSeconds;
+        if (dial) dial.classList.toggle('danger', remainingSeconds > 0 && remainingSeconds <= 3);
+        if (progress) {
+            progress.style.strokeDasharray = '219.91';
+            progress.style.strokeDashoffset = String(219.91 * (durationMs === 0 ? 1 : 1 - remainingMs / durationMs));
         }
-        const isDanger = seconds <= 3 && seconds > 0;
-        if (isDanger && timerDial) timerDial.classList.add('danger');
-        if (seconds > 0 && window.arenaSound) window.arenaSound.playTick(isDanger);
-        if (seconds <= 0) {
+        if (remainingMs <= 0) {
             clearInterval(countdownInterval);
-            document.querySelectorAll('.answer-btn').forEach(b => b.disabled = true);
-            if (amIAlive && !document.getElementById('feedback-msg').innerText) {
-                document.getElementById('feedback-msg').innerText = '⏰ Đã hết thời gian! Bạn không kịp nộp đáp án.';
-            }
+            answerWindowOpen = false;
+            refreshAnswerControls();
         }
-    }, 1000);
+    }
+    countdownInterval = setInterval(tick, 100);
+    tick();
 }
 
 // YÊU CẦU 2 & 5: Hàm startCountdown cho các trường hợp đặc biệt (resume, main player turn)
@@ -887,6 +954,11 @@ function startCountdown(seconds) {
 
 // ── 14. RESET GAME STATE ─────────────────────────────────────────
 function resetGameState() {
+    setMainPlayer('');
+    currentPhase = 'NONE';
+    gamePaused = false;
+    answerLocked = false;
+    answerWindowOpen = false;
     amIMainPlayer         = false;
     amIAlive              = true;
     totalInitialOpponents = 0;
@@ -913,6 +985,16 @@ document.getElementById('btn-toggle-ready').addEventListener('click', () => {
 document.getElementById('btn-start').addEventListener('click', () => {
     socket.send(JSON.stringify({ type: 'start_arena_game' }));
 });
+
+function sendMainSelection() {
+    const mode = document.getElementById('waiting-main-mode').value;
+    const username = document.getElementById('waiting-main-player').value || currentUsername;
+    socket.send(JSON.stringify({ type: 'select_arena_main_player', mainSelectionMode: mode, username }));
+}
+document.getElementById('waiting-main-mode').addEventListener('change', sendMainSelection);
+document.getElementById('waiting-main-player').addEventListener('change', sendMainSelection);
+document.getElementById('btn-delete-room').addEventListener('click', () => window.closeRoomByAdmin(currentRoomCode));
+document.getElementById('btn-delete-room-game').addEventListener('click', () => window.closeRoomByAdmin(currentRoomCode));
 
 // Rời Phòng
 document.getElementById('btn-leave-room').addEventListener('click', () => {
@@ -971,18 +1053,23 @@ document.getElementById('btn-submit-create-room').addEventListener('click', () =
     const difficulty   = document.getElementById('create-difficulty').value;
     const questionCount = parseInt(document.getElementById('create-question-count').value) || 10;
     const botCount     = parseInt(document.getElementById('create-bot-count').value) || 0;
+    const timeLimit = Number(document.getElementById('create-opponent-time').value);
+    const mainPlayerTimeLimit = Number(document.getElementById('create-main-time').value);
+    const mainSelectionMode = document.getElementById('create-main-mode').value;
+    if (![timeLimit, mainPlayerTimeLimit].every(time => Number.isInteger(time) && time >= 1 && time <= 120)) {
+        alert('Thời gian mỗi lượt phải là số nguyên từ 1 đến 120 giây.'); return;
+    }
 
     socket.send(JSON.stringify({
         type: 'create_room',
-        roomName, roomCode, topic, difficulty, questionCount, botCount
+        roomName, roomCode, topic, difficulty, questionCount, botCount, timeLimit, mainPlayerTimeLimit, mainSelectionMode
     }));
     modalCreateRoom.classList.remove('active');
 });
 
 // Quyền Trợ Giúp – Tin Người Chơi
 document.getElementById('btn-life-trust').addEventListener('click', () => {
-    if (lifeTrustUsed) return;
-    lifeTrustUsed = true;
+    if (lifeTrustUsed || !amIMainPlayer || !canAnswerNow()) return;
     updateLifelineButtons();
     socket.send(JSON.stringify({ type: 'arena_life_trust' }));
 });
@@ -990,7 +1077,7 @@ document.getElementById('btn-life-trust').addEventListener('click', () => {
 // Quyền Trợ Giúp – Hỏi Người Chơi (mở modal chọn)
 const modalAsk = document.getElementById('modal-ask-player');
 document.getElementById('btn-life-ask').addEventListener('click', () => {
-    if (lifeAskUsed) return;
+    if (lifeAskUsed || !amIMainPlayer || !canAnswerNow()) return;
     // Hiển thị modal chọn đối thủ thật còn sống
     const listEl = document.getElementById('ask-player-list');
     listEl.innerHTML = '';
@@ -1005,7 +1092,7 @@ document.getElementById('btn-life-ask').addEventListener('click', () => {
         btn.style.width = '100%';
         btn.innerText   = `👤 ${p.username}`;
         btn.onclick     = () => {
-            lifeAskUsed = true;
+            if (!amIMainPlayer || !canAnswerNow()) { modalAsk.classList.remove('active'); return; }
             updateLifelineButtons();
             socket.send(JSON.stringify({ type: 'arena_life_ask', targetUsername: p.username }));
             modalAsk.classList.remove('active');
@@ -1020,8 +1107,7 @@ document.getElementById('btn-close-ask-modal').addEventListener('click', () => {
 
 // Quyền Trợ Giúp – Khảo Sát
 document.getElementById('btn-life-survey').addEventListener('click', () => {
-    if (lifeSurveyUsed) return;
-    lifeSurveyUsed = true;
+    if (lifeSurveyUsed || !amIMainPlayer || !canAnswerNow()) return;
     updateLifelineButtons();
     socket.send(JSON.stringify({ type: 'arena_life_survey' }));
 });

@@ -1072,7 +1072,20 @@ body::after {
     font-weight: 900 !important;
 }
 .podium-seat.main-player .seat-name {
-    color: #fff !important;
-    font-weight: 800 !important;
+    color: #fef08a !important;
+    font-weight: 900 !important;
+}
+
+.podium-seat.main-player { outline: 2px solid #facc15; outline-offset: 2px; box-shadow: 0 0 18px #facc1599 !important; }
+.podium-seat.main-player .main-player-crown { font-size: 17px; }
+.podium-seat.main-player .main-player-seat-label { color: #fde047; font-size: 7px; font-weight: 900; }
+.podium-seat.is-me:not(.main-player) {
+    background: linear-gradient(135deg, #075985, #0369a1); border-color: #67e8f9;
+    color: #fff; box-shadow: 0 0 12px #22d3ee99;
+}
+.arena-main-player-label { color: #fde047; font-weight: 900; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+    .podium-seat.main-player .main-player-seat-label { display: none; }
+    .podium-seat.main-player .main-player-crown { font-size: 13px; }
 }
 

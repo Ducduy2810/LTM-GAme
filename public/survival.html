@@ -6,8 +6,10 @@
     <title>Đấu Trường Sinh Tử - Survival Arena</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="survival_theme.css">
+    <link rel="stylesheet" href="room_notices.css">
 </head>
 <body>
+    <div id="room-notices" class="room-notices" role="log" aria-live="polite" aria-relevant="additions"></div>
     <div class="survival-app">
         <!-- 1. HEADER & HUD SINH TỒN -->
         <header class="survival-header">
@@ -47,6 +49,12 @@
                 <button class="sound-toggle-btn" id="btn-sound" title="Bật/Tắt âm thanh">🔊</button>
             </div>
         </header>
+        <div id="survival-room-controls" style="display:none; gap:10px; align-items:center; flex-wrap:wrap; margin:12px 0;">
+            <button id="btn-survival-pause" class="btn-join-card" style="display:none; background:#92400e;">⏸ Tạm dừng</button>
+            <button id="btn-survival-resume" class="btn-join-card" style="display:none; background:#166534;">▶ Tiếp tục</button>
+            <button id="btn-survival-delete" class="btn-join-card" style="display:none; background:#b91c1c;">Xóa phòng</button>
+            <span id="survival-pause-status" role="status" style="color:#fde047;"></span>
+        </div>
 
         <!-- 2. KHUNG TRÌNH DIỄN CHÍNH -->
         <main class="stage-card">
@@ -180,7 +188,7 @@
             <div id="result-screen" class="screen">
                 <div class="result-banner">
                     <h2 style="color: #f87171; margin: 0; text-transform: uppercase; letter-spacing: 1.5px;">KẾT QUẢ VÒNG ĐẤU</h2>
-                    <p id="result-info" style="font-size: 1.25rem; font-weight: 800; margin: 12px 0 0 0;"></p>
+                    <div id="result-info" style="font-size: 1.25rem; font-weight: 800; margin: 12px 0 0 0;"></div>
                 </div>
 
                 <!-- Hàng thống kê kết quả -->
@@ -372,6 +380,7 @@
 
     <!-- Scripts -->
     <script src="arena_sound.js"></script>
-    <script src="survival.js"></script>
+    <script src="room_notices.js"></script>
+    <script src="survival.js?v=presence-1"></script>
 </body>
 </html>

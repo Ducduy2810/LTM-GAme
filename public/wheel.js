@@ -155,6 +155,10 @@ socket.onopen = () => {
 
 socket.onmessage = (event) => {
     const data = JSON.parse(event.data);
+    if (data.type === 'player_disconnected') {
+        if (data.roomCode === currentRoomCode) window.RoomNotices?.show(data);
+        return;
+    }
 
     if (data.type === 'auth_error') {
         alert(data.message);

@@ -8,19 +8,23 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class Env {
-    private static final Map<String, String> values = new HashMap<>();
+    private static volatile Map<String, String> values = Map.of();
 
     static {
         load();
     }
 
-    public static void load() {
+    public static synchronized void load() {
         File file = new File(".env");
         if (!file.exists()) {
             file = new File("../.env");
         }
-        if (!file.exists()) return;
+        if (!file.exists()) {
+            values = Map.of();
+            return;
+        }
 
+        Map<String, String> loaded = new HashMap<>();
         try (BufferedReader reader = new BufferedReader(new FileReader(file, StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
@@ -33,9 +37,11 @@ public class Env {
                     if ((val.startsWith("\"") && val.endsWith("\"")) || (val.startsWith("'") && val.endsWith("'"))) {
                         val = val.substring(1, val.length() - 1);
                     }
-                    values.put(key, val);
+                    loaded.put(key, val);
                 }
             }
+            // Thay toàn bộ snapshot để không giữ mật khẩu cũ hoặc key đã bị xóa.
+            values = Map.copyOf(loaded);
         } catch (Exception e) {
             System.err.println("Lỗi đọc file .env: " + e.getMessage());
         }

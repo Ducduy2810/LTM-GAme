@@ -24,4 +24,8 @@ public class SessionManager {
             sessions.remove(sessionId);
         }
     }
+
+    public void removeUserSessions(String username) {
+        sessions.entrySet().removeIf(entry -> entry.getValue().equalsIgnoreCase(username));
+    }
 }

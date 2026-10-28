@@ -11,7 +11,7 @@ import java.util.concurrent.*;
  * Trình quản lý sảnh và danh sách phòng chơi Đấu Trường Sinh Tử (Survival Arena).
  * Xử lý tạo phòng, tham gia, rời phòng, bắt đầu trận đấu, nộp đáp án và quản trị phòng.
  */
-public class SurvivalGame {
+public class SurvivalGame implements AutoCloseable {
 
     private final UserRepository userRepository;
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
@@ -166,6 +166,7 @@ public class SurvivalGame {
     }
 
     private synchronized void joinRoomInternal(WebSocketClient client, SurvivalRoom room) {
+        if (!room.canJoin(client.getUsername())) { sendError(client, "Trận đấu đang diễn ra hoặc phòng đã đóng. Không thể vào lúc này."); return; }
         // Chỉ rời phòng cũ nếu client đang thực sự ở phòng nào đó
         if (clientRoomMap.containsKey(client)) {
             SurvivalRoom currentRoom = clientRoomMap.remove(client);
@@ -174,12 +175,12 @@ public class SurvivalGame {
                 boolean canDelete = currentRoom.isEmpty()
                         && !DEFAULT_ROOM_CODE.equalsIgnoreCase(currentRoom.getRoomCode())
                         && ("WAITING".equals(currentRoom.getGameState()) || "END".equals(currentRoom.getGameState()));
-                if (canDelete) rooms.remove(currentRoom.getRoomCode());
+                if (canDelete) { rooms.remove(currentRoom.getRoomCode()); currentRoom.close(); }
             }
         }
         lobbyClients.remove(client);
-        clientRoomMap.put(client, room);
-        room.handleJoin(client);
+        if (room.handleJoin(client)) clientRoomMap.put(client, room);
+        else lobbyClients.add(client);
     }
 
     // ==========================================
@@ -195,6 +196,7 @@ public class SurvivalGame {
                     && ("WAITING".equals(currentRoom.getGameState()) || "END".equals(currentRoom.getGameState()));
             if (canDelete) {
                 rooms.remove(currentRoom.getRoomCode());
+                currentRoom.close();
             }
         }
         lobbyClients.add(client);
@@ -234,6 +236,16 @@ public class SurvivalGame {
         if (room != null) room.handleSubmitAnswer(client, answerIndex);
     }
 
+    public void handlePauseGame(WebSocketClient client) {
+        SurvivalRoom room = clientRoomMap.get(client);
+        if (room != null) room.handlePauseGame(client);
+    }
+
+    public void handleResumeGame(WebSocketClient client) {
+        SurvivalRoom room = clientRoomMap.get(client);
+        if (room != null) room.handleResumeGame(client);
+    }
+
     // ==========================================
     // 6. NGẮT KẾT NỐI & QUẢN TRỊ
     // ==========================================
@@ -242,42 +254,45 @@ public class SurvivalGame {
         lobbyClients.remove(client);
         SurvivalRoom room = clientRoomMap.remove(client);
         if (room != null) {
-            room.handleLeave(client);
+            room.handleDisconnect(client);
             boolean canDelete = room.isEmpty()
                     && !DEFAULT_ROOM_CODE.equalsIgnoreCase(room.getRoomCode())
                     && ("WAITING".equals(room.getGameState()) || "END".equals(room.getGameState()));
-            if (canDelete) rooms.remove(room.getRoomCode());
+            if (canDelete) { rooms.remove(room.getRoomCode()); room.close(); }
             broadcastRoomListToLobby();
         }
     }
 
     public synchronized void handleAdminCloseRoom(WebSocketClient client, String roomCode) {
-        String username = client.getUsername();
-        if (!isAdmin(username)) {
-            sendError(client, "Chỉ Super Admin mới có quyền đóng phòng!");
-            return;
+        if (roomCode == null) return;
+        roomCode = roomCode.trim().toUpperCase(Locale.ROOT);
+        SurvivalRoom room = rooms.get(roomCode);
+        if (room == null) { sendError(client, "Phòng không còn tồn tại."); return; }
+        if (!room.isHost(client.getUsername()) && !isAdmin(client.getUsername())) {
+            sendError(client, "Chỉ chủ phòng hoặc admin được xóa phòng."); return;
         }
-        if (DEFAULT_ROOM_CODE.equalsIgnoreCase(roomCode)) {
-            sendError(client, "Không thể đóng phòng mặc định của hệ thống!");
-            return;
-        }
-
-        SurvivalRoom room = rooms.remove(roomCode);
-        if (room != null) {
-            Map<String, Object> notice = new HashMap<>();
-            notice.put("type", "survival_error");
-            notice.put("message", "Phòng này đã bị đóng bởi Super Admin!");
-            room.broadcast(notice);
-
-            for (Map.Entry<WebSocketClient, SurvivalRoom> entry : new ArrayList<>(clientRoomMap.entrySet())) {
-                if (entry.getValue().equals(room)) {
-                    clientRoomMap.remove(entry.getKey());
-                    lobbyClients.add(entry.getKey());
-                    sendRoomList(entry.getKey());
-                }
+        if (DEFAULT_ROOM_CODE.equalsIgnoreCase(roomCode)) { sendError(client, "Không thể xóa phòng mặc định."); return; }
+        rooms.remove(roomCode);
+        room.close();
+        for (Map.Entry<WebSocketClient, SurvivalRoom> entry : new ArrayList<>(clientRoomMap.entrySet())) {
+            if (entry.getValue() == room) {
+                WebSocketClient member = entry.getKey();
+                clientRoomMap.remove(member);
+                lobbyClients.add(member);
+                member.send(JsonUtil.toJson(Map.of("type", "survival_room_closed",
+                        "message", "Phòng đã bị xóa bởi chủ phòng hoặc admin. Trận đấu đã được hủy.")));
             }
-            broadcastRoomListToLobby();
         }
+        broadcastRoomListToLobby();
+    }
+
+    @Override
+    public synchronized void close() {
+        rooms.values().forEach(SurvivalRoom::close);
+        rooms.clear();
+        clientRoomMap.clear();
+        lobbyClients.clear();
+        scheduler.shutdownNow();
     }
 
     private void sendError(WebSocketClient client, String message) {

@@ -98,7 +98,15 @@ public class SurvivalRoom {
     private volatile String gameState = "WAITING"; // WAITING, QUESTION, RESULT, END
     private volatile int currentRound = 0;
     private ScheduledFuture<?> currentTimer = null;
-    private volatile long questionStartTime = 0;
+    private long questionStartNanos;
+    private long timerDeadlineNanos;
+    private long timerGeneration;
+    private long remainingBeforePauseMs;
+    private long pauseStartNanos;
+    private volatile boolean isPaused;
+    private volatile boolean closed;
+    private Runnable pendingAction;
+    private Map<String, Object> lastRoundResult;
 
     // Tổng số người chơi lúc bắt đầu trận đấu để tính mốc % bị loại
     private volatile int initialPlayerCount = 0;
@@ -194,9 +202,16 @@ public class SurvivalRoom {
 
     // ─── 7. THAM GIA / RỜI PHÒNG / SẴN SÀNG ─────────────────────────────────
 
-    public synchronized void handleJoin(WebSocketClient client) {
+    public synchronized boolean canJoin(String username) {
+        return username != null && !closed && ("WAITING".equals(gameState) || "END".equals(gameState)
+                || recentlyLeftUsernames.contains(username.toLowerCase(Locale.ROOT))
+                || players.values().stream().anyMatch(p -> p.username.equalsIgnoreCase(username)));
+    }
+
+    public synchronized boolean handleJoin(WebSocketClient client) {
         String username = client.getUsername();
-        if (username == null) return;
+        if (!canJoin(username)) return false;
+        PlayerState previous = players.values().stream().filter(p -> p.username.equalsIgnoreCase(username)).findFirst().orElse(null);
 
         // Xóa kết nối cũ trùng username (reconnect/rejoin)
         players.keySet().removeIf(old -> {
@@ -206,17 +221,24 @@ public class SurvivalRoom {
             }
             return false;
         });
-        players.keySet().removeIf(WebSocketClient::isClosed);
 
         // Chặn người mới hoàn toàn khi đang chơi; cho phép người đã từng trong phòng vào lại
         boolean gameActive = !"WAITING".equals(gameState) && !"END".equals(gameState);
-        if (gameActive && !recentlyLeftUsernames.contains(username.toLowerCase())) {
+        if (gameActive && previous == null && !recentlyLeftUsernames.contains(username.toLowerCase())) {
             sendError(client, "Trận đấu đang diễn ra! Không thể vào phòng lúc này.");
-            return;
+            return false;
         }
         recentlyLeftUsernames.remove(username.toLowerCase());
 
         PlayerState state = new PlayerState(client, username, startingHp);
+        if (gameActive && previous != null) {
+            state.hp = previous.hp;
+            state.score = previous.score;
+            state.isAlive = previous.isAlive;
+            state.isReady = previous.isReady;
+            state.answer = previous.answer;
+            state.answerTimeMs = previous.answerTimeMs;
+        } else if (gameActive) { state.hp = 0; state.isAlive = false; }
         
         // Khôi phục quyền chủ phòng nếu đây là chủ phòng ban đầu
         if (canControl(username)) {
@@ -238,9 +260,19 @@ public class SurvivalRoom {
         }
         
         broadcastPlayers();
+        return true;
     }
 
     public synchronized void handleLeave(WebSocketClient client) {
+        removePlayer(client, false);
+    }
+
+    public synchronized void handleDisconnect(WebSocketClient client) {
+        removePlayer(client, true);
+    }
+
+    private void removePlayer(WebSocketClient client, boolean disconnected) {
+        if (closed || !players.containsKey(client)) return;
         String leavingUsername = client.getUsername();
         boolean wasHost = (leavingUsername != null && leavingUsername.equalsIgnoreCase(hostUsername));
 
@@ -250,7 +282,8 @@ public class SurvivalRoom {
         }
 
         players.remove(client);
-        players.keySet().removeIf(WebSocketClient::isClosed);
+        if (disconnected) broadcast(Map.of("type", "player_disconnected", "username", leavingUsername,
+                "roomCode", roomCode, "message", "Người chơi [" + leavingUsername + "] đã mất kết nối."));
 
         if (players.isEmpty()) {
             // Chỉ reset khi không đang chơi
@@ -276,6 +309,7 @@ public class SurvivalRoom {
             }
         }
         broadcastPlayers();
+        finishIfAllAnswered();
     }
 
     public synchronized void handleToggleReady(WebSocketClient client) {
@@ -293,7 +327,7 @@ public class SurvivalRoom {
 
     public synchronized void handleStartGame(WebSocketClient client) {
         String username = client.getUsername();
-        if (username == null) return;
+        if (username == null || closed) return;
 
         if (!canControl(username)) {
             sendError(client, "Chỉ Chủ phòng hoặc Super Admin mới có quyền bắt đầu trận đấu!");
@@ -315,7 +349,9 @@ public class SurvivalRoom {
     }
 
     private synchronized void startGame() {
-        gameState = "WAITING";
+        gameState = "STARTING";
+        isPaused = false;
+        lastRoundResult = null;
         currentRound = 0;
         milestonesTriggered.clear();
 
@@ -364,13 +400,13 @@ public class SurvivalRoom {
         startMsg.put("playerCount", initialPlayerCount);
         broadcast(startMsg);
 
-        if (currentTimer != null) currentTimer.cancel(false);
-        currentTimer = scheduler.schedule(this::sendQuestion, 1500, TimeUnit.MILLISECONDS);
+        scheduleNext(this::sendQuestion, 1500);
     }
 
     // ─── 9. GỬI CÂU HỎI MỚI ─────────────────────────────────────────────────
 
     private synchronized void sendQuestion() {
+        if (closed || isPaused) return;
         long survivorsCount = countAlivePlayers();
 
         // Kiểm tra điều kiện kết thúc sớm
@@ -390,7 +426,7 @@ public class SurvivalRoom {
 
         currentRound++;
         gameState = "QUESTION";
-        questionStartTime = System.currentTimeMillis();
+        questionStartNanos = System.nanoTime();
 
         PhaseConfig phaseConfig = getPhaseConfig(currentRound);
         Question q = questions.get(currentRound - 1);
@@ -430,25 +466,93 @@ public class SurvivalRoom {
         msg.put("playerStates", playerStates);
         broadcast(msg);
 
-        if (currentTimer != null) currentTimer.cancel(false);
-        currentTimer = scheduler.schedule(this::processResults, phaseConfig.timeLimit, TimeUnit.SECONDS);
+        scheduleNext(this::processResults, phaseConfig.timeLimit * 1000L);
     }
 
     // ─── 10. NHẬN ĐÁP ÁN TỪ NGƯỜI CHƠI ──────────────────────────────────────
 
-    public void handleSubmitAnswer(WebSocketClient client, int answerIndex) {
+    public synchronized void handleSubmitAnswer(WebSocketClient client, int answerIndex) {
         PlayerState state = players.get(client);
-        if (state != null && state.isAlive && "QUESTION".equals(gameState)) {
-            if (state.answer == null) {
-                state.answer = answerIndex;
-                state.answerTimeMs = Math.max(1, System.currentTimeMillis() - questionStartTime);
-            }
+        boolean allowed = !closed && !isPaused && "QUESTION".equals(gameState) && state != null
+                && state.isAlive && state.answer == null && System.nanoTime() < timerDeadlineNanos;
+        if (!allowed || answerIndex < 0 || answerIndex >= questions.get(currentRound - 1).getOptions().size()) {
+            client.send(JsonUtil.toJson(Map.of("type", "survival_answer_rejected", "message",
+                    "Không thể chốt: đáp án không hợp lệ, đã chốt, đã hết giờ hoặc trận đang tạm dừng.",
+                    "hasAnswered", state != null && state.answer != null, "canAnswer", allowed)));
+            return;
         }
+        state.answer = answerIndex;
+        state.answerTimeMs = Math.max(1, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - questionStartNanos));
+        client.send(JsonUtil.toJson(Map.of("type", "survival_answer_locked", "answer", answerIndex)));
+        finishIfAllAnswered();
+    }
+
+    private void finishIfAllAnswered() {
+        if (closed || isPaused || !"QUESTION".equals(gameState)) return;
+        List<PlayerState> active = players.values().stream().filter(p -> p.isAlive && !p.client.isClosed()).toList();
+        if (!active.isEmpty() && active.stream().allMatch(p -> p.answer != null)) processResults();
+    }
+
+    private long remainingTimerMs() {
+        return isPaused ? remainingBeforePauseMs : Math.max(0, (timerDeadlineNanos - System.nanoTime() + 999999) / 1000000);
+    }
+
+    private void scheduleNext(Runnable action, long milliseconds) {
+        if (currentTimer != null) currentTimer.cancel(false);
+        long generation = ++timerGeneration;
+        pendingAction = action;
+        timerDeadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(milliseconds);
+        currentTimer = scheduler.schedule(() -> {
+            synchronized (SurvivalRoom.this) {
+                if (!closed && !isPaused && generation == timerGeneration) {
+                    pendingAction = null;
+                    action.run();
+                }
+            }
+        }, Math.max(0, milliseconds), TimeUnit.MILLISECONDS);
+    }
+
+    public synchronized void handlePauseGame(WebSocketClient client) {
+        if (closed || !canControl(client.getUsername())) { sendError(client, "Chỉ chủ phòng hoặc admin được tạm dừng."); return; }
+        if (isPaused || pendingAction == null || !Set.of("STARTING", "QUESTION", "RESULT").contains(gameState)
+                || remainingTimerMs() <= 0) { sendError(client, "Không thể tạm dừng ở thời điểm này."); return; }
+        remainingBeforePauseMs = remainingTimerMs();
+        isPaused = true;
+        pauseStartNanos = System.nanoTime();
+        ++timerGeneration;
+        if (currentTimer != null) currentTimer.cancel(false);
+        broadcast(Map.of("type", "survival_game_paused", "gameState", gameState,
+                "remainingTime", remainingBeforePauseMs / 1000.0, "message", "Trận đấu đã tạm dừng."));
+    }
+
+    public synchronized void handleResumeGame(WebSocketClient client) {
+        if (closed || !canControl(client.getUsername())) { sendError(client, "Chỉ chủ phòng hoặc admin được tiếp tục."); return; }
+        if (!isPaused || pendingAction == null) { sendError(client, "Trận đấu chưa được tạm dừng."); return; }
+        isPaused = false;
+        questionStartNanos += System.nanoTime() - pauseStartNanos;
+        Runnable action = pendingAction;
+        broadcast(Map.of("type", "survival_game_resumed", "gameState", gameState,
+                "remainingTime", remainingBeforePauseMs / 1000.0, "message", "Trận đấu tiếp tục."));
+        scheduleNext(action, remainingBeforePauseMs);
+        finishIfAllAnswered();
+    }
+
+    public synchronized void close() {
+        closed = true;
+        isPaused = false;
+        gameState = "CLOSED";
+        pendingAction = null;
+        ++timerGeneration;
+        if (currentTimer != null) currentTimer.cancel(false);
+        players.clear();
     }
 
     // ─── 11. XỬ LÝ KẾT QUẢ VÒNG & MỐC THƯỞNG ────────────────────────────────
 
     private synchronized void processResults() {
+        if (closed || isPaused || !"QUESTION".equals(gameState)) return;
+        ++timerGeneration;
+        if (currentTimer != null) currentTimer.cancel(false);
         gameState = "RESULT";
         Question q = questions.get(currentRound - 1);
         int correctIndex = q.getCorrect();
@@ -471,6 +575,10 @@ public class SurvivalRoom {
             Map<String, Object> answerInfo = new HashMap<>();
             answerInfo.put("answer", p.answer != null ? p.answer : -1);
             answerInfo.put("isCorrect", isCorrect);
+            answerInfo.put("participated", true);
+            answerInfo.put("status", p.answer == null ? "UNANSWERED" : isCorrect ? "CORRECT" : "WRONG");
+            answerInfo.put("answerText", p.answer == null ? "" : q.getOptions().get(p.answer));
+            answerInfo.put("hpLost", isCorrect ? 0 : Math.min(p.hp, Math.abs(penalty)));
             playerAnswerResults.put(p.username, answerInfo);
 
             if (isCorrect) {
@@ -539,6 +647,8 @@ public class SurvivalRoom {
         Map<String, Object> resultMsg = new HashMap<>();
         resultMsg.put("type", "survival_round_result");
         resultMsg.put("correctAnswerIndex", correctIndex);
+        resultMsg.put("correctAnswerText", q.getOptions().get(correctIndex));
+        resultMsg.put("options", q.getOptions());
         resultMsg.put("playerAnswerResults", playerAnswerResults); // YÊU CẦU 1: Gửi thông tin đáp án của người chơi
         resultMsg.put("round", currentRound);
         resultMsg.put("eliminatedThisRound", eliminatedThisRound);
@@ -551,11 +661,11 @@ public class SurvivalRoom {
                     + " người chơi! Tất cả người sống sót nhận +" + milestoneBonus + " điểm thưởng!");
         }
         resultMsg.put("playerStates", playerStates);
-        broadcast(resultMsg);
+        lastRoundResult = resultMsg;
+        for (WebSocketClient client : players.keySet()) sendPersonalResult(client);
 
         // Lên lịch xử lý vòng tiếp theo hoặc kết thúc sau 5 giây
-        if (currentTimer != null) currentTimer.cancel(false);
-        currentTimer = scheduler.schedule(() -> {
+        scheduleNext(() -> {
             synchronized (SurvivalRoom.this) {
                 if (survivorsCount == 0) {
                     endGame("Tất cả người chơi đã bị loại! Trận đấu kết thúc.", null);
@@ -568,12 +678,13 @@ public class SurvivalRoom {
                     sendQuestion();
                 }
             }
-        }, 5, TimeUnit.SECONDS);
+        }, 5000);
     }
 
     // ─── 12. KẾT THÚC TRẬN ĐẤU ───────────────────────────────────────────────
 
     private synchronized void endGame(String overrideReason, String winnerOverride) {
+        if (closed) return;
         gameState = "END";
         if (currentTimer != null) {
             currentTimer.cancel(false);
@@ -632,19 +743,30 @@ public class SurvivalRoom {
         broadcast(endMsg);
 
         // Sau 2 giây chuyển về trạng thái WAITING để chuẩn bị cho trận kế tiếp
-        scheduler.schedule(() -> {
+        scheduleNext(() -> {
             synchronized (SurvivalRoom.this) {
                 gameState = "WAITING";
                 currentRound = 0;
                 milestonesTriggered.clear();
             }
             broadcastPlayers();
-        }, 2, TimeUnit.SECONDS);
+        }, 2000);
     }
 
     // ─── 13. THÔNG TIN PHÒNG & BROADCAST ────────────────────────────────────
 
+    private void sendPersonalResult(WebSocketClient client) {
+        if (lastRoundResult == null) return;
+        Map<String, Object> result = new HashMap<>(lastRoundResult);
+        Map<?, ?> answers = (Map<?, ?>) lastRoundResult.get("playerAnswerResults");
+        Object personal = answers.get(client.getUsername());
+        result.put("myAnswerResult", personal != null ? personal : Map.of("participated", false, "status", "SPECTATING"));
+        result.put("isPaused", isPaused);
+        client.send(JsonUtil.toJson(result));
+    }
+
     private void sendCurrentGameState(WebSocketClient client) {
+        if ("RESULT".equals(gameState)) { sendPersonalResult(client); return; }
         // Gửi trạng thái game hiện tại cho người vừa join vào giữa chừng
         if ("QUESTION".equals(gameState) && currentRound > 0 && currentRound <= questions.size()) {
             PhaseConfig phaseConfig = getPhaseConfig(currentRound);
@@ -670,7 +792,11 @@ public class SurvivalRoom {
             msg.put("totalQuestions", Math.min(totalRounds, questions.size()));
             msg.put("text", q.getText());
             msg.put("options", q.getOptions());
-            msg.put("timeLimit", phaseConfig.timeLimit);
+            msg.put("timeLimit", remainingTimerMs() / 1000.0);
+            PlayerState state = players.get(client);
+            msg.put("isPaused", isPaused);
+            msg.put("hasAnswered", state != null && state.answer != null);
+            msg.put("selectedAnswer", state != null && state.answer != null ? state.answer : -1);
             msg.put("phaseName", phaseConfig.phaseName);
             msg.put("penalty", phaseConfig.penalty);
             msg.put("difficulty", phaseConfig.difficulty);
@@ -678,7 +804,7 @@ public class SurvivalRoom {
             msg.put("totalEliminated", totalEliminated);
             msg.put("round", currentRound);
             msg.put("playerStates", playerStates);
-            msg.put("spectatorMode", true); // Đánh dấu là chế độ xem
+            msg.put("spectatorMode", state == null || !state.isAlive);
             client.send(JsonUtil.toJson(msg));
         }
     }
@@ -689,6 +815,8 @@ public class SurvivalRoom {
         info.put("roomCode", roomCode);
         info.put("roomName", roomName);
         info.put("hostUsername", getEffectiveHostUsername());
+        info.put("gameState", gameState);
+        info.put("isPaused", isPaused);
         info.put("topic", topic);
         info.put("topicName", getTopicDisplayName(topic));
         info.put("startingHp", startingHp);
@@ -752,6 +880,7 @@ public class SurvivalRoom {
         map.put("maxPlayers", maxPlayers);
         map.put("playerCount", players.size());
         map.put("gameState", gameState);
+        map.put("isPaused", isPaused);
         return map;
     }
 

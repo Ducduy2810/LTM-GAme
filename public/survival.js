@@ -58,6 +58,36 @@
 
     // Đồng hồ đếm ngược
     let countdownInterval   = null;
+    let gamePaused = false;
+    let activeQuestion = false;
+    let answerWindowOpen = false;
+    let roomGameState = 'WAITING';
+    let selectedAnswerIndex = null;
+    let lastQuestionOptions = [];
+
+    function refreshRoomControls() {
+        const canControl = isMyHost || isCurrentUserAdmin;
+        const canPause = ['STARTING', 'QUESTION', 'RESULT'].includes(roomGameState);
+        document.getElementById('survival-room-controls').style.display = currentRoomCode ? 'flex' : 'none';
+        document.getElementById('btn-survival-pause').style.display = canControl && canPause && !gamePaused ? 'inline-block' : 'none';
+        document.getElementById('btn-survival-resume').style.display = canControl && canPause && gamePaused ? 'inline-block' : 'none';
+        document.getElementById('btn-survival-delete').style.display = canControl && currentRoomCode !== 'DTST' ? 'inline-block' : 'none';
+        document.getElementById('survival-pause-status').textContent = gamePaused ? '⏸ Trận đấu đang tạm dừng.' : '';
+        document.querySelectorAll('.answer-btn').forEach(button => {
+            button.disabled = !activeQuestion || !answerWindowOpen || gamePaused || !myIsAlive || myAnswerLocked;
+        });
+    }
+
+    function handlePauseState(data, paused) {
+        gamePaused = paused;
+        roomGameState = data.gameState || roomGameState;
+        clearInterval(countdownInterval);
+        if (activeQuestion && roomGameState === 'QUESTION') {
+            if (paused) document.getElementById('time-left').innerText = Math.ceil(data.remainingTime);
+            else { answerWindowOpen = data.remainingTime > 0; startTimer(data.remainingTime); }
+        }
+        refreshRoomControls();
+    }
     let soundEnabled        = true;
 
     // ── Sound Synthesizer Fallback (Web Audio API) ───────────────────
@@ -180,6 +210,16 @@
 
     const sound = window.arenaSound || new SurvivalSoundFallback();
 
+    // Hiệu ứng phụ không được làm gián đoạn gửi đáp án hoặc cập nhật kết quả.
+    function playSoundEffect(name) {
+        if (!soundEnabled || !sound) return;
+        const method = typeof sound[name] === 'function' ? name
+            : name === 'playDamage' && typeof sound.playEliminated === 'function' ? 'playEliminated' : null;
+        if (!method) return;
+        try { sound[method](); }
+        catch (error) { console.warn('Không phát được hiệu ứng âm thanh:', error); }
+    }
+
     // ── 1. KIỂM TRA ĐĂNG NHẬP & PHÂN QUYỀN ───────────────────────────
     fetch('/auth/me')
         .then(r => r.json())
@@ -242,6 +282,9 @@
         if (!data || !data.type) return;
 
         switch (data.type) {
+            case 'player_disconnected':
+                if (data.roomCode === currentRoomCode) window.RoomNotices?.show(data);
+                break;
             case 'auth_error':
                 alert(data.message || 'Lỗi xác thực người dùng!');
                 window.location.href = 'index.html';
@@ -258,17 +301,23 @@
 
             // ── THÔNG TIN PHÒNG ĐÃ THAM GIA ──────────────────────────
             case 'survival_room_info':
+                roomGameState = data.gameState || 'WAITING';
+                gamePaused = Boolean(data.isPaused);
+                isMyHost = Boolean(data.isHost);
                 currentRoomInfo = data;
                 currentRoomCode = data.roomCode;
                 maxHp           = data.startingHp || 100;
-                myHp            = maxHp;
+                if (roomGameState === 'WAITING' || roomGameState === 'END') myHp = maxHp;
                 totalRounds     = data.totalRounds || 15;
 
                 updateRoomInfoStrip(data);
-                showScreen('waiting');
+                refreshRoomControls();
+                if (roomGameState === 'WAITING' || roomGameState === 'END') showScreen('waiting');
                 break;
 
             // ── RỜI PHÒNG THÀNH CÔNG ─────────────────────────────────
+            case 'survival_room_closed':
+                alert(data.message);
             case 'left_survival_room_success':
             case 'survival_left_room_success':
                 currentRoomCode = '';
@@ -277,6 +326,28 @@
                 resetSurvivalState();
                 showScreen('lobby');
                 socket.send(JSON.stringify({ type: 'get_survival_rooms' }));
+                refreshRoomControls();
+                break;
+            case 'survival_game_paused':
+                handlePauseState(data, true);
+                break;
+            case 'survival_game_resumed':
+                handlePauseState(data, false);
+                break;
+            case 'survival_answer_locked':
+                myAnswerLocked = true;
+                selectedAnswerIndex = data.answer;
+                refreshRoomControls();
+                break;
+            case 'survival_answer_rejected':
+                myAnswerLocked = Boolean(data.hasAnswered);
+                answerWindowOpen = Boolean(data.canAnswer);
+                if (!myAnswerLocked) {
+                    selectedAnswerIndex = null;
+                    document.querySelectorAll('.answer-btn').forEach(button => button.classList.remove('selected'));
+                }
+                document.getElementById('feedback-msg').innerText = data.message;
+                refreshRoomControls();
                 break;
 
             // ── CẬP NHẬT NGƯỜI CHƠI TRONG PHÒNG CHỜ ──────────────────
@@ -413,12 +484,12 @@
             const card = document.createElement('div');
             card.className = 'room-card';
 
-            const isPlaying   = (r.gameState === 'QUESTION' || r.gameState === 'RESULT' || r.isPlaying);
+            const isPlaying   = (r.gameState === 'STARTING' || r.gameState === 'QUESTION' || r.gameState === 'RESULT' || r.isPlaying);
             const statusClass = isPlaying ? 'playing' : 'waiting';
             const statusText  = isPlaying ? 'Đang Diễn Ra' : 'Đang Chờ';
 
             let adminCloseBtn = '';
-            if (isCurrentUserAdmin) {
+            if ((isCurrentUserAdmin || r.hostUsername.toLowerCase() === currentUsername.toLowerCase()) && r.roomCode !== 'DTST') {
                 adminCloseBtn = `
                     <button class="btn-join-card" style="background:#7f1d1d; border-color:#dc2626; margin-left:6px;" 
                             onclick="window.survivalAdminCloseRoom('${r.roomCode}')">
@@ -466,6 +537,7 @@
         // Host xác định
         const hostUsername = data.hostUsername;
         isMyHost = (currentUsername === hostUsername);
+        refreshRoomControls();
 
         // Nút Bắt đầu cho Host
         const btnStart = document.getElementById('btn-start');
@@ -536,6 +608,8 @@
     function handleGameStarted(data) {
         clearInterval(countdownInterval);
         resetSurvivalState();
+        roomGameState = 'STARTING';
+        refreshRoomControls();
 
         if (data.startingHp) maxHp = data.startingHp;
         if (data.totalRounds) totalRounds = data.totalRounds;
@@ -559,8 +633,16 @@
 
     // ── 9. HANDLER: CÂU HỎI MỚI (NEW QUESTION) ────────────────────────
     function handleNewQuestion(data) {
+        // Không để lại thông báo đúng/sai của vòng trước khi có câu hỏi mới.
+        document.getElementById('result-info').innerHTML = '';
         showScreen('game');
-        myAnswerLocked = false;
+        roomGameState = 'QUESTION';
+        activeQuestion = true;
+        answerWindowOpen = Number(data.timeLimit) > 0;
+        gamePaused = Boolean(data.isPaused);
+        myAnswerLocked = Boolean(data.hasAnswered);
+        selectedAnswerIndex = Number.isInteger(data.selectedAnswer) && data.selectedAnswer >= 0 ? data.selectedAnswer : null;
+        lastQuestionOptions = data.options || data.choices || [];
 
         // Cập nhật số vòng và giai đoạn
         currentRoundNum = data.round || data.questionId || 1;
@@ -654,26 +736,30 @@
                 `;
 
                 // Nếu đã bị loại, vô hiệu hóa nút bấm
-                if (!myIsAlive) {
+                if (!myIsAlive || myAnswerLocked || gamePaused || !answerWindowOpen) {
                     btn.disabled = true;
                 }
 
                 btn.onclick = () => selectSurvivalAnswer(index, btn);
+                if (index === selectedAnswerIndex) btn.classList.add('selected');
                 container.appendChild(btn);
             });
         }
 
         // Bắt đầu đồng hồ đếm ngược với thời gian riêng biệt của Phase
-        const phaseTime = currentPhase.timeLimit || data.timeLimit || 15;
-        startTimer(phaseTime);
+        const phaseTime = data.timeLimit ?? currentPhase.timeLimit;
+        if (gamePaused) document.getElementById('time-left').innerText = Math.ceil(phaseTime);
+        else startTimer(phaseTime);
+        refreshRoomControls();
     }
 
     // ── 10. CHỌN ĐÁP ÁN (SUBMIT ANSWER) ──────────────────────────────
     function selectSurvivalAnswer(index, btn) {
-        if (!myIsAlive || myAnswerLocked) return;
+        if (!myIsAlive || myAnswerLocked || gamePaused || !activeQuestion || !answerWindowOpen) return;
         myAnswerLocked = true;
+        selectedAnswerIndex = index;
 
-        if (sound) sound.playLockAnswer();
+        playSoundEffect('playLockAnswer');
 
         const btns = document.querySelectorAll('.answer-btn');
         btns.forEach(b => {
@@ -682,7 +768,7 @@
         });
 
         btn.classList.add('selected');
-        btn.disabled = false;
+        refreshRoomControls();
 
         socket.send(JSON.stringify({
             type: 'submit_survival_answer',
@@ -699,52 +785,39 @@
     // ── 11. ĐỒNG HỒ ĐẾM NGƯỢC CÔNG NGHỆ CAO ───────────────────────────
     function startTimer(seconds) {
         clearInterval(countdownInterval);
-        const timeDisplay    = document.getElementById('time-left');
-        const timerDial      = document.getElementById('timer-dial');
-        const timerProgress  = document.getElementById('timer-progress');
-        const totalCircumference = 219.91; // 2 * PI * 35
-        const maxSeconds     = seconds > 0 ? seconds : 15;
-
-        if (timeDisplay) timeDisplay.innerText = seconds;
-        if (timerDial) timerDial.classList.remove('danger');
-        if (timerProgress) {
-            timerProgress.style.strokeDasharray  = `${totalCircumference}`;
-            timerProgress.style.strokeDashoffset = '0';
-        }
-
-        if (sound) sound.playTick(false);
-
-        countdownInterval = setInterval(() => {
-            seconds--;
-            if (timeDisplay) timeDisplay.innerText = Math.max(0, seconds);
-
-            if (timerProgress) {
-                const fraction = Math.min(1, Math.max(0, (maxSeconds - seconds) / maxSeconds));
-                timerProgress.style.strokeDashoffset = `${totalCircumference * fraction}`;
+        const durationMs = Math.max(0, Number(seconds) || 0) * 1000;
+        const deadline = performance.now() + durationMs;
+        const display = document.getElementById('time-left');
+        const dial = document.getElementById('timer-dial');
+        const progress = document.getElementById('timer-progress');
+        function tick() {
+            const remaining = Math.max(0, deadline - performance.now());
+            const secondsLeft = Math.ceil(remaining / 1000);
+            if (display) display.innerText = secondsLeft;
+            if (dial) dial.classList.toggle('danger', secondsLeft > 0 && secondsLeft <= 3);
+            if (progress) {
+                progress.style.strokeDasharray = '219.91';
+                progress.style.strokeDashoffset = String(219.91 * (durationMs ? 1 - remaining / durationMs : 1));
             }
-
-            const isDanger = (seconds <= 3 && seconds > 0);
-            if (isDanger && timerDial) timerDial.classList.add('danger');
-            if (seconds > 0 && sound) sound.playTick(isDanger);
-
-            if (seconds <= 0) {
+            if (remaining <= 0) {
                 clearInterval(countdownInterval);
-                document.querySelectorAll('.answer-btn').forEach(b => b.disabled = true);
-
-                if (myIsAlive && !myAnswerLocked) {
-                    const feedbackMsg = document.getElementById('feedback-msg');
-                    if (feedbackMsg) {
-                        feedbackMsg.innerText = '⏰ Hết giờ! Bạn không kịp nộp đáp án và sẽ chịu phạt trừ máu!';
-                        feedbackMsg.style.color = '#ef4444';
-                    }
-                }
+                answerWindowOpen = false;
+                refreshRoomControls();
+                if (myIsAlive && !myAnswerLocked) document.getElementById('feedback-msg').innerText = 'Hết giờ. Đang chờ công bố đáp án và kết quả của bạn.';
             }
-        }, 1000);
+        }
+        countdownInterval = setInterval(tick, 100);
+        tick();
     }
 
     // ── 12. HANDLER: KẾT QUẢ VÒNG ĐẤU (ROUND RESULT) ─────────────────
     function handleRoundResult(data) {
         clearInterval(countdownInterval);
+        roomGameState = 'RESULT';
+        activeQuestion = false;
+        answerWindowOpen = false;
+        gamePaused = Boolean(data.isPaused);
+        refreshRoomControls();
         showScreen('result');
 
         const correctIndex = data.correctAnswerIndex !== undefined ? data.correctAnswerIndex : (data.correctAnswer !== undefined ? data.correctAnswer : data.correctIndex);
@@ -753,9 +826,10 @@
 
         // YÊU CẦU 1: Lấy thông tin đáp án của bản thân từ playerAnswerResults
         const playerAnswerResults = data.playerAnswerResults || {};
-        const myAnswerResult = playerAnswerResults[currentUsername];
-        const myAnswer = myAnswerResult ? myAnswerResult.answer : null;
-        const myIsCorrect = myAnswerResult ? myAnswerResult.isCorrect : false;
+        const myAnswerResult = data.myAnswerResult || playerAnswerResults[currentUsername];
+        const myAnswer = myAnswerResult && Number.isInteger(myAnswerResult.answer) && myAnswerResult.answer >= 0 ? myAnswerResult.answer : null;
+        const myIsCorrect = myAnswerResult?.isCorrect === true;
+        const participated = Boolean(myAnswerResult) && myAnswerResult.participated !== false;
 
         // Tìm trạng thái của bản thân trong vòng này
         const playerStates = data.playerStates || data.standings || [];
@@ -790,30 +864,31 @@
             }
         }
 
-        // YÊU CẦU 1: Hiển thị đáp án người chơi chọn và kết quả đúng/sai
         const resultInfo = document.getElementById('result-info');
         if (resultInfo) {
-            let statusText = '';
-            const myAnswerLetter = (myAnswer >= 0 && myAnswer < 4) ? letters[myAnswer] : 'Không trả lời';
-
-            if (myIsCorrect) {
-                statusText = `<span style="color:#10b981;">✅ Bạn chọn <strong>[${myAnswerLetter}]</strong> - CHÍNH XÁC! Bảo toàn Máu và nhận điểm thưởng.</span>`;
-                if (sound) sound.playCorrect();
+            const options = data.options || lastQuestionOptions;
+            const correctText = data.correctAnswerText ?? options[correctIndex] ?? '';
+            const correctDescription = '[' + correctLetter + '] ' + escapeHtml(correctText);
+            const selectedDescription = myAnswer !== null && myAnswer < letters.length
+                ? '[' + letters[myAnswer] + '] ' + escapeHtml(myAnswerResult?.answerText ?? options[myAnswer] ?? '') : 'Không trả lời';
+            const hpLost = myAnswerResult?.hpLost ?? (data.penalty ?? currentPhase.penalty);
+            let statusText;
+            let soundEffect = null;
+            if (!participated) {
+                statusText = '<span style="color:#94a3b8;">Bạn đang xem trận đấu, không tham gia trả lời ở vòng này và không bị trừ HP.</span>';
+            } else if (myIsCorrect) {
+                statusText = '<span style="color:#10b981;">✅ Bạn đã chọn <strong>' + selectedDescription + '</strong> — ĐÚNG! Giữ nguyên HP và nhận +10 điểm.</span>';
+                soundEffect = 'playCorrect';
+            } else if (myAnswer === null) {
+                statusText = '<span style="color:#ef4444;">⏰ Bạn không trả lời — bị trừ ' + hpLost + ' HP.' + (!myIsAlive ? ' Bạn đã bị loại.' : '') + '</span>';
+                soundEffect = 'playDamage';
             } else {
-                const penaltyNum = data.penalty || currentPhase.penalty || 15;
-                if (!myIsAlive) {
-                    statusText = `<span style="color:#ef4444;">❌ Bạn chọn <strong>[${myAnswerLetter}]</strong> - SAI! 💀 BẠN ĐÃ CẠN KIỆT HP VÀ CHÍNH THỨC BỊ LOẠI KHỎI ĐẤU TRƯỜNG!</span>`;
-                    if (sound) sound.playEliminated();
-                } else {
-                    statusText = `<span style="color:#ef4444;">❌ Bạn chọn <strong>[${myAnswerLetter}]</strong> - SAI! Bị trừ -${penaltyNum} HP. Hãy cẩn trọng ở vòng kế!</span>`;
-                    if (sound) sound.playDamage();
-                }
+                statusText = '<span style="color:#ef4444;">❌ Bạn đã chọn <strong>' + selectedDescription + '</strong> — SAI! Bị trừ ' + hpLost + ' HP.' + (!myIsAlive ? ' Bạn đã bị loại.' : '') + '</span>';
+                soundEffect = 'playDamage';
             }
-
-            resultInfo.innerHTML = `
-                <div>Đáp án chính xác: <strong style="color:#38bdf8; font-size:1.3rem;">[${correctLetter}]</strong></div>
-                <div style="margin-top:6px;">${statusText}</div>
-            `;
+            resultInfo.innerHTML = '<div>Đáp án đúng: <strong style="color:#38bdf8;">' + correctDescription
+                + '</strong></div><div style="margin-top:8px;">' + statusText + '</div>';
+            if (soundEffect) playSoundEffect(soundEffect);
         }
 
         // Thống kê 4 ô
@@ -830,7 +905,7 @@
             eliminatedRoundCount.innerText = elimThisRound.length;
         }
         if (penaltyAppliedCount) {
-            const penaltyNum = data.penaltyApplied || currentPhase.penalty || 15;
+            const penaltyNum = data.penalty ?? currentPhase.penalty;
             penaltyAppliedCount.innerText = `-${penaltyNum} HP`;
         }
         if (resultMyHp) {
@@ -855,9 +930,10 @@
         if (milestoneBox && milestoneText) {
             if (data.milestoneBonus) {
                 milestoneBox.style.display = 'flex';
-                milestoneText.innerText = typeof data.milestoneBonus === 'string'
+                milestoneText.innerText = data.milestoneMessage || (typeof data.milestoneBonus === 'number'
+                    ? `⭐ Mốc sinh tồn: người sống sót nhận +${data.milestoneBonus} điểm.` : typeof data.milestoneBonus === 'string'
                     ? data.milestoneBonus
-                    : `⭐ Cột mốc sinh tồn đạt được! Thưởng +${data.milestoneBonus.hp || 0} HP & +${data.milestoneBonus.score || 0} Điểm!`;
+                    : `⭐ Cột mốc sinh tồn đạt được! Thưởng +${data.milestoneBonus.hp || 0} HP & +${data.milestoneBonus.score || 0} Điểm!`);
             } else {
                 milestoneBox.style.display = 'none';
             }
@@ -925,6 +1001,11 @@
 
     // ── 14. HANDLER: KẾT THÚC TRẬN ĐẤU (END GAME) ─────────────────────
     function handleEndGame(data) {
+        roomGameState = 'END';
+        activeQuestion = false;
+        answerWindowOpen = false;
+        gamePaused = false;
+        refreshRoomControls();
         clearInterval(countdownInterval);
         showScreen('end');
 
@@ -955,7 +1036,7 @@
                 endTitle.innerText = 'CHIẾN THẮNG TUYỆT ĐỐI!';
                 endTitle.style.color = '#fde047';
             }
-            if (sound) sound.playVictory();
+            playSoundEffect('playVictory');
         } else if (myIsAlive) {
             if (trophyEl) trophyEl.innerText = '🏅';
             if (endTitle) {
@@ -993,6 +1074,12 @@
 
     // ── 15. RESET STATE KHI RỜI TRẬN ─────────────────────────────────
     function resetSurvivalState() {
+        gamePaused = false;
+        activeQuestion = false;
+        answerWindowOpen = false;
+        roomGameState = 'WAITING';
+        selectedAnswerIndex = null;
+        lastQuestionOptions = [];
         myHp            = maxHp;
         myScore         = 0;
         myIsAlive       = true;
@@ -1053,14 +1140,23 @@
 
     // Admin đóng phòng
     window.survivalAdminCloseRoom = function (code) {
-        if (!isCurrentUserAdmin) return;
         if (confirm(`Bạn có chắc chắn muốn đóng phòng [${code}]?`)) {
             socket.send(JSON.stringify({
-                type: 'admin_close_survival_room',
+                type: 'close_survival_room',
                 roomCode: code
             }));
         }
     };
+
+    document.getElementById('btn-survival-pause').addEventListener('click', () => {
+        socket.send(JSON.stringify({ type: 'pause_survival_game' }));
+    });
+    document.getElementById('btn-survival-resume').addEventListener('click', () => {
+        socket.send(JSON.stringify({ type: 'resume_survival_game' }));
+    });
+    document.getElementById('btn-survival-delete').addEventListener('click', () => {
+        window.survivalAdminCloseRoom(currentRoomCode);
+    });
 
     // Modal tạo phòng
     const modalCreateRoom   = document.getElementById('modal-create-room');

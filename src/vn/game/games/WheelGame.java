@@ -7,7 +7,7 @@ import vn.game.util.JsonUtil;
 import java.util.*;
 import java.util.concurrent.*;
 
-public class WheelGame {
+public class WheelGame implements AutoCloseable {
 
     private final UserRepository userRepository;
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
@@ -301,13 +301,22 @@ public class WheelGame {
         unregisterLobbyClient(client);
         WheelRoom room = clientRoomMap.remove(client);
         if (room != null) {
-            room.removePlayer(client);
+            room.handleDisconnect(client);
             boolean canDelete = room.getPlayerCount() == 0
                     && !DEFAULT_ROOM_CODE.equalsIgnoreCase(room.getRoomCode())
                     && !"PLAYING".equals(room.getGameState());
             if (canDelete) rooms.remove(room.getRoomCode());
             broadcastRoomListToLobby();
         }
+    }
+
+    @Override
+    public synchronized void close() {
+        rooms.values().forEach(WheelRoom::close);
+        rooms.clear();
+        clientRoomMap.clear();
+        lobbyClients.clear();
+        scheduler.shutdownNow();
     }
 
     private void sendError(WebSocketClient client, String text) {

@@ -1,6 +1,8 @@
 package vn.game.db;
 
 import vn.game.model.User;
+import vn.game.util.PasswordResetCode;
+import vn.game.util.EmailVerification;
 
 import java.sql.*;
 import java.util.UUID;
@@ -70,6 +72,154 @@ public class UserRepository {
 
     // ── Ghi ──────────────────────────────────────────────────────────────────
 
+    /** Giữ thông tin đăng ký dưới dạng băm; chưa tạo tài khoản hoạt động. */
+    public synchronized boolean issueEmailVerification(String username, String email, String password, String tokenHash, long now) throws Exception {
+        if (findByUsername(username) != null) throw new Exception("Tên tài khoản này đã có người sử dụng!");
+        if (findByEmail(email) != null) throw new Exception("Email này đã được đăng ký. Hãy đăng nhập hoặc lấy lại mật khẩu.");
+        try (PreparedStatement ps = db.getConnection().prepareStatement("DELETE FROM pending_registrations WHERE expires <= ?")) {
+            ps.setLong(1, now);
+            ps.executeUpdate();
+        }
+        try (PreparedStatement ps = db.getConnection().prepareStatement("SELECT * FROM pending_registrations WHERE email = ? COLLATE NOCASE")) {
+            ps.setString(1, email);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    if (!username.equalsIgnoreCase(rs.getString("username"))
+                            || !User.hashPassword(password, rs.getString("salt")).equals(rs.getString("password_hash"))) {
+                        throw new Exception("Email này đang chờ xác nhận. Để gửi lại liên kết, hãy nhập đúng tên đăng nhập và mật khẩu của yêu cầu trước, hoặc đợi liên kết hết hạn sau 30 phút.");
+                    }
+                    if (rs.getLong("sent_at") > now - EmailVerification.RESEND_AFTER_MS) return false;
+                }
+            }
+        }
+        try (PreparedStatement ps = db.getConnection().prepareStatement("SELECT 1 FROM pending_registrations WHERE username = ? COLLATE NOCASE AND email <> ? COLLATE NOCASE")) {
+            ps.setString(1, username);
+            ps.setString(2, email);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) throw new Exception("Tên đăng nhập này đang chờ xác nhận email. Hãy chọn tên khác hoặc xác nhận yêu cầu trước.");
+            }
+        }
+        String salt = User.generateSalt();
+        try (PreparedStatement ps = db.getConnection().prepareStatement("""
+            INSERT INTO pending_registrations (email, username, password_hash, salt, token_hash, expires, sent_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(email) DO UPDATE SET token_hash = excluded.token_hash, expires = excluded.expires, sent_at = excluded.sent_at
+        """)) {
+            ps.setString(1, email);
+            ps.setString(2, username);
+            ps.setString(3, User.hashPassword(password, salt));
+            ps.setString(4, salt);
+            ps.setString(5, tokenHash);
+            ps.setLong(6, now + EmailVerification.VALID_FOR_MS);
+            ps.setLong(7, now);
+            ps.executeUpdate();
+            return true;
+        }
+    }
+
+    public synchronized void cancelEmailVerification(String email, String tokenHash) {
+        try (PreparedStatement ps = db.getConnection().prepareStatement("DELETE FROM pending_registrations WHERE email = ? COLLATE NOCASE AND token_hash = ?")) {
+            ps.setString(1, email);
+            ps.setString(2, tokenHash);
+            ps.executeUpdate();
+        } catch (SQLException e) { throw new RuntimeException("cancelEmailVerification: " + e.getMessage(), e); }
+    }
+
+    public boolean hasPendingRegistration(String username) {
+        try (PreparedStatement ps = db.getConnection().prepareStatement("SELECT 1 FROM pending_registrations WHERE username = ? COLLATE NOCASE AND expires > ?")) {
+            ps.setString(1, username);
+            ps.setLong(2, System.currentTimeMillis());
+            try (ResultSet rs = ps.executeQuery()) { return rs.next(); }
+        } catch (SQLException e) { throw new RuntimeException("hasPendingRegistration: " + e.getMessage(), e); }
+    }
+
+    /** Xác nhận và tạo tài khoản trong cùng khóa ghi, không thể dùng liên kết hai lần. */
+    public synchronized User confirmEmailVerification(String tokenHash, long now) throws Exception {
+        String username, email, passwordHash, salt;
+        try (PreparedStatement ps = db.getConnection().prepareStatement("SELECT * FROM pending_registrations WHERE token_hash = ? AND expires > ?")) {
+            ps.setString(1, tokenHash);
+            ps.setLong(2, now);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return null;
+                username = rs.getString("username");
+                email = rs.getString("email");
+                passwordHash = rs.getString("password_hash");
+                salt = rs.getString("salt");
+            }
+        }
+        if (findByUsername(username) != null || findByEmail(email) != null) {
+            throw new Exception("Tên đăng nhập hoặc email đã được sử dụng. Hãy đăng nhập hoặc đăng ký lại với thông tin khác.");
+        }
+        User user = insertUser(username, email, passwordHash, salt);
+        cancelEmailVerification(email, tokenHash);
+        return user;
+    }
+
+
+    /** Giữ chỗ gửi mã nguyên tử, tránh nhiều request cùng gửi cho một tài khoản. */
+    public synchronized User issuePasswordReset(String email, String hash, long now) {
+        User user = findByEmail(email);
+        if (user == null) return null;
+        String sql = """
+            UPDATE users SET reset_token = ?, reset_expires = ?, reset_attempts = 0, reset_sent_at = ?
+            WHERE id = ? AND reset_sent_at <= ?
+        """;
+        try (PreparedStatement ps = db.getConnection().prepareStatement(sql)) {
+            ps.setString(1, hash);
+            ps.setLong(2, now + PasswordResetCode.VALID_FOR_MS);
+            ps.setLong(3, now);
+            ps.setInt(4, user.getId());
+            ps.setLong(5, now - PasswordResetCode.RESEND_AFTER_MS);
+            return ps.executeUpdate() == 1 ? user : null;
+        } catch (SQLException e) {
+            throw new RuntimeException("issuePasswordReset: " + e.getMessage(), e);
+        }
+    }
+
+    /** Chỉ hủy đúng mã gửi thất bại, không xóa mã mới hơn. */
+    public synchronized void cancelPasswordReset(int userId, String hash) {
+        try (PreparedStatement ps = db.getConnection().prepareStatement("""
+            UPDATE users SET reset_token = NULL, reset_expires = 0, reset_attempts = 0, reset_sent_at = 0
+            WHERE id = ? AND reset_token = ?
+        """)) {
+            ps.setInt(1, userId);
+            ps.setString(2, hash);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException("cancelPasswordReset: " + e.getMessage(), e);
+        }
+    }
+
+    /** Kiểm tra, đếm lần sai và tiêu thụ mã trong cùng khóa ghi của repository. */
+    public synchronized String resetPasswordWithCode(String email, String code, String password, long now) {
+        User user = findByEmail(email);
+        if (user == null) return null;
+        try (PreparedStatement ps = db.getConnection().prepareStatement(
+                "SELECT reset_attempts FROM users WHERE id = ?")) {
+            ps.setInt(1, user.getId());
+            int attempts;
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return null;
+                attempts = rs.getInt("reset_attempts");
+            }
+            if (user.getResetExpires() <= now || attempts >= PasswordResetCode.MAX_ATTEMPTS
+                    || user.getResetToken() == null || !user.getResetToken().startsWith("otp:")) return null;
+            if (!PasswordResetCode.matches(email, code, user.getResetToken())) {
+                try (PreparedStatement update = db.getConnection().prepareStatement(
+                        "UPDATE users SET reset_attempts = reset_attempts + 1 WHERE id = ?")) {
+                    update.setInt(1, user.getId());
+                    update.executeUpdate();
+                }
+                return null;
+            }
+            user.updatePassword(password);
+            update(user);
+            return user.getUsername();
+        } catch (SQLException e) {
+            throw new RuntimeException("resetPasswordWithCode: " + e.getMessage(), e);
+        }
+    }
+
     /**
      * Đăng ký user mới. Throws Exception nếu username/email đã tồn tại.
      */
@@ -81,11 +231,16 @@ public class UserRepository {
             throw new Exception("Email này đã được sử dụng!");
         }
 
+        String salt = User.generateSalt();
+        return insertUser(username, email, User.hashPassword(password, salt), salt);
+    }
+
+    private User insertUser(String username, String email, String passwordHash, String salt) {
         User user = new User();
         user.setUsername(username);
         user.setEmail(email);
-        user.setSalt(User.generateSalt());
-        user.setPasswordHash(User.hashPassword(password, user.getSalt()));
+        user.setSalt(salt);
+        user.setPasswordHash(passwordHash);
         user.setRole(
             "admin".equalsIgnoreCase(username) ||
             (email != null && "mainung28@gmail.com".equalsIgnoreCase(email))

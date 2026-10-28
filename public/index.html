@@ -40,18 +40,21 @@
 
         <!-- FORM ĐĂNG KÝ -->
         <div id="register-form" class="hidden">
-            <input type="text" id="reg-username" placeholder="Tên đăng nhập mới" autocomplete="off">
-            <input type="email" id="reg-email" placeholder="Nhập Email (để khôi phục MK)" autocomplete="off">
-            <input type="password" id="reg-password" placeholder="Mật khẩu mới">
-            <button id="btn-register" style="background:#10b981;">Tạo Tài Khoản</button>
+            <p style="font-size:0.9em; color:#94a3b8;">Sau khi đăng ký, hãy bấm liên kết trong email để kích hoạt tài khoản. Không cần nhập mã xác nhận.</p>
+            <input type="text" id="reg-username" placeholder="Tên đăng nhập mới" autocomplete="username" maxlength="64">
+            <input type="email" id="reg-email" placeholder="Email của bạn, ví dụ: ten@gmail.com" autocomplete="email" maxlength="254" aria-describedby="reg-email-error">
+            <p id="reg-email-error" role="status" aria-live="polite" style="color:#ef4444; font-size:0.85em; margin:0 0 8px;"></p>
+            <input type="password" id="reg-password" placeholder="Mật khẩu mới (8–128 ký tự)" autocomplete="new-password" minlength="8" maxlength="128">
+            <button type="button" id="btn-register" style="background:#10b981;">Tạo Tài Khoản</button>
             <p style="font-size: 0.9em;">Đã có tài khoản? <a href="#" id="link-login" style="color:#60a5fa;">Đăng nhập ngay</a></p>
         </div>
 
         <!-- FORM QUÊN MẬT KHẨU -->
         <div id="forgot-form" class="hidden">
-            <p style="font-size:0.9em; margin-bottom:15px; color:#94a3b8;">Nhập Email đã đăng ký, hệ thống Java sẽ tạo mã khôi phục mật khẩu bảo mật.</p>
+            <p style="font-size:0.9em; margin-bottom:15px; color:#94a3b8;">Nhập email đã đăng ký để nhận mã xác nhận gồm 6 chữ số. Mã có hiệu lực trong 10 phút.</p>
             <input type="email" id="forgot-email" placeholder="Nhập Email của bạn..." autocomplete="off">
-            <button id="btn-forgot" style="background:#f59e0b;">Lấy Link Khôi Phục</button>
+            <button id="btn-forgot" style="background:#f59e0b;">Gửi Mã Xác Nhận</button>
+            <p style="font-size:0.9em;"><a href="/reset.html" style="color:#60a5fa;">Đã có mã? Đặt lại mật khẩu</a></p>
             <p style="font-size: 0.9em;"><a href="#" id="link-back-login" style="color:#60a5fa; text-decoration:none;">⬅ Quay lại đăng nhập</a></p>
         </div>
 

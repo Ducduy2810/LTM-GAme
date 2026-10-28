@@ -1,0 +1,10 @@
+.room-notices {
+    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+    z-index: 10000; width: min(92vw, 620px); max-height: 35vh;
+    overflow-y: auto; pointer-events: none; display: flex; flex-direction: column; gap: 8px;
+}
+.room-notice {
+    padding: 12px 18px; border: 1px solid #fbbf24; border-radius: 10px;
+    background: #451a03; color: #fef3c7; box-shadow: 0 6px 24px #0008;
+    font: 700 14px/1.5 'Segoe UI', sans-serif; overflow-wrap: anywhere;
+}

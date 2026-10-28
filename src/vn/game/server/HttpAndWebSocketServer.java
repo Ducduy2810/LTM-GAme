@@ -7,6 +7,9 @@ import vn.game.games.SurvivalGame;
 import vn.game.games.WheelGame;
 import vn.game.model.User;
 import vn.game.util.JsonUtil;
+import vn.game.util.PasswordResetCode;
+import vn.game.util.PasswordResetMailer;
+import vn.game.util.EmailVerification;
 
 import java.io.*;
 import java.net.*;
@@ -18,6 +21,9 @@ import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Máy chủ hợp nhất TCP ServerSocket:
@@ -34,9 +40,14 @@ public class HttpAndWebSocketServer {
     private final ArenaGame arenaGame;
     private final WheelGame wheelGame;
     private final SurvivalGame survivalGame;
+    private final PasswordResetMailer resetMailer = new PasswordResetMailer();
     private final ExecutorService threadPool = Executors.newCachedThreadPool();
     private volatile boolean running = false;
     private ServerSocket serverSocket;
+    private final Set<WebSocketClient> connections = ConcurrentHashMap.newKeySet();
+    private final ScheduledExecutorService heartbeat = Executors.newSingleThreadScheduledExecutor();
+    private static final long HEARTBEAT_INTERVAL_MS = 10_000;
+    private static final long HEARTBEAT_TIMEOUT_MS = 20_000;
 
     public HttpAndWebSocketServer(int port, File publicDir, UserRepository userRepository,
                                   SessionManager sessionManager, ArenaGame arenaGame,
@@ -54,6 +65,7 @@ public class HttpAndWebSocketServer {
         // Bind rõ ràng 0.0.0.0 để chấp nhận kết nối từ mạng LAN
         serverSocket = new ServerSocket(port, 50, java.net.InetAddress.getByName("0.0.0.0"));
         running = true;
+        heartbeat.scheduleAtFixedRate(this::checkConnections, 1, 1, TimeUnit.SECONDS);
         System.out.println("🚀 [Java Server] Đang lắng nghe kết nối tại cổng " + port + " (0.0.0.0)");
 
         while (running) {
@@ -66,22 +78,39 @@ public class HttpAndWebSocketServer {
         }
     }
 
+    public int getPort() { return running && serverSocket != null ? serverSocket.getLocalPort() : port; }
+
     public void stop() {
         running = false;
+        heartbeat.shutdownNow();
+        connections.forEach(WebSocketClient::close);
+        connections.clear();
         try {
             if (serverSocket != null) serverSocket.close();
         } catch (IOException ignored) {}
         threadPool.shutdownNow();
     }
 
+    private void checkConnections() {
+        if (!running) return;
+        long now = System.nanoTime();
+        for (WebSocketClient client : connections) {
+            if (client.isClosed() || client.heartbeatExpired(now, HEARTBEAT_TIMEOUT_MS)) {
+                client.close(); // Đánh thức luồng đọc để xử lý rời phòng đúng một lần.
+                continue;
+            }
+            byte[] ping = client.prepareHeartbeat(now, HEARTBEAT_INTERVAL_MS);
+            if (ping != null && !threadPool.isShutdown()) threadPool.execute(() -> client.sendPing(ping));
+        }
+    }
+
     private void handleConnection(Socket socket) {
         try {
-            InputStream in = socket.getInputStream();
+            InputStream in = new BufferedInputStream(socket.getInputStream());
             OutputStream out = socket.getOutputStream();
 
             // Đọc HTTP Header dòng đầu
-            BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
-            String initialLine = reader.readLine();
+            String initialLine = readHttpLine(in);
             if (initialLine == null || initialLine.trim().isEmpty()) {
                 socket.close();
                 return;
@@ -99,7 +128,7 @@ public class HttpAndWebSocketServer {
             // Đọc các Headers
             Map<String, String> headers = new HashMap<>();
             String line;
-            while ((line = reader.readLine()) != null && !line.isEmpty()) {
+            while ((line = readHttpLine(in)) != null && !line.isEmpty()) {
                 int colonIdx = line.indexOf(':');
                 if (colonIdx > 0) {
                     String k = line.substring(0, colonIdx).trim().toLowerCase();
@@ -119,11 +148,22 @@ public class HttpAndWebSocketServer {
             }
 
             // Xử lý các HTTP Request thông thường (REST API hoặc File tĩnh)
-            handleHttpRequest(socket, out, reader, method, path, headers, sessionId);
+            handleHttpRequest(socket, out, in, method, path, headers, sessionId);
 
         } catch (Exception e) {
             try { socket.close(); } catch (IOException ignored) {}
         }
+    }
+
+    private static String readHttpLine(InputStream in) throws IOException {
+        ByteArrayOutputStream line = new ByteArrayOutputStream();
+        int value;
+        while ((value = in.read()) != -1) {
+            if (value == '\n') return line.toString(StandardCharsets.ISO_8859_1).replaceFirst("\\r$", "");
+            if (line.size() >= 8192) throw new IOException("HTTP header quá dài.");
+            line.write(value);
+        }
+        return line.size() == 0 ? null : line.toString(StandardCharsets.ISO_8859_1);
     }
 
     private String extractSessionId(String cookieHeader) {
@@ -179,6 +219,7 @@ public class HttpAndWebSocketServer {
             }
 
             // Vòng lặp lắng nghe các Frame từ WebSocket Client
+            connections.add(client);
             DataInputStream dataIn = new DataInputStream(in);
             while (!client.isClosed()) {
                 int b0 = dataIn.read();
@@ -196,6 +237,7 @@ public class HttpAndWebSocketServer {
                 } else if (len == 127) {
                     len = dataIn.readLong();
                 }
+                if (len < 0 || len > 1024 * 1024 || (opcode >= 0x8 && len > 125)) throw new IOException("WebSocket frame không hợp lệ.");
 
                 byte[] mask = new byte[4];
                 if (masked) {
@@ -218,12 +260,11 @@ public class HttpAndWebSocketServer {
 
                 // Opcode 0x9 là Ping
                 if (opcode == 0x9) {
-                    // Trả lời Pong (0xA)
-                    synchronized (out) {
-                        out.write(0x8A);
-                        out.write(0);
-                        out.flush();
-                    }
+                    client.sendPong(payload);
+                    continue;
+                }
+                if (opcode == 0xA) {
+                    client.receivePong(payload);
                     continue;
                 }
 
@@ -238,6 +279,7 @@ public class HttpAndWebSocketServer {
             // Client ngắt kết nối
         } finally {
             if (client != null) {
+                connections.remove(client);
                 arenaGame.handleDisconnect(client);
                 wheelGame.handleDisconnect(client);
                 survivalGame.handleDisconnect(client);
@@ -270,6 +312,7 @@ public class HttpAndWebSocketServer {
             case "toggle_ready":
                 arenaGame.handleToggleReady(client);
                 break;
+            case "close_arena_room":
             case "admin_close_room": {
                 String roomCode = (String) req.get("roomCode");
                 arenaGame.handleAdminCloseRoom(client, roomCode);
@@ -280,6 +323,9 @@ public class HttpAndWebSocketServer {
                 break;
             case "start_arena_game":
                 arenaGame.handleStartGame(client);
+                break;
+            case "select_arena_main_player":
+                arenaGame.handleSelectMainPlayer(client, req);
                 break;
             case "submit_arena_answer":
                 if (req.get("answer") instanceof Number) {
@@ -377,6 +423,13 @@ public class HttpAndWebSocketServer {
                     survivalGame.handleSubmitAnswer(client, ((Number) req.get("answer")).intValue());
                 }
                 break;
+            case "pause_survival_game":
+                survivalGame.handlePauseGame(client);
+                break;
+            case "resume_survival_game":
+                survivalGame.handleResumeGame(client);
+                break;
+            case "close_survival_room":
             case "admin_close_survival_room": {
                 String roomCode = (String) req.get("roomCode");
                 survivalGame.handleAdminCloseRoom(client, roomCode);
@@ -392,7 +445,7 @@ public class HttpAndWebSocketServer {
     // ==========================================
     // 2. XỬ LÝ HTTP REST API & TÀI NGUYÊN TĨNH
     // ==========================================
-    private void handleHttpRequest(Socket socket, OutputStream out, BufferedReader reader,
+    private void handleHttpRequest(Socket socket, OutputStream out, InputStream in,
                                   String method, String path, Map<String, String> headers, String sessionId) throws IOException {
         String query = "";
         int qIdx = path.indexOf('?');
@@ -408,14 +461,15 @@ public class HttpAndWebSocketServer {
             try { contentLength = Integer.parseInt(clStr); } catch (NumberFormatException ignored) {}
         }
 
-        char[] bodyChars = new char[contentLength];
-        int read = 0;
-        while (read < contentLength) {
-            int r = reader.read(bodyChars, read, contentLength - read);
-            if (r == -1) break;
-            read += r;
+        if (contentLength < 0 || contentLength > 65536) {
+            sendJson(out, 400, Map.of("error", "Nội dung yêu cầu quá lớn hoặc không hợp lệ."), null);
+            socket.close();
+            return;
         }
-        String body = new String(bodyChars);
+        // Content-Length tính theo byte, không phải số ký tự (mật khẩu có thể có dấu).
+        byte[] bodyBytes = in.readNBytes(contentLength);
+        if (bodyBytes.length != contentLength) throw new EOFException("Thiếu nội dung HTTP.");
+        String body = new String(bodyBytes, StandardCharsets.UTF_8);
 
         // --- LEADERBOARD API ---
         if ("GET".equals(method) && "/api/leaderboard".equals(path)) {
@@ -459,21 +513,83 @@ public class HttpAndWebSocketServer {
     private void handleAuthApi(OutputStream out, String method, String path, String query, String body, String sessionId, Map<String, String> headers) throws IOException {
         Map<String, Object> req = JsonUtil.parseObject(body);
 
+        if (("/auth/forgot".equals(path) || "/auth/reset".equals(path)
+                || "/auth/register".equals(path) || "/auth/verify-email".equals(path)) && !"POST".equals(method)) {
+            sendJson(out, 405, Map.of("error", "Vui lòng gửi yêu cầu bằng POST."), null);
+            return;
+        }
+
         switch (path) {
             case "/auth/register": {
-                String username = (String) req.get("username");
-                String email = (String) req.get("email");
-                String password = (String) req.get("password");
-
-                if (username == null || email == null || password == null ||
-                        username.trim().isEmpty() || email.trim().isEmpty() || password.trim().isEmpty()) {
-                    sendJson(out, 400, Map.of("error", "Hãy nhập đủ thông tin (cả email)!"), null);
+                String username = requestText(req, "username").trim();
+                String email = requestText(req, "email").trim().toLowerCase(Locale.ROOT);
+                String password = requestText(req, "password");
+                if (username.isEmpty() || username.length() > 64 || !PasswordResetMailer.isEmail(email)) {
+                    sendJson(out, 400, Map.of("error", "Hãy nhập tên đăng nhập (tối đa 64 ký tự) và email hợp lệ."), null);
+                    return;
+                }
+                if (password.isBlank() || password.length() < 8 || password.length() > 128) {
+                    sendJson(out, 400, Map.of("error", "Mật khẩu phải có từ 8 đến 128 ký tự."), null);
                     return;
                 }
 
+                Env.load();
+                if (!resetMailer.isConfigured()) {
+                    sendJson(out, 503, Map.of("error", "Chức năng gửi email chưa được cấu hình. Vui lòng liên hệ quản trị viên."), null);
+                    return;
+                }
+                String baseUrl;
                 try {
-                    userRepository.register(username.trim(), email.trim(), password);
-                    sendJson(out, 200, Map.of("success", true, "message", "Đăng ký thành công! Hãy tiến hành đăng nhập."), null);
+                    URI configured = URI.create(Env.get("APP_BASE_URL", "http://localhost:" + port));
+                    if ((!"http".equals(configured.getScheme()) && !"https".equals(configured.getScheme()))
+                            || configured.getHost() == null || configured.getUserInfo() != null
+                            || configured.getQuery() != null || configured.getFragment() != null
+                            || (configured.getPath() != null && !configured.getPath().isEmpty() && !"/".equals(configured.getPath()))) {
+                        throw new IllegalArgumentException();
+                    }
+                    baseUrl = configured.toString().replaceAll("/+$", "");
+                } catch (IllegalArgumentException e) {
+                    sendJson(out, 503, Map.of("error", "APP_BASE_URL chưa hợp lệ. Vui lòng liên hệ quản trị viên."), null);
+                    return;
+                }
+                String token = EmailVerification.generateToken();
+                String hash = EmailVerification.hash(token);
+                try {
+                    if (!userRepository.issueEmailVerification(username, email, password, hash, System.currentTimeMillis())) {
+                        sendJson(out, 429, Map.of("error", "Vui lòng chờ 60 giây trước khi gửi lại liên kết xác nhận.", "retryAfter", 60), null);
+                        return;
+                    }
+                } catch (Exception e) {
+                    sendJson(out, 400, Map.of("error", e.getMessage()), null);
+                    return;
+                }
+                try {
+                    resetMailer.sendRegistrationLink(email, baseUrl + "/verify-email.html#token=" + token);
+                } catch (IOException e) {
+                    userRepository.cancelEmailVerification(email, hash);
+                    System.err.println("Không gửi được email xác nhận đăng ký: " + e.getMessage());
+                    sendJson(out, 503, Map.of("error", "Không gửi được email xác nhận. Hãy kiểm tra lại email hoặc thử lại sau."), null);
+                    return;
+                }
+                System.out.println("[Registration] SMTP đã tiếp nhận email chứa liên kết xác nhận.");
+                sendJson(out, 200, Map.of("success", true, "verificationRequired", true, "retryAfter", 60,
+                        "message", "Đã gửi liên kết xác nhận. Hãy mở email và bấm liên kết trong 30 phút để kích hoạt tài khoản. Kiểm tra cả thư rác. Nếu chưa nhận được, chờ 60 giây rồi đăng ký lại với cùng thông tin để gửi lại."), null);
+                break;
+            }
+
+            case "/auth/verify-email": {
+                String token = requestText(req, "token");
+                if (!token.matches("[A-Za-z0-9_-]{43}")) {
+                    sendJson(out, 400, Map.of("error", "Liên kết xác nhận không hợp lệ."), null);
+                    return;
+                }
+                try {
+                    User user = userRepository.confirmEmailVerification(EmailVerification.hash(token), System.currentTimeMillis());
+                    if (user == null) {
+                        sendJson(out, 400, Map.of("error", "Liên kết đã hết hạn, đã được sử dụng hoặc đã được thay bằng liên kết mới. Hãy đăng ký lại để nhận email mới."), null);
+                        return;
+                    }
+                    sendJson(out, 200, Map.of("success", true, "message", "Email đã được xác nhận. Tài khoản đã được kích hoạt, bạn có thể đăng nhập."), null);
                 } catch (Exception e) {
                     sendJson(out, 400, Map.of("error", e.getMessage()), null);
                 }
@@ -485,6 +601,10 @@ public class HttpAndWebSocketServer {
                 String password = (String) req.get("password");
 
                 User user = userRepository.findByUsername(username);
+                if (user == null && userRepository.hasPendingRegistration(username)) {
+                    sendJson(out, 403, Map.of("error", "Tài khoản đang chờ xác nhận email. Hãy mở email đăng ký và bấm liên kết để kích hoạt."), null);
+                    return;
+                }
                 if (user == null || !user.verifyPassword(password)) {
                     sendJson(out, 400, Map.of("error", "Sai tên đăng nhập hoặc mật khẩu!"), null);
                     return;
@@ -529,47 +649,64 @@ public class HttpAndWebSocketServer {
             }
 
             case "/auth/forgot": {
-                String email = (String) req.get("email");
-                User user = userRepository.findByEmail(email);
-                if (user == null) {
-                    sendJson(out, 400, Map.of("error", "Không tìm thấy tài khoản nào đăng ký bằng Email này."), null);
+                String email = requestText(req, "email").trim().toLowerCase(Locale.ROOT);
+                if (!PasswordResetMailer.isEmail(email)) {
+                    sendJson(out, 400, Map.of("error", "Vui lòng nhập email hợp lệ."), null);
                     return;
                 }
-
-                String token = UUID.randomUUID().toString().replace("-", "");
-                user.setResetToken(token);
-                user.setResetExpires(System.currentTimeMillis() + 3600000); // 1 giờ
-                userRepository.update(user);
-
-                String proto = headers.getOrDefault("x-forwarded-proto", "http");
-                String host = headers.getOrDefault("x-forwarded-host", headers.get("host"));
-                if (host == null || host.isEmpty()) host = "localhost:" + port;
-
-                String resetLink = proto + "://" + host + "/reset.html?token=" + token;
-
-                System.out.println("\n==============================================");
-                System.out.println("[JAVA SERVER] YÊU CẦU ĐỔI MẬT KHẨU CHO EMAIL: " + email);
-                System.out.println("Bấm vào link sau để đặt lại mật khẩu:");
-                System.out.println(resetLink);
-                System.out.println("==============================================\n");
-
-                sendJson(out, 200, Map.of("success", true, "message", "Đã tạo link khôi phục! Vui lòng kiểm tra màn hình Terminal."), null);
+                if (userRepository.findByEmail(email) == null) {
+                    sendJson(out, 404, Map.of("error", "Email này chưa được đăng ký. Hãy nhập email đã gắn với tài khoản của bạn hoặc đăng ký tài khoản mới."), null);
+                    return;
+                }
+                // Người quản trị có thể vừa cập nhật mật khẩu ứng dụng trong .env.
+                Env.load();
+                if (!resetMailer.isConfigured()) {
+                    sendJson(out, 503, Map.of("error", "Chức năng gửi email chưa được cấu hình. Vui lòng liên hệ quản trị viên."), null);
+                    return;
+                }
+                String code = PasswordResetCode.generate();
+                String hash = PasswordResetCode.hash(email, code);
+                User user = userRepository.issuePasswordReset(email, hash, System.currentTimeMillis());
+                if (user == null) {
+                    sendJson(out, 429, Map.of("error", "Bạn vừa yêu cầu mã. Vui lòng chờ 60 giây trước khi gửi lại và kiểm tra cả thư rác.",
+                            "retryAfter", PasswordResetCode.RESEND_AFTER_MS / 1000), null);
+                    return;
+                }
+                try {
+                    resetMailer.sendCode(user.getEmail(), code);
+                } catch (IOException e) {
+                    userRepository.cancelPasswordReset(user.getId(), hash);
+                    System.err.println("Không gửi được email khôi phục: " + e.getMessage());
+                    sendJson(out, 503, Map.of("error", "Chưa gửi được email. Vui lòng thử lại hoặc liên hệ quản trị viên kiểm tra cấu hình gửi mail."), null);
+                    return;
+                }
+                System.out.println("[Password reset] SMTP đã tiếp nhận email gửi mã xác nhận.");
+                sendJson(out, 200, Map.of("success", true,
+                        "message", "Đã gửi mã xác nhận đến email đăng ký. Mã có hiệu lực 10 phút; vui lòng kiểm tra cả thư rác.",
+                        "retryAfter", PasswordResetCode.RESEND_AFTER_MS / 1000), null);
                 break;
             }
 
             case "/auth/reset": {
-                String token = (String) req.get("token");
-                String newPassword = (String) req.get("newPassword");
-
-                User user = userRepository.findByResetToken(token);
-                if (user == null || user.getResetExpires() < System.currentTimeMillis()) {
-                    sendJson(out, 400, Map.of("error", "Mã khôi phục không hợp lệ hoặc đã hết hạn (1 giờ)."), null);
+                String email = requestText(req, "email").trim().toLowerCase(Locale.ROOT);
+                String code = requestText(req, "code").trim();
+                String newPassword = requestText(req, "newPassword");
+                if (!PasswordResetMailer.isEmail(email) || !code.matches("[0-9]{6}")) {
+                    sendJson(out, 400, Map.of("error", "Vui lòng nhập email và mã xác nhận gồm 6 chữ số."), null);
                     return;
                 }
-
-                user.updatePassword(newPassword);
-                userRepository.update(user);
-                sendJson(out, 200, Map.of("success", true, "message", "Đã cập nhật mật khẩu! Đang đưa bạn về trang chủ..."), null);
+                if (newPassword.isBlank() || newPassword.length() < 8 || newPassword.length() > 128) {
+                    sendJson(out, 400, Map.of("error", "Mật khẩu mới phải có từ 8 đến 128 ký tự."), null);
+                    return;
+                }
+                String username = userRepository.resetPasswordWithCode(email, code, newPassword, System.currentTimeMillis());
+                if (username == null) {
+                    sendJson(out, 400, Map.of("error", "Mã không đúng, đã hết hạn hoặc đã nhập sai quá 5 lần. Vui lòng yêu cầu mã mới nếu cần."), null);
+                    return;
+                }
+                sessionManager.removeUserSessions(username);
+                sendJson(out, 200, Map.of("success", true, "message", "Đã đổi mật khẩu thành công! Hãy đăng nhập bằng mật khẩu mới."),
+                        "session_id=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
                 break;
             }
 
@@ -695,6 +832,10 @@ public class HttpAndWebSocketServer {
         }
     }
 
+    private static String requestText(Map<String, Object> req, String key) {
+        return req.get(key) instanceof String ? (String) req.get(key) : "";
+    }
+
     // Hàm tự động ghép URL động dựa theo Header của Client / Ngrok
     private String getDynamicRedirectUri(Map<String, String> headers) {
         String proto = headers.getOrDefault("x-forwarded-proto", "http");
@@ -740,6 +881,8 @@ public class HttpAndWebSocketServer {
             case 400 -> "Bad Request";
             case 404 -> "Not Found";
             case 405 -> "Method Not Allowed";
+            case 429 -> "Too Many Requests";
+            case 503 -> "Service Unavailable";
             default -> "OK";
         };
 

@@ -20,17 +20,47 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('link-back-login').onclick = () => showForm(loginForm);
 
     // 1. Đăng ký
+    const registerButton = document.getElementById('btn-register');
+    const registerEmail = document.getElementById('reg-email');
+    const registerEmailError = document.getElementById('reg-email-error');
+    let registrationBusy = false;
+
+    function validateRegistrationEmail(required = false) {
+        const email = registerEmail.value.trim();
+        const pattern = new RegExp("^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*"
+            + "@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,63}$");
+        const valid = pattern.test(email) && email.length <= 254 && email.indexOf('@') <= 64 && registerEmail.checkValidity();
+        const showError = !valid && (required || email.length > 0);
+        registerEmailError.textContent = showError ? 'Email không hợp lệ. Ví dụ: ten@gmail.com' : '';
+        registerEmail.setAttribute('aria-invalid', String(showError));
+        return valid;
+    }
+    registerEmail.addEventListener('input', () => validateRegistrationEmail());
+    registerEmail.addEventListener('blur', () => validateRegistrationEmail(true));
+
     document.getElementById('btn-register').onclick = async () => {
+        if (registrationBusy) return;
         const user = document.getElementById('reg-username').value.trim();
         const email = document.getElementById('reg-email').value.trim();
         const pass = document.getElementById('reg-password').value;
+
+        if (!validateRegistrationEmail(true)) {
+            registerEmail.focus();
+            return;
+        }
 
         if (!user || !email || !pass) {
             msgBox.style.color = '#ef4444';
             msgBox.innerText = 'Vui lòng nhập đầy đủ thông tin!';
             return;
         }
-
+        if (user.length > 64 || pass.trim().length === 0 || pass.length < 8 || pass.length > 128) {
+            msgBox.style.color = '#ef4444';
+            msgBox.innerText = 'Hãy nhập tên tối đa 64 ký tự và mật khẩu 8–128 ký tự.';
+            return;
+        }
+        registrationBusy = true;
+        registerButton.disabled = true;
         try {
             const res = await fetch('/auth/register', {
                 method: 'POST',
@@ -41,7 +71,10 @@ document.addEventListener("DOMContentLoaded", () => {
             if (data.success) {
                 msgBox.style.color = '#10b981';
                 msgBox.innerText = data.message;
-                setTimeout(() => document.getElementById('link-login').click(), 1200);
+                document.getElementById('reg-password').value = '';
+                if (!data.verificationRequired) {
+                    setTimeout(() => document.getElementById('link-login').click(), 1200);
+                }
             } else {
                 msgBox.style.color = '#ef4444';
                 msgBox.innerText = data.error || 'Đăng ký thất bại!';
@@ -49,6 +82,9 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (e) {
             msgBox.style.color = '#ef4444';
             msgBox.innerText = 'Lỗi kết nối máy chủ Java!';
+        } finally {
+            registrationBusy = false;
+            registerButton.disabled = false;
         }
     };
 
@@ -83,16 +119,19 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     // 3. Quên mật khẩu
+    const forgotButton = document.getElementById('btn-forgot');
     document.getElementById('btn-forgot').onclick = async () => {
-        const email = document.getElementById('forgot-email').value.trim();
-        if (!email) {
+        const emailInput = document.getElementById('forgot-email');
+        const email = emailInput.value.trim();
+        if (!email || !emailInput.checkValidity()) {
             msgBox.style.color = '#ef4444';
-            msgBox.innerText = 'Vui lòng nhập email!';
+            msgBox.innerText = 'Vui lòng nhập email hợp lệ!';
             return;
         }
 
         msgBox.style.color = '#facc15';
-        msgBox.innerText = 'Đang xử lý yêu cầu...';
+        msgBox.innerText = 'Đang gửi mã xác nhận...';
+        forgotButton.disabled = true;
 
         try {
             const res = await fetch('/auth/forgot', {
@@ -104,6 +143,9 @@ document.addEventListener("DOMContentLoaded", () => {
             if (data.success) {
                 msgBox.style.color = '#10b981';
                 msgBox.innerText = data.message;
+                sessionStorage.setItem('password-reset-email', email);
+                sessionStorage.setItem('password-reset-resend-at', String(Date.now() + data.retryAfter * 1000));
+                window.location.href = '/reset.html';
             } else {
                 msgBox.style.color = '#ef4444';
                 msgBox.innerText = data.error || 'Có lỗi xảy ra!';
@@ -111,6 +153,8 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (e) {
             msgBox.style.color = '#ef4444';
             msgBox.innerText = 'Lỗi kết nối máy chủ!';
+        } finally {
+            forgotButton.disabled = false;
         }
     };
 

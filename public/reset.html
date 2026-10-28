@@ -2,56 +2,40 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>Khôi Phục Mật Khẩu - Java Backend</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Đặt Lại Mật Khẩu - Game Portal</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; text-align: center; margin: 0;}
-        .container { background: #1e293b; padding: 30px; border-radius: 10px; width: 400px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        input { width: 85%; padding: 12px; margin: 10px 0; border-radius: 5px; border: none; font-size: 16px; background:#334155; color:white;}
-        input:focus { outline: 2px solid #3b82f6;}
-        button { width: 92%; padding: 14px; margin: 10px 0; background: #10b981; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; transition: 0.3s;}
+        body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; text-align: center; margin: 0; }
+        .container { box-sizing: border-box; background: #1e293b; padding: 30px; border-radius: 10px; width: 420px; max-width: 95%; margin: 20px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        label { display: block; text-align: left; margin-top: 14px; color: #cbd5e1; font-size: 14px; }
+        input { box-sizing: border-box; width: 100%; padding: 12px; margin-top: 6px; border-radius: 5px; border: none; font-size: 16px; background: #334155; color: white; }
+        input:focus { outline: 2px solid #3b82f6; }
+        button { width: 100%; padding: 14px; margin-top: 18px; background: #10b981; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
         button:hover { background: #059669; }
+        button:disabled { opacity: 0.55; cursor: wait; }
+        #btn-resend { background: #334155; margin-top: 10px; }
+        a { color: #60a5fa; text-decoration: none; }
     </style>
 </head>
 <body>
-    <div class="container">
+    <main class="container">
         <h2 style="color:#facc15; margin-top:0;">🔑 Đặt Lại Mật Khẩu</h2>
-        <p id="msg" style="color:#ef4444; font-size:0.9em; min-height: 1.2em;"></p>
-        
-        <input type="password" id="new-password" placeholder="Nhập mật khẩu mới">
-        <button id="btn-reset">Cập Nhật Mật Khẩu</button>
-        <br><br><a href="/" style="color:#60a5fa; text-decoration:none;">⬅ Quay lại Trang Chủ</a>
-    </div>
-    
-    <script>
-        const urlParams = new URLSearchParams(window.location.search);
-        const token = urlParams.get('token');
-
-        document.getElementById('btn-reset').onclick = async () => {
-            const newPassword = document.getElementById('new-password').value;
-            if (!newPassword || !token) {
-                document.getElementById('msg').innerText = "Vui lòng nhập mật khẩu mới (hoặc đường link không hợp lệ).";
-                return;
-            }
-
-            try {
-                const res = await fetch('/auth/reset', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token, newPassword })
-                });
-                const data = await res.json();
-                
-                const msgBox = document.getElementById('msg');
-                msgBox.innerText = data.message || data.error;
-                msgBox.style.color = data.success ? '#10b981' : '#ef4444';
-                
-                if(data.success) {
-                    setTimeout(() => window.location.href = '/', 1800);
-                }
-            } catch (e) {
-                document.getElementById('msg').innerText = "Lỗi kết nối máy chủ!";
-            }
-        };
-    </script>
+        <p style="color:#94a3b8; font-size:14px;">Nhập mã 6 số được gửi tới email đã đăng ký. Mã có hiệu lực 10 phút. Kiểm tra thư rác nếu chưa thấy email.</p>
+        <p id="msg" role="status" aria-live="polite" style="color:#ef4444; font-size:14px; min-height:1.2em;"></p>
+        <form id="reset-form">
+            <label for="reset-email">Email đã đăng ký</label>
+            <input type="email" id="reset-email" autocomplete="email" required maxlength="254">
+            <label for="reset-code">Mã xác nhận</label>
+            <input type="text" id="reset-code" placeholder="000000" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" required>
+            <label for="new-password">Mật khẩu mới (8–128 ký tự)</label>
+            <input type="password" id="new-password" autocomplete="new-password" minlength="8" maxlength="128" required>
+            <label for="confirm-password">Nhập lại mật khẩu mới</label>
+            <input type="password" id="confirm-password" autocomplete="new-password" minlength="8" maxlength="128" required>
+            <button type="submit" id="btn-reset">Cập Nhật Mật Khẩu</button>
+        </form>
+        <button type="button" id="btn-resend">Gửi Lại Mã</button>
+        <p><a href="/">⬅ Quay lại đăng nhập</a></p>
+    </main>
+    <script src="reset.js"></script>
 </body>
 </html>

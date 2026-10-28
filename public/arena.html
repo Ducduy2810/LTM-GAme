@@ -5,9 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Đấu Trường 100 - Gameshow VTV3</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="arena_theme.css">
+    <link rel="stylesheet" href="arena_theme.css?v=presence-1">
+    <link rel="stylesheet" href="room_notices.css">
 </head>
 <body>
+    <div id="room-notices" class="room-notices" role="log" aria-live="polite" aria-relevant="additions"></div>
     <div class="arena-app">
         <!-- 1. HEADER TRUYỀN HÌNH & HUD (Chỉ hiển thị khi đang trong game) -->
         <header class="arena-header" id="arena-header" style="display: none;">
@@ -36,6 +38,7 @@
         <div class="podiums-container" id="podiums-container" style="display:none;">
             <div class="podiums-header">
                 <span>🏟️ Khán Đài Sàn Đấu 100 Người</span>
+                <strong id="arena-main-player-label" class="arena-main-player-label">👑 Người chơi chính: Chưa bắt đầu</strong>
                 <span id="player-room-status">Đang kết nối...</span>
             </div>
             <div class="podiums-grid" id="podiums-grid">
@@ -119,12 +122,22 @@
 
                     <p style="color: #94a3b8; font-size: 14px; margin: 0;">Danh sách đấu thủ đang có mặt trên sàn đấu:</p>
                     <div class="player-chips-list" id="player-list"></div>
+                    <p id="main-selection-summary" style="color:#38bdf8;"></p>
+                    <div id="main-selection-controls" style="display:none; margin:12px 0;">
+                        <label for="waiting-main-mode">Người chơi chính:</label>
+                        <select id="waiting-main-mode" class="form-control">
+                            <option value="MANUAL">Chọn thủ công</option>
+                            <option value="RANDOM">Ngẫu nhiên khi bắt đầu</option>
+                        </select>
+                        <select id="waiting-main-player" class="form-control" aria-label="Chọn người chơi chính"></select>
+                    </div>
 
                     <p id="waiting-msg" style="color: #facc15; font-style: italic; margin-top: 10px; font-weight: 600;">Đang kết nối vào trường quay...</p>
                     
                     <div style="display: flex; gap: 15px; justify-content: center; align-items: center; flex-wrap: wrap; margin-top: 15px;">
                         <button id="btn-toggle-ready" class="btn-ready-toggle">✅ SẴN SÀNG</button>
                         <button id="btn-start" class="btn-gameshow" style="display:none; margin: 0;">👑 Bắt đầu Trận Đấu</button>
+                        <button id="btn-delete-room" class="btn-primary-action" style="display:none; background:#b91c1c;">Xóa phòng</button>
                     </div>
                     
                     <div style="margin-top: 25px;">
@@ -149,6 +162,8 @@
 
                     <!-- Vai trò trong trận -->
                     <div id="role-badge-game" style="font-size:12px; font-weight:700; padding: 4px 12px; border-radius:20px; background: rgba(0,0,0,0.4);"></div>
+                    <span id="answer-phase-label" style="color:#facc15; font-size:13px;"></span>
+                    <button id="btn-delete-room-game" class="sound-toggle-btn" style="display:none; background:#b91c1c;">Xóa phòng</button>
                     
                     <!-- YÊU CẦU 5: Nút tạm dừng/tiếp tục (chỉ cho host/admin) -->
                     <div id="pause-controls" style="display:none; margin-left: auto;">
@@ -329,6 +344,24 @@
                     </div>
                 </div>
 
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="create-opponent-time">Thời gian người chơi phụ (giây):</label>
+                        <input id="create-opponent-time" class="form-control" type="number" min="1" max="120" value="5" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="create-main-time">Thời gian người chơi chính (giây):</label>
+                        <input id="create-main-time" class="form-control" type="number" min="1" max="120" value="15" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="create-main-mode">Cách chọn người chơi chính:</label>
+                    <select id="create-main-mode" class="form-control">
+                        <option value="MANUAL">Chọn thủ công (mặc định chủ phòng; đổi trong phòng chờ)</option>
+                        <option value="RANDOM">Ngẫu nhiên khi bắt đầu trận</option>
+                    </select>
+                </div>
+                <p style="color:#94a3b8; font-size:13px;">Người chơi phụ trả lời trước. Sau đó mới tính giờ và mở quyền trợ giúp cho người chơi chính.</p>
                 <div class="modal-actions">
                     <button type="button" class="btn-primary-action" id="btn-cancel-modal" style="background:#334155; border-color:#475569;">Hủy</button>
                     <button type="submit" class="btn-gold-action" id="btn-submit-create-room">🚀 Tạo Phòng &amp; Vào Ngay</button>
@@ -350,6 +383,7 @@
     </div>
 
     <script src="arena_sound.js"></script>
-    <script src="arena.js"></script>
+    <script src="room_notices.js"></script>
+    <script src="arena.js?v=presence-1"></script>
 </body>
 </html>
