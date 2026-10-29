@@ -1,0 +1,26 @@
+===============================================================
+   ? HE THONG GAME PORTAL - JAVA PURE NETWORK PROGRAMMING   
+   - Game 1: Dau Truong 100 (luot phu -> luot chinh, timer rieng) 
+   - Game 2: Chiec Non Ky Dieu (4 Nguoi choi theo luot, 10s)   
+   - Game 3: Dau Truong Sinh Tu (HP giam dan, Thuong moc loai) 
+   - Xac thuc & Bao mat: Session Cookie + SHA-256 Hash + Salt  
+   - Giao thuc mang: TCP Socket + WebSocket RFC 6455 + HTTP    
+===============================================================
+? B?ng SQLite ?ã s?n sàng (users, leaderboard)
+Database backup: data/backups/before-admin-1793299529989.db
+? SQLite ?ã k?t n?i: C:\Users\admin\Documents\ki1nam4\LTM-thayQuyen\LTM-GAme-xuanvu2\data\game.db
+? ?ã t?i leaderboard: 2 ng??i ch?i t? SQLite.
+? ?ã t?i leaderboard: 2 ng??i ch?i t? SQLite.
+? Truy cap tren may nay : http://localhost:3000
+? Cho ban be vao mang LAN, thu cac IP sau:
+   ? http://192.168.209.1:3000
+   ? http://192.168.81.1:3000
+   ? http://192.168.0.1:3000
+   ? http://10.1.1.95:3000
+===============================================================
+??  NEU BAN BE KHONG VAO DUOC:
+   1. Chay file 'open_firewall.bat' (Run as Administrator)
+   2. Hoac mo Windows Defender Firewall -> Allow port 3000
+   3. Kiem tra ca hai may cung mang WiFi/LAN
+===============================================================
+? [Java Server] ?ang l?ng nghe k?t n?i t?i c?ng 3000 (0.0.0.0)

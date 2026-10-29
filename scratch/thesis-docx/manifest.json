@@ -1,0 +1,18 @@
+{
+  "headings": 44,
+  "tables": 10,
+  "figures": 1,
+  "sections": 4,
+  "format": {
+    "size": "A4",
+    "font": "Times New Roman",
+    "points": 13,
+    "lineSpacing": 1.5,
+    "marginsCm": {
+      "top": 3,
+      "bottom": 3,
+      "left": 3.5,
+      "right": 2
+    }
+  }
+}
