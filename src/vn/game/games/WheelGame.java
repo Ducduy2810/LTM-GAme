@@ -34,7 +34,7 @@ public class WheelGame implements AutoCloseable {
         WheelRoom defaultRoom = new WheelRoom(
                 DEFAULT_ROOM_CODE,
                 "Sàn Đấu Chiếc Nón VTV3",
-                "DuyNguyen",
+                "",
                 "ALL",
                 10,
                 userRepository,
@@ -45,7 +45,6 @@ public class WheelGame implements AutoCloseable {
 
     public boolean isAdmin(String username) {
         if (username == null) return false;
-        if ("admin".equalsIgnoreCase(username) || "DuyNguyen".equalsIgnoreCase(username)) return true;
         return userRepository != null && userRepository.isAdmin(username);
     }
 
@@ -98,6 +97,9 @@ public class WheelGame implements AutoCloseable {
     // 2. TẠO PHÒNG MỚI (CREATE ROOM)
     // ==========================================
     public synchronized void handleCreateRoom(WebSocketClient client, Map<String, Object> req) {
+        String denied=vn.game.db.AdminStore.newMatchDenied("WHEEL");
+        if(denied!=null){sendError(client,denied);return;}
+        req=vn.game.db.AdminStore.applyDefaults("WHEEL",req);
         String username = client.getUsername();
         if (username == null) return;
 
@@ -235,35 +237,102 @@ public class WheelGame implements AutoCloseable {
     // ==========================================
     // 6. SUPER ADMIN ĐÓNG PHÒNG
     // ==========================================
-    public synchronized void handleAdminCloseRoom(WebSocketClient client, String roomCode) {
-        String username = client.getUsername();
-        if (!isAdmin(username)) {
-            sendError(client, "Bạn không có quyền quản trị viên tối cao (Super Admin)!");
-            return;
+    public synchronized void handleAdminCloseRoom(WebSocketClient client, String code) {
+        if(code==null){sendError(client,"Thiếu mã phòng.");return;}
+        code=code.trim().toUpperCase(Locale.ROOT);
+        WheelRoom room=rooms.get(code);
+        if(room==null){sendError(client,"Phòng không còn tồn tại.");return;}
+        if(isAdmin(client.getUsername())) {
+            adminCancelRoom(code,"Quản trị viên hủy phòng");return;
         }
-
-        if (DEFAULT_ROOM_CODE.equalsIgnoreCase(roomCode)) {
-            sendError(client, "Không thể đóng phòng mặc định của hệ thống!");
-            return;
-        }
-
-        WheelRoom room = rooms.remove(roomCode);
-        if (room != null) {
-            for (Map.Entry<WebSocketClient, WheelRoom> entry : new HashMap<>(clientRoomMap).entrySet()) {
-                if (entry.getValue().equals(room)) {
-                    clientRoomMap.remove(entry.getKey());
-                    sendError(entry.getKey(), "Phòng đã bị đóng bởi Super Admin [" + username + "]!");
-                    handleLeaveRoom(entry.getKey());
-                }
+        // Starting a match and checking its idle state use the same room monitor.
+        synchronized(room) {
+            if(clientRoomMap.get(client)!=room||!room.isHost(client.getUsername())) {
+                sendError(client,"Chỉ chủ phòng được xóa phòng chờ của mình.");return;
             }
-            broadcastRoomListToLobby();
+            if(DEFAULT_ROOM_CODE.equalsIgnoreCase(code)) {sendError(client,"Không được xóa phòng mặc định.");return;}
+            if(!Set.of("WAITING","END").contains(room.getGameState())) {
+                sendError(client,"Trận đấu đang diễn ra. Chủ phòng chỉ được xóa khi ở sảnh chờ.");return;
+            }
+            try{vn.game.db.AdminStore.audit(client.getUsername(),"HOST_ROOM_DELETE","WHEEL:"+code,Map.of("state",room.getGameState()));}
+            catch(java.sql.SQLException e){sendError(client,"Không ghi được nhật ký. Vui lòng thử lại.");return;}
+            adminCancelRoom(code,"Chủ phòng đã xóa phòng chờ");
         }
+    }
+
+    public synchronized void adminCancelRoom(String code,String reason) {
+        if(code==null)throw new IllegalArgumentException("Thiếu mã phòng.");
+        code=code.trim().toUpperCase(Locale.ROOT);
+        WheelRoom room=rooms.remove(code);
+        if(room==null)throw new IllegalArgumentException("Phòng không còn tồn tại.");
+        String notification=reason+(Set.of("WAITING","END").contains(room.getGameState())?".":". Trận đấu đã hủy.");
+        room.close();
+        for (Map.Entry<WebSocketClient,WheelRoom> entry:new ArrayList<>(clientRoomMap.entrySet())) {
+            if(entry.getValue()==room) {
+                WebSocketClient member=entry.getKey();clientRoomMap.remove(member);
+                member.send(JsonUtil.toJson(Map.of("type","left_wheel_room","message",notification)));
+                registerLobbyClient(member);
+            }
+        }
+        if(DEFAULT_ROOM_CODE.equalsIgnoreCase(code))initDefaultRoom();
+        broadcastRoomListToLobby();
+    }
+
+    public synchronized List<Map<String,Object>> adminRooms() {
+        List<Map<String,Object>> result=new ArrayList<>();
+        for(WheelRoom room:rooms.values()) {
+            Map<String,Object> row=new LinkedHashMap<>(room.toSummaryMap());
+            row.put("game","WHEEL");
+            List<Map<String,Object>> members=new ArrayList<>();
+            for(Map.Entry<WebSocketClient,WheelRoom> entry:clientRoomMap.entrySet())if(entry.getValue()==room)
+                members.add(Map.of("username",entry.getKey().getUsername(),"host",room.isHost(entry.getKey().getUsername())));
+            row.put("members",members);result.add(row);
+        }return result;
+    }
+
+    public synchronized void adminNotice(String code,String message) {
+        WheelRoom room=rooms.get(code.toUpperCase(Locale.ROOT));
+        if(room==null)throw new IllegalArgumentException("Phòng không còn tồn tại.");
+        for(Map.Entry<WebSocketClient,WheelRoom> entry:clientRoomMap.entrySet())if(entry.getValue()==room)
+            entry.getKey().send(JsonUtil.toJson(Map.of("type","server_notice","message",message)));
+    }
+
+    public synchronized void adminKick(String code,String target,String actor,String reason) {
+        WheelRoom room=rooms.get(code.toUpperCase(Locale.ROOT));
+        if(room==null)throw new IllegalArgumentException("Phòng không còn tồn tại.");
+        kickMember(room,target,actor,true,reason);
+    }
+
+    public synchronized void handleHostKick(WebSocketClient actor,String target) {
+        WheelRoom room=clientRoomMap.get(actor);
+        if(room==null||!room.isHost(actor.getUsername())) {sendError(actor,"Chỉ chủ phòng được kick thành viên.");return;}
+        try {kickMember(room,target,actor.getUsername(),false,"Chủ phòng đã mời bạn rời phòng.");}
+        catch(IllegalArgumentException e){sendError(actor,e.getMessage());}
+    }
+
+    private void kickMember(WheelRoom room,String target,String actor,boolean admin,String reason) {
+        if(target==null||target.isBlank())throw new IllegalArgumentException("Hãy chọn người chơi cần kick.");
+        if(!admin&&(actor.equalsIgnoreCase(target)||isAdmin(target)))throw new IllegalArgumentException("Không thể kick bản thân hoặc quản trị viên.");
+        WebSocketClient member=null;
+        for(Map.Entry<WebSocketClient,WheelRoom> entry:clientRoomMap.entrySet())
+            if(entry.getValue()==room&&target.equalsIgnoreCase(entry.getKey().getUsername())){member=entry.getKey();break;}
+        if(member==null)throw new IllegalArgumentException("Người chơi không ở trong phòng này.");
+        try {vn.game.db.AdminStore.audit(actor,admin?"ADMIN_KICK":"HOST_KICK","WHEEL:"+room.getRoomCode(),Map.of("target",target,"reason",reason));}
+        catch(java.sql.SQLException e){throw new IllegalStateException("Không ghi được nhật ký kick.",e);}
+        room.banPlayer(target);
+        handleLeaveRoom(member);
+        member.send(JsonUtil.toJson(Map.of("type","room_kicked","game","WHEEL","roomCode",room.getRoomCode(),"message",reason)));
+        for(Map.Entry<WebSocketClient,WheelRoom> entry:clientRoomMap.entrySet())if(entry.getValue()==room)
+            entry.getKey().send(JsonUtil.toJson(Map.of("type","server_notice","message",target+" đã bị mời rời phòng.")));
+        broadcastRoomListToLobby();
     }
 
     // ==========================================
     // 7. BẮT ĐẦU TRẬN ĐẤU & THAO TÁC GAME
     // ==========================================
     public void handleStartGame(WebSocketClient client) {
+        String denied=vn.game.db.AdminStore.newMatchDenied("WHEEL");
+        if(denied!=null){sendError(client,denied);return;}
         WheelRoom room = clientRoomMap.get(client);
         if (room != null) {
             room.handleStartGame(client);

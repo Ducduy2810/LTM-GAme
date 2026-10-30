@@ -2,10 +2,16 @@ package vn.game.server;
 
 import vn.game.config.Env;
 import vn.game.db.UserRepository;
+import vn.game.db.AdminStore;
+import vn.game.db.PlayerAccountStore;
+import vn.game.db.RaceStore;
+import vn.game.games.KnowledgeRaceGame;
 import vn.game.games.ArenaGame;
 import vn.game.games.SurvivalGame;
 import vn.game.games.WheelGame;
 import vn.game.model.User;
+import vn.game.model.MatchService;
+import vn.game.model.PracticeService;
 import vn.game.util.JsonUtil;
 import vn.game.util.PasswordResetCode;
 import vn.game.util.PasswordResetMailer;
@@ -40,7 +46,15 @@ public class HttpAndWebSocketServer {
     private final ArenaGame arenaGame;
     private final WheelGame wheelGame;
     private final SurvivalGame survivalGame;
+    private final KnowledgeRaceGame raceGame=new KnowledgeRaceGame();
     private final PasswordResetMailer resetMailer = new PasswordResetMailer();
+    private final PracticeService practice = new PracticeService();
+    private final AdminController adminController;
+    private final ClientEvents clientEvents=new ClientEvents();
+    private final GoogleOAuthService googleOAuth;
+    private record Feedback(Map<String,Object> value,long expires){}
+    private final Map<String,Feedback> feedback=new ConcurrentHashMap<>();
+    private final Map<WebSocketClient,String> socketSessions=new ConcurrentHashMap<>();
     private final ExecutorService threadPool = Executors.newCachedThreadPool();
     private volatile boolean running = false;
     private ServerSocket serverSocket;
@@ -52,6 +66,11 @@ public class HttpAndWebSocketServer {
     public HttpAndWebSocketServer(int port, File publicDir, UserRepository userRepository,
                                   SessionManager sessionManager, ArenaGame arenaGame,
                                   WheelGame wheelGame, SurvivalGame survivalGame) {
+        this(port,publicDir,userRepository,sessionManager,arenaGame,wheelGame,survivalGame,new GoogleOAuthService());
+    }
+
+    public HttpAndWebSocketServer(int port,File publicDir,UserRepository userRepository,SessionManager sessionManager,
+                                  ArenaGame arenaGame,WheelGame wheelGame,SurvivalGame survivalGame,GoogleOAuthService googleOAuth) {
         this.port = port;
         this.publicDir = publicDir;
         this.userRepository = userRepository;
@@ -59,12 +78,40 @@ public class HttpAndWebSocketServer {
         this.arenaGame = arenaGame;
         this.wheelGame = wheelGame;
         this.survivalGame = survivalGame;
+        this.googleOAuth=googleOAuth;
+        this.adminController=new AdminController(userRepository,new AdminController.Runtime(){
+            public Map<String,Object> rooms(){return Map.of("items",java.util.stream.Stream.of(arenaGame.adminRooms(),wheelGame.adminRooms(),survivalGame.adminRooms()).flatMap(List::stream).toList());}
+            public int connections(){return (int)connections.stream().filter(c->!c.isClosed()).count();}
+            public void disconnect(String username,String reason){
+                endPlayerSessions(username,"Phiên đã kết thúc bởi quản trị viên. Lý do: "+reason,true);
+            }
+            public void announce(Map<String,Object> value){clientEvents.broadcast(value);}
+            public Map<String,Object> integrations(){return Map.of("google",googleOAuth.diagnostics(getPort()),"smtp",vn.game.util.SmtpTransport.diagnostics());}
+            public Map<String,Object> race()throws java.sql.SQLException{return raceGame.adminView();}
+            public void raceAction(String actor,Map<String,Object> input)throws java.sql.SQLException{raceGame.adminAction(actor,input);}
+            public void roomAction(String actor,String game,String room,String action,String target,String reason){
+                switch(game){
+                    case "ARENA":if(action.equals("cancel"))arenaGame.adminCancelRoom(room,reason);else if(action.equals("kick"))arenaGame.adminKick(room,target,actor,reason);else arenaGame.adminNotice(room,reason);break;
+                    case "WHEEL":if(action.equals("cancel"))wheelGame.adminCancelRoom(room,reason);else if(action.equals("kick"))wheelGame.adminKick(room,target,actor,reason);else wheelGame.adminNotice(room,reason);break;
+                    case "SURVIVAL":if(action.equals("cancel"))survivalGame.adminCancelRoom(room,reason);else if(action.equals("kick"))survivalGame.adminKick(room,target,actor,reason);else survivalGame.adminNotice(room,reason);break;
+                    default:throw new IllegalArgumentException("Trò chơi không hợp lệ.");
+                }
+            }
+        });
     }
 
     public void start() throws IOException {
+        start(() -> {});
+    }
+
+    public void start(Runnable onBound) throws IOException {
         // Bind rõ ràng 0.0.0.0 để chấp nhận kết nối từ mạng LAN
         serverSocket = new ServerSocket(port, 50, java.net.InetAddress.getByName("0.0.0.0"));
+        try { onBound.run(); }
+        catch (RuntimeException e) { serverSocket.close(); throw e; }
         running = true;
+        clientEvents.start();
+        raceGame.start();
         heartbeat.scheduleAtFixedRate(this::checkConnections, 1, 1, TimeUnit.SECONDS);
         System.out.println("🚀 [Java Server] Đang lắng nghe kết nối tại cổng " + port + " (0.0.0.0)");
 
@@ -83,6 +130,8 @@ public class HttpAndWebSocketServer {
     public void stop() {
         running = false;
         heartbeat.shutdownNow();
+        clientEvents.close();
+        raceGame.close();
         connections.forEach(WebSocketClient::close);
         connections.clear();
         try {
@@ -206,6 +255,7 @@ public class HttpAndWebSocketServer {
             out.flush();
 
             String username = sessionManager.getUsername(sessionId);
+            if(username!=null&&(AdminStore.isBlocked(username)||userRepository.isAdmin(username)))username=null;
             client = new WebSocketClient(socket, in, out, username);
 
             if (username == null) {
@@ -220,6 +270,7 @@ public class HttpAndWebSocketServer {
 
             // Vòng lặp lắng nghe các Frame từ WebSocket Client
             connections.add(client);
+            socketSessions.put(client,sessionId);
             DataInputStream dataIn = new DataInputStream(in);
             while (!client.isClosed()) {
                 int b0 = dataIn.read();
@@ -280,6 +331,8 @@ public class HttpAndWebSocketServer {
         } finally {
             if (client != null) {
                 connections.remove(client);
+                socketSessions.remove(client);
+                raceGame.disconnect(client);
                 arenaGame.handleDisconnect(client);
                 wheelGame.handleDisconnect(client);
                 survivalGame.handleDisconnect(client);
@@ -290,11 +343,16 @@ public class HttpAndWebSocketServer {
 
     private void routeWebSocketMessage(WebSocketClient client, String text) {
         try {
+            if(!Objects.equals(client.getUsername(),sessionManager.getUsername(socketSessions.get(client)))||AdminStore.isBlocked(client.getUsername())||userRepository.isAdmin(client.getUsername())){client.close();return;}
             Map<String, Object> req = JsonUtil.parseObject(text);
             String type = (String) req.get("type");
             if (type == null) return;
+            if(type.startsWith("race_")){raceGame.handle(client,req);return;}
 
         switch (type) {
+            case "kick_arena_player":arenaGame.handleHostKick(client,requestText(req,"targetUsername"));break;
+            case "kick_wheel_player":wheelGame.handleHostKick(client,requestText(req,"targetUsername"));break;
+            case "kick_survival_player":survivalGame.handleHostKick(client,requestText(req,"targetUsername"));break;
             case "get_rooms":
                 arenaGame.registerLobbyClient(client);
                 break;
@@ -372,6 +430,7 @@ public class HttpAndWebSocketServer {
             case "toggle_wheel_ready":
                 wheelGame.handleToggleReady(client);
                 break;
+            case "close_wheel_room":
             case "admin_close_wheel_room": {
                 String roomCode = (String) req.get("roomCode");
                 wheelGame.handleAdminCloseRoom(client, roomCode);
@@ -461,7 +520,7 @@ public class HttpAndWebSocketServer {
             try { contentLength = Integer.parseInt(clStr); } catch (NumberFormatException ignored) {}
         }
 
-        if (contentLength < 0 || contentLength > 65536) {
+        if (contentLength < 0 || contentLength > (path.startsWith("/api/admin/") ? 1500000 : 65536)) {
             sendJson(out, 400, Map.of("error", "Nội dung yêu cầu quá lớn hoặc không hợp lệ."), null);
             socket.close();
             return;
@@ -470,6 +529,36 @@ public class HttpAndWebSocketServer {
         byte[] bodyBytes = in.readNBytes(contentLength);
         if (bodyBytes.length != contentLength) throw new EOFException("Thiếu nội dung HTTP.");
         String body = new String(bodyBytes, StandardCharsets.UTF_8);
+
+        if("GET".equals(method)&&"/api/events".equals(path)){
+            String name=sessionManager.getUsername(sessionId);
+            if(name!=null&&(AdminStore.isBlocked(name)||userRepository.isAdmin(name)))name=null;
+            clientEvents.stream(socket,out,name,id->sessionManager.getUsername(id)!=null,sessionId);return;
+        }
+
+        if(path.startsWith("/api/admin/")){
+            AdminController.Reply reply=adminController.handle(method,path,query,body,headers,socket.getInetAddress().getHostAddress());
+            if(reply.file()!=null){
+                String response="HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nCache-Control: no-store\r\nContent-Disposition: attachment; filename=\""+reply.filename()+"\"\r\nContent-Length: "+reply.file().length+"\r\nConnection: close\r\n\r\n";
+                out.write(response.getBytes(StandardCharsets.UTF_8));out.write(reply.file());out.flush();
+            }else sendJson(out,reply.status(),reply.data(),reply.cookie());
+            socket.close();return;
+        }
+        if("GET".equals(method)&&"/api/catalog".equals(path)){
+            try{sendJson(out,200,Map.of("topics",AdminStore.topics().stream().filter(t->((Number)t.get("active")).intValue()==1).toList(),"settings",AdminStore.settings()),null);}
+            catch(Exception e){sendJson(out,503,Map.of("error","Chưa tải được danh mục."),null);}
+            socket.close();return;
+        }
+        if("/admin".equals(path)||"/admin/".equals(path)||"/admin/login".equals(path))path="/admin.html";
+        if(path.startsWith("/api/race/")){
+            handleRaceApi(out,method,path,query,sessionId);socket.close();return;
+        }
+
+        if (path.startsWith("/api/portal/") || path.startsWith("/api/practice/")) {
+            handlePortalApi(out, method, path, body, sessionId);
+            socket.close();
+            return;
+        }
 
         // --- LEADERBOARD API ---
         if ("GET".equals(method) && "/api/leaderboard".equals(path)) {
@@ -480,18 +569,9 @@ public class HttpAndWebSocketServer {
             return;
         }
 
-        if ("POST".equals(method) && "/api/leaderboard/clear".equals(path)) {
-            String username = sessionManager.getUsername(sessionId);
-            if (username == null || !userRepository.isAdmin(username)) {
-                sendJson(out, 403, Map.of("error", "Chỉ Super Admin mới có quyền xóa bảng xếp hạng!"), null);
-                socket.close();
-                return;
-            }
-            vn.game.model.Leaderboard.clear();
-            arenaGame.broadcastLeaderboard();
-            sendJson(out, 200, Map.of("success", true, "message", "Đã xóa toàn bộ bảng xếp hạng thành công!"), null);
-            socket.close();
-            return;
+        if ("/api/leaderboard/clear".equals(path)) {
+            sendJson(out,403,Map.of("error","Legacy leaderboard is read-only."),null);
+            socket.close();return;
         }
 
         // --- CÁC ROUTE REST API ---
@@ -502,12 +582,50 @@ public class HttpAndWebSocketServer {
         }
 
         // --- PHỤC VỤ FILE TĨNH (HTML, CSS, JS) ---
-        if ("GET".equals(method)) {
-            serveStaticFile(out, path);
+        if ("GET".equals(method) || "HEAD".equals(method)) {
+            serveStaticFile(out, path, method, headers);
         } else {
             sendResponse(out, 405, "text/plain", "Method Not Allowed".getBytes(StandardCharsets.UTF_8), null);
         }
         socket.close();
+    }
+
+    private void handlePortalApi(OutputStream out, String method, String path, String body, String sessionId) throws IOException {
+        String username = sessionManager.getUsername(sessionId);
+        if (username == null) { sendJson(out,401,Map.of("error","Vui lòng đăng nhập."),null); return; }
+        if(AdminStore.isBlocked(username)||userRepository.isAdmin(username)){sendJson(out,403,Map.of("error","Tài khoản không được truy cập cổng người chơi."),null);return;}
+        try {
+            switch (path) {
+                case "/api/portal/overview":
+                    if (!"GET".equals(method)) { sendJson(out,405,Map.of("error","Method Not Allowed"),null); return; }
+                    sendJson(out,200,Map.of("history",MatchService.history(username),"rankEnabled",true,
+                            "rooms",Map.of("arena",arenaGame.getRoomsSummaryList(),"wheel",wheelGame.getRoomsSummaryList(),
+                            "survival",survivalGame.getRoomsSummaryList())),null);
+                    return;
+                case "/api/portal/admin":
+                    sendJson(out,403,Map.of("error","Sử dụng trang /admin và phiên quản trị riêng."),null);
+                    return;
+                case "/api/practice/next": {
+                    if (!"POST".equals(method)) { sendJson(out,405,Map.of("error","Method Not Allowed"),null); return; }
+                    Map<String,Object> req=JsonUtil.parseObject(body);
+                    sendJson(out,200,practice.next(username,requestText(req,"topic"),requestText(req,"difficulty")),null);
+                    return;
+                }
+                case "/api/practice/answer": {
+                    if (!"POST".equals(method)) { sendJson(out,405,Map.of("error","Method Not Allowed"),null); return; }
+                    Map<String,Object> req=JsonUtil.parseObject(body);
+                    Object value=req.get("answer");
+                    if (!(value instanceof Number n) || n.doubleValue()!=n.intValue()) throw new IllegalArgumentException("Đáp án không hợp lệ.");
+                    sendJson(out,200,practice.answer(username,requestText(req,"questionId"),((Number)value).intValue()),null);
+                    return;
+                }
+                default: sendJson(out,404,Map.of("error","Không tìm thấy chức năng."),null);
+            }
+        } catch (IllegalArgumentException e) { sendJson(out,400,Map.of("error",e.getMessage()),null);
+        } catch (Exception e) {
+            System.err.println("Portal API: " + e.getMessage());
+            sendJson(out,503,Map.of("error","Chưa tải được dữ liệu. Vui lòng thử lại."),null);
+        }
     }
 
     private void handleAuthApi(OutputStream out, String method, String path, String query, String body, String sessionId, Map<String, String> headers) throws IOException {
@@ -520,6 +638,29 @@ public class HttpAndWebSocketServer {
         }
 
         switch (path) {
+            case "/auth/profile": {
+                String username=sessionManager.getUsername(sessionId);
+                if(!"GET".equals(method)){sendJson(out,405,Map.of("error","Dùng GET để xem hồ sơ."),null);return;}
+                if(username==null||userRepository.isAdmin(username)||AdminStore.isBlocked(username)){sendJson(out,401,Map.of("error","Vui lòng đăng nhập lại."),null);return;}
+                try{sendJson(out,200,PlayerAccountStore.profile(username),null);}catch(java.sql.SQLException e){sendJson(out,503,Map.of("error","Chưa tải được hồ sơ."),null);}return;
+            }
+            case "/auth/change-password":
+            case "/auth/notice/ack": {
+                String username=sessionManager.getUsername(sessionId);
+                if(!"POST".equals(method)){sendJson(out,405,Map.of("error","Dùng POST để cập nhật tài khoản."),null);return;}
+                if(username==null||userRepository.isAdmin(username)||AdminStore.isBlocked(username)){sendJson(out,401,Map.of("error","Vui lòng đăng nhập lại."),null);return;}
+                if(!sessionManager.validCsrf(sessionId,headers.get("x-csrf-token"))||"cross-site".equals(headers.get("sec-fetch-site"))){sendJson(out,403,Map.of("error","Phiên xác nhận không hợp lệ. Tải lại trang."),null);return;}
+                try{
+                    if(path.equals("/auth/notice/ack")){
+                        Object noticeId=req.get("noticeId");if(!(noticeId instanceof Number n)||n.doubleValue()!=n.intValue()||n.intValue()<1)throw new IllegalArgumentException("Thông báo không hợp lệ.");
+                        PlayerAccountStore.acknowledge(username,((Number)noticeId).intValue());sendJson(out,200,Map.of("success",true),null);
+                    }else{
+                        PlayerAccountStore.changePassword(username,requestText(req,"currentPassword"),requestText(req,"newPassword"));
+                        endPlayerSessions(username,"Mật khẩu đã được đổi. Vui lòng đăng nhập lại.",false);
+                        sendJson(out,200,Map.of("success",true,"message","Đã đổi mật khẩu. Vui lòng đăng nhập lại."),"session_id=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
+                    }
+                }catch(IllegalArgumentException e){sendJson(out,400,Map.of("error",e.getMessage()),null);}catch(java.sql.SQLException e){sendJson(out,503,Map.of("error","Không cập nhật được tài khoản. Vui lòng thử lại."),null);}return;
+            }
             case "/auth/register": {
                 String username = requestText(req, "username").trim();
                 String email = requestText(req, "email").trim().toLowerCase(Locale.ROOT);
@@ -568,7 +709,7 @@ public class HttpAndWebSocketServer {
                 } catch (IOException e) {
                     userRepository.cancelEmailVerification(email, hash);
                     System.err.println("Không gửi được email xác nhận đăng ký: " + e.getMessage());
-                    sendJson(out, 503, Map.of("error", "Không gửi được email xác nhận. Hãy kiểm tra lại email hoặc thử lại sau."), null);
+                    sendMailFailure(out,e);
                     return;
                 }
                 System.out.println("[Registration] SMTP đã tiếp nhận email chứa liên kết xác nhận.");
@@ -597,8 +738,8 @@ public class HttpAndWebSocketServer {
             }
 
             case "/auth/login": {
-                String username = (String) req.get("username");
-                String password = (String) req.get("password");
+                String username = requestText(req,"username").trim();
+                String password = requestText(req,"password");
 
                 User user = userRepository.findByUsername(username);
                 if (user == null && userRepository.hasPendingRegistration(username)) {
@@ -610,8 +751,13 @@ public class HttpAndWebSocketServer {
                     return;
                 }
 
+                if(user.isAdmin()) {sendJson(out,403,Map.of("error","Tài khoản quản trị đăng nhập tại /admin."),null);return;}
+                if(AdminStore.isBlocked(user.getUsername())){
+                    try{Map<String,Object> restriction=PlayerAccountStore.restriction(user.getUsername());sendJson(out,403,Map.of("error",PlayerAccountStore.restrictionMessage(restriction),"accountNotice",restriction),null);}catch(java.sql.SQLException e){sendJson(out,403,Map.of("error","Tài khoản đang bị khóa."),null);}return;
+                }
+
                 String newSessionId = sessionManager.createSession(user.getUsername());
-                String cookieHeader = "session_id=" + newSessionId + "; Path=/; HttpOnly; SameSite=Lax";
+                String cookieHeader = playerCookie(newSessionId);
                 Map<String, Object> resp = new HashMap<>();
                 resp.put("success", true);
                 resp.put("user", Map.of("username", user.getUsername()));
@@ -632,6 +778,10 @@ public class HttpAndWebSocketServer {
             case "/auth/me": {
                 String username = sessionManager.getUsername(sessionId);
                 Map<String, Object> resp = new HashMap<>();
+                if(username!=null&&(AdminStore.isBlocked(username)||userRepository.isAdmin(username))){
+                    if(!userRepository.isAdmin(username))try{resp.put("accountNotice",PlayerAccountStore.restriction(username));}catch(java.sql.SQLException ignored){}
+                    sessionManager.removeSession(sessionId);username=null;
+                }
                 if (username != null) {
                     resp.put("loggedIn", true);
                     User u = userRepository.findByUsername(username);
@@ -640,16 +790,24 @@ public class HttpAndWebSocketServer {
                     userMap.put("username", username);
                     userMap.put("isAdmin", isAdmin);
                     userMap.put("email", u != null && u.getEmail() != null ? u.getEmail() : "");
+                    userMap.put("csrfToken",sessionManager.getCsrfToken(sessionId));
+                    try{Map<String,Object> profile=PlayerAccountStore.profile(username);userMap.put("rank",profile.get("rank"));userMap.put("googleLinked",profile.get("googleLinked"));userMap.put("hasLocalPassword",profile.get("hasLocalPassword"));resp.put("accountNotice",profile.get("accountNotice"));}
+                    catch(java.sql.SQLException e){sendJson(out,503,Map.of("error","Chưa tải được thông tin tài khoản."),null);return;}
                     resp.put("user", userMap);
                 } else {
                     resp.put("loggedIn", false);
                 }
-                sendJson(out, 200, resp, null);
+                String feedbackId=AdminSessions.cookieValue(headers.get("cookie"),"auth_feedback");
+                Feedback flash=feedbackId==null?null:feedback.remove(feedbackId);
+                if(flash!=null&&flash.expires()>System.currentTimeMillis())resp.put("accountNotice",flash.value());
+                sendJson(out, 200, resp, feedbackId==null?null:"auth_feedback=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
                 break;
             }
 
             case "/auth/forgot": {
                 String email = requestText(req, "email").trim().toLowerCase(Locale.ROOT);
+                User account=userRepository.findByEmail(email);
+                if(account!=null&&account.isAdmin()){sendJson(out,403,Map.of("error","Tài khoản quản trị khôi phục mật khẩu tại máy server."),null);return;}
                 if (!PasswordResetMailer.isEmail(email)) {
                     sendJson(out, 400, Map.of("error", "Vui lòng nhập email hợp lệ."), null);
                     return;
@@ -676,8 +834,8 @@ public class HttpAndWebSocketServer {
                     resetMailer.sendCode(user.getEmail(), code);
                 } catch (IOException e) {
                     userRepository.cancelPasswordReset(user.getId(), hash);
-                    System.err.println("Không gửi được email khôi phục: " + e.getMessage());
-                    sendJson(out, 503, Map.of("error", "Chưa gửi được email. Vui lòng thử lại hoặc liên hệ quản trị viên kiểm tra cấu hình gửi mail."), null);
+                    System.err.println("Không gửi được email khôi phục: " + e.getClass().getSimpleName());
+                    sendMailFailure(out,e);
                     return;
                 }
                 System.out.println("[Password reset] SMTP đã tiếp nhận email gửi mã xác nhận.");
@@ -688,6 +846,8 @@ public class HttpAndWebSocketServer {
             }
 
             case "/auth/reset": {
+                User adminAccount=userRepository.findByEmail(requestText(req,"email").trim());
+                if(adminAccount!=null&&adminAccount.isAdmin()){sendJson(out,403,Map.of("error","Tài khoản quản trị dùng công cụ khôi phục cục bộ."),null);return;}
                 String email = requestText(req, "email").trim().toLowerCase(Locale.ROOT);
                 String code = requestText(req, "code").trim();
                 String newPassword = requestText(req, "newPassword");
@@ -704,126 +864,44 @@ public class HttpAndWebSocketServer {
                     sendJson(out, 400, Map.of("error", "Mã không đúng, đã hết hạn hoặc đã nhập sai quá 5 lần. Vui lòng yêu cầu mã mới nếu cần."), null);
                     return;
                 }
-                sessionManager.removeUserSessions(username);
+                endPlayerSessions(username,"Mật khẩu đã được đặt lại. Vui lòng đăng nhập bằng mật khẩu mới.",false);
                 sendJson(out, 200, Map.of("success", true, "message", "Đã đổi mật khẩu thành công! Hãy đăng nhập bằng mật khẩu mới."),
                         "session_id=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
                 break;
             }
 
-            // case "/auth/google": {
-            //     String clientId = Env.get("GOOGLE_CLIENT_ID");
-            //     if (clientId.isEmpty()) {
-            //         sendResponse(out, 400, "text/html; charset=utf-8",
-            //                 "<h3>Lỗi: Chưa cấu hình GOOGLE_CLIENT_ID trong file .env!</h3><br><a href='/'>Quay lại trang chủ</a>".getBytes(StandardCharsets.UTF_8), null);
-            //         return;
-            //     }
-            //     String redirectUri = URLEncoder.encode("http://localhost:" + port + "/auth/google/callback", StandardCharsets.UTF_8);
-            //     String scope = URLEncoder.encode("openid email profile", StandardCharsets.UTF_8);
-            //     String googleAuthUrl = "https://accounts.google.com/o/oauth2/v2/auth" +
-            //             "?client_id=" + clientId +
-            //             "&redirect_uri=" + redirectUri +
-            //             "&response_type=code" +
-            //             "&scope=" + scope +
-            //             "&prompt=select_account";
-            //     sendRedirect(out, googleAuthUrl, null);
-            //     break;
-            // }
-
-
             case "/auth/google": {
-                String clientId = Env.get("GOOGLE_CLIENT_ID");
-                if (clientId.isEmpty()) {
-                    sendResponse(out, 400, "text/html; charset=utf-8",
-                            "<h3>Lỗi: Chưa cấu hình GOOGLE_CLIENT_ID trong file .env!</h3><br><a href='/'>Quay lại trang chủ</a>".getBytes(StandardCharsets.UTF_8), null);
-                    return;
-                }
-                
-                // ĐÃ SỬA: Lấy URI động
-                String dynamicUri = getDynamicRedirectUri(headers);
-                String redirectUri = URLEncoder.encode(dynamicUri, StandardCharsets.UTF_8);
-                
-                String scope = URLEncoder.encode("openid email profile", StandardCharsets.UTF_8);
-                String googleAuthUrl = "https://accounts.google.com/o/oauth2/v2/auth" +
-                        "?client_id=" + clientId +
-                        "&redirect_uri=" + redirectUri +
-                        "&response_type=code" +
-                        "&scope=" + scope +
-                        "&prompt=select_account";
-                sendRedirect(out, googleAuthUrl, null);
-                break;
-            }
-
-            case "/auth/google/callback": {
-                String code = null;
-                if (query != null && !query.isEmpty()) {
-                    for (String param : query.split("&")) {
-                        String[] kv = param.split("=", 2);
-                        if ("code".equals(kv[0]) && kv.length > 1) {
-                            code = URLDecoder.decode(kv[1], StandardCharsets.UTF_8);
-                        }
-                    }
-                }
-
-                if (code == null) {
-                    sendRedirect(out, "/?error=google_auth_failed", null);
-                    return;
-                }
-
-                String clientId = Env.get("GOOGLE_CLIENT_ID");
-                String clientSecret = Env.get("GOOGLE_CLIENT_SECRET");
-                // String redirectUri = "http://localhost:" + port + "/auth/google/callback";
-                // ĐÃ SỬA: Lấy URI động
-                String redirectUri = getDynamicRedirectUri(headers);
-
+                if(!"GET".equals(method)){sendJson(out,405,Map.of("error","Dùng GET để đăng nhập Google."),null);return;}
                 try {
-                    // 1. Gửi request POST đổi authorization code lấy access_token
-                    HttpClient httpClient = HttpClient.newHttpClient();
-                    String tokenBody = "code=" + URLEncoder.encode(code, StandardCharsets.UTF_8)
-                            + "&client_id=" + URLEncoder.encode(clientId, StandardCharsets.UTF_8)
-                            + "&client_secret=" + URLEncoder.encode(clientSecret, StandardCharsets.UTF_8)
-                            + "&redirect_uri=" + URLEncoder.encode(redirectUri, StandardCharsets.UTF_8)
-                            + "&grant_type=authorization_code";
-
-                    HttpRequest tokenReq = HttpRequest.newBuilder()
-                            .uri(URI.create("https://oauth2.googleapis.com/token"))
-                            .header("Content-Type", "application/x-www-form-urlencoded")
-                            .POST(HttpRequest.BodyPublishers.ofString(tokenBody))
-                            .build();
-
-                    HttpResponse<String> tokenResp = httpClient.send(tokenReq, HttpResponse.BodyHandlers.ofString());
-                    Map<String, Object> tokenJson = JsonUtil.parseObject(tokenResp.body());
-                    String accessToken = (String) tokenJson.get("access_token");
-
-                    if (accessToken == null) {
-                        System.err.println("Lỗi đổi token Google: " + tokenResp.body());
-                        sendRedirect(out, "/?error=token_error", null);
-                        return;
+                    Env.load();String redirect=googleOAuth.redirectUri(getPort());URI uri=URI.create(redirect);
+                    String authority=uri.getRawAuthority();
+                    if(!authority.equalsIgnoreCase(headers.getOrDefault("host",""))&&!authority.equalsIgnoreCase(headers.getOrDefault("x-forwarded-host",""))){
+                        sendRedirect(out,uri.getScheme()+"://"+authority+"/auth/google",null);return;
                     }
-
-                    // 2. Lấy thông tin user từ Google
-                    HttpRequest userReq = HttpRequest.newBuilder()
-                            .uri(URI.create("https://www.googleapis.com/oauth2/v3/userinfo"))
-                            .header("Authorization", "Bearer " + accessToken)
-                            .GET()
-                            .build();
-
-                    HttpResponse<String> userResp = httpClient.send(userReq, HttpResponse.BodyHandlers.ofString());
-                    Map<String, Object> userJson = JsonUtil.parseObject(userResp.body());
-                    String googleId = (String) userJson.get("sub");
-                    String email = (String) userJson.get("email");
-                    String name = (String) userJson.get("name");
-
-                    // 3. Đăng ký hoặc lấy user trong UserRepository
-                    User user = userRepository.registerOrGetGoogleUser(googleId, email, name);
-                    String newSessionId = sessionManager.createSession(user.getUsername());
-                    String cookieHeader = "session_id=" + newSessionId + "; Path=/; HttpOnly; SameSite=Lax";
-
-                    sendRedirect(out, "/", cookieHeader);
-                } catch (Exception e) {
-                    System.err.println("Lỗi xử lý Google Callback: " + e.getMessage());
-                    sendRedirect(out, "/?error=oauth_exception", null);
-                }
-                break;
+                    GoogleOAuthService.Start auth=googleOAuth.begin(getPort());
+                    String stateCookie="oauth_state="+auth.state()+"; Path=/auth/google; HttpOnly; SameSite=Lax; Max-Age=600"+(redirect.startsWith("https://")?"; Secure":"");
+                    sendRedirect(out,auth.location(),stateCookie);
+                }catch(GoogleOAuthService.Failure e){sendRedirect(out,"/?error="+e.code,null);}
+                return;
+            }
+            case "/auth/google/callback": {
+                if(!"GET".equals(method)){sendJson(out,405,Map.of("error","Dùng GET cho Google callback."),null);return;}
+                Map<String,String> values=new HashMap<>();
+                try {for(String part:query.split("&")){String[] kv=part.split("=",2);values.put(URLDecoder.decode(kv[0],StandardCharsets.UTF_8),kv.length>1?URLDecoder.decode(kv[1],StandardCharsets.UTF_8):"");}}
+                catch(IllegalArgumentException e){sendRedirect(out,"/?error=google_state_invalid",null);return;}
+                try {
+                    GoogleOAuthService.Identity identity=googleOAuth.finish(values.get("code"),values.get("state"),AdminSessions.cookieValue(headers.get("cookie"),"oauth_state"));
+                    User user=userRepository.registerOrGetGoogleUser(identity.id(),identity.email(),identity.name());
+                    if(user.isAdmin()){sendRedirect(out,"/?error=google_account_restricted",null);return;}
+                    if(AdminStore.isBlocked(user.getUsername())){
+                        Map<String,Object> notice=PlayerAccountStore.restriction(user.getUsername());
+                        sendRedirect(out,"/",feedbackCookie(notice));return;
+                    }
+                    String id=sessionManager.createSession(user.getUsername());sendRedirect(out,"/",playerCookie(id));
+                }catch(GoogleOAuthService.Failure e){sendRedirect(out,"/?error="+e.code,"oauth_state=; Path=/auth/google; HttpOnly; SameSite=Lax; Max-Age=0");}
+                catch(IllegalArgumentException e){sendRedirect(out,"/?error=google_account_restricted",null);}
+                catch(Exception e){System.err.println("Google account completion failed: "+e.getClass().getSimpleName());sendRedirect(out,"/?error=google_account_failed",null);}
+                return;
             }
 
             default:
@@ -832,21 +910,46 @@ public class HttpAndWebSocketServer {
         }
     }
 
+    private String playerCookie(String id){return "session_id="+id+"; Path=/; HttpOnly; SameSite=Lax"+((Env.get("APP_BASE_URL").startsWith("https://")||Env.get("GOOGLE_REDIRECT_URI").startsWith("https://"))?"; Secure":"");}
+    private String feedbackCookie(Map<String,Object> value){
+        long now=System.currentTimeMillis();feedback.entrySet().removeIf(e->e.getValue().expires()<now);
+        String id=UUID.randomUUID().toString();feedback.put(id,new Feedback(value,now+300000));return "auth_feedback="+id+"; Path=/; HttpOnly; SameSite=Lax; Max-Age=300"+(Env.get("APP_BASE_URL").startsWith("https://")?"; Secure":"");
+    }
+    private void endPlayerSessions(String username,String message,boolean moderation){
+        Map<String,Object> notice=Map.of();if(moderation)try{notice=PlayerAccountStore.latestNotice(username);}catch(java.sql.SQLException ignored){}
+        Map<String,Object> event=Map.of("username",username,"message",message,"accountNotice",notice);
+        clientEvents.notifyUser(username,event);sessionManager.removeUserSessions(username);
+        if(moderation)raceGame.moderate(username,message);
+        for(WebSocketClient c:connections)if(username.equalsIgnoreCase(c.getUsername())){
+            Map<String,Object> packet=new HashMap<>(event);packet.put("type","auth_error");c.send(JsonUtil.toJson(packet));c.close();
+        }
+    }
+    private void sendMailFailure(OutputStream out,IOException error)throws IOException{
+        if(error instanceof vn.game.util.SmtpTransport.Failure f)sendJson(out,503,Map.of("error",f.getMessage(),"code",f.code),null);
+        else sendJson(out,503,Map.of("error","Không gửi được email. Vui lòng thử lại hoặc liên hệ quản trị viên.","code","SMTP_SEND"),null);
+    }
+    private void handleRaceApi(OutputStream out,String method,String path,String query,String sessionId)throws IOException{
+        String username=sessionManager.getUsername(sessionId);
+        if(username==null||AdminStore.isBlocked(username)||userRepository.isAdmin(username)){sendJson(out,401,Map.of("error","Vui lòng đăng nhập người chơi."),null);return;}
+        if(!method.equals("GET")){sendJson(out,405,Map.of("error","Dùng GET để xem dữ liệu."),null);return;}
+        try{
+            Map<String,Object> result;
+            switch(path){
+                case "/api/race/overview":result=Map.of("account",RaceStore.account(username),"settings",RaceStore.settings(),"rooms",raceGame.lobby(),"leaderboard",RaceStore.leaderboard());break;
+                case "/api/race/history":result=Map.of("items",RaceStore.history(username,false));break;
+                case "/api/race/review":{
+                    String match="";for(String part:query.split("&")){String[] pair=part.split("=",2);if(pair[0].equals("id")&&pair.length==2)match=URLDecoder.decode(pair[1],StandardCharsets.UTF_8);}
+                    result=RaceStore.review(username,match,false);break;
+                }
+                default:sendJson(out,404,Map.of("error","Không tìm thấy dữ liệu Đường đua."),null);return;
+            }sendJson(out,200,result,null);
+        }catch(IllegalArgumentException e){sendJson(out,400,Map.of("error",e.getMessage()),null);}catch(java.sql.SQLException e){sendJson(out,503,Map.of("error","Chưa tải được dữ liệu Đường đua."),null);}
+    }
     private static String requestText(Map<String, Object> req, String key) {
         return req.get(key) instanceof String ? (String) req.get(key) : "";
     }
 
-    // Hàm tự động ghép URL động dựa theo Header của Client / Ngrok
-    private String getDynamicRedirectUri(Map<String, String> headers) {
-        String proto = headers.getOrDefault("x-forwarded-proto", "http");
-        String host = headers.getOrDefault("x-forwarded-host", headers.get("host"));
-        if (host == null || host.isEmpty()) {
-            host = "localhost:" + port;
-        }
-        return proto + "://" + host + "/auth/google/callback";
-    }
-
-    private void serveStaticFile(OutputStream out, String path) throws IOException {
+    private void serveStaticFile(OutputStream out, String path, String method, Map<String,String> headers) throws IOException {
         if ("/".equals(path)) path = "/index.html";
         File file = new File(publicDir, path);
 
@@ -856,18 +959,52 @@ public class HttpAndWebSocketServer {
         }
 
         String mime = getMimeType(file.getName());
+        if (mime.startsWith("video/") || "HEAD".equals(method)) {
+            serveMediaFile(out, file, mime, method, headers.get("range"));
+            return;
+        }
         byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
         sendResponse(out, 200, mime, bytes, null);
     }
 
     private String getMimeType(String name) {
+        name = name.toLowerCase(java.util.Locale.ROOT);
         if (name.endsWith(".html")) return "text/html; charset=utf-8";
         if (name.endsWith(".css")) return "text/css; charset=utf-8";
         if (name.endsWith(".js")) return "application/javascript; charset=utf-8";
         if (name.endsWith(".png")) return "image/png";
         if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
         if (name.endsWith(".svg")) return "image/svg+xml";
+        if (name.endsWith(".mp4") || name.endsWith(".m4v")) return "video/mp4";
+        if (name.endsWith(".webm")) return "video/webm";
         return "application/octet-stream";
+    }
+
+    /** Stream a bounded byte range so browsers can load and loop videos without buffering whole files. */
+    private void serveMediaFile(OutputStream out, File file, String mime, String method, String range) throws IOException {
+        long size=file.length(),start=0,end=size-1;boolean partial=false;
+        if ("GET".equals(method) && range!=null) {
+            try {
+                if(!range.matches("bytes=\\d*-\\d*"))throw new IllegalArgumentException();
+                String[] bounds=range.substring(6).split("-",-1);
+                if(bounds[0].isEmpty()){
+                    long suffix=Long.parseLong(bounds[1]);if(suffix<=0)throw new IllegalArgumentException();start=Math.max(0,size-suffix);
+                } else {
+                    start=Long.parseLong(bounds[0]);if(!bounds[1].isEmpty())end=Math.min(end,Long.parseLong(bounds[1]));
+                }
+                if(size==0||start>=size||start>end)throw new IllegalArgumentException();partial=true;
+            } catch(IllegalArgumentException e) {
+                out.write(("HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */"+size+"\r\nAccept-Ranges: bytes\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));out.flush();return;
+            }
+        }
+        long length=size==0?0:end-start+1;
+        String response="HTTP/1.1 "+(partial?"206 Partial Content":"200 OK")+"\r\nContent-Type: "+mime+"\r\nAccept-Ranges: bytes\r\nContent-Length: "+length+"\r\n"+(partial?"Content-Range: bytes "+start+"-"+end+"/"+size+"\r\n":"")+"Cache-Control: no-cache\r\nConnection: close\r\n\r\n";
+        out.write(response.getBytes(StandardCharsets.UTF_8));
+        if(!"HEAD".equals(method))try(var input=new java.io.RandomAccessFile(file,"r")){
+            input.seek(start);byte[] buffer=new byte[64*1024];long remaining=length;
+            while(remaining>0){int read=input.read(buffer,0,(int)Math.min(buffer.length,remaining));if(read<0)break;out.write(buffer,0,read);remaining-=read;}
+        }
+        out.flush();
     }
 
     private void sendJson(OutputStream out, int status, Map<String, Object> map, String setCookie) throws IOException {
@@ -879,8 +1016,11 @@ public class HttpAndWebSocketServer {
         String statusText = switch (status) {
             case 200 -> "OK";
             case 400 -> "Bad Request";
+            case 401 -> "Unauthorized";
+            case 403 -> "Forbidden";
             case 404 -> "Not Found";
             case 405 -> "Method Not Allowed";
+            case 415 -> "Unsupported Media Type";
             case 429 -> "Too Many Requests";
             case 503 -> "Service Unavailable";
             default -> "OK";
@@ -889,6 +1029,7 @@ public class HttpAndWebSocketServer {
         StringBuilder sb = new StringBuilder();
         sb.append("HTTP/1.1 ").append(status).append(" ").append(statusText).append("\r\n");
         sb.append("Content-Type: ").append(mime).append("\r\n");
+        if (mime.startsWith("application/json")) sb.append("Cache-Control: no-store\r\n");
         sb.append("Content-Length: ").append(body.length).append("\r\n");
         if (setCookie != null) {
             sb.append("Set-Cookie: ").append(setCookie).append("\r\n");

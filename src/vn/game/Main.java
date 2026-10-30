@@ -50,6 +50,8 @@ public class Main {
         }));
 
         UserRepository userRepository = new UserRepository(dbManager);
+        try {vn.game.db.AdminAccount.bootstrap(userRepository);}
+        catch(Exception e){throw new IllegalStateException("Cannot initialize administrator: "+e.getMessage(),e);}
 
         // ── Migrate dữ liệu từ JSON (chạy 1 lần duy nhất) ────────────────────
         migrateUsersFromJson(userRepository);
@@ -100,7 +102,11 @@ public class Main {
             System.out.println("   3. Kiem tra ca hai may cung mang WiFi/LAN");
             System.out.println("===============================================================");
 
-            server.start();
+            server.start(() -> {
+                // Do not mark live matches interrupted if another server owns port 3000.
+                try { vn.game.model.MatchService.recoverInterrupted();vn.game.db.RaceStore.recoverInterrupted(); }
+                catch (java.sql.SQLException e) { throw new IllegalStateException("Cannot recover match history",e); }
+            });
         } catch (Exception e) {
             System.err.println("❌ Lỗi khởi động máy chủ: " + e.getMessage());
             e.printStackTrace();

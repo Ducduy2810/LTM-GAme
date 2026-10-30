@@ -5,6 +5,10 @@ import java.util.*;
 public class QuestionBank {
 
     private static final List<Question> ALL_QUESTIONS = new ArrayList<>();
+    private static volatile List<Question> databaseQuestions;
+    public static List<Question> seedQuestions() { return List.copyOf(ALL_QUESTIONS); }
+    public static void useDatabaseQuestions(List<Question> questions) { databaseQuestions=List.copyOf(questions); }
+    private static List<Question> available() { List<Question> current=databaseQuestions; return current==null?ALL_QUESTIONS:current; }
 
     static {
         // ========================================================
@@ -139,12 +143,13 @@ public class QuestionBank {
         
         // YÊU CẦU 1: Hỗ trợ câu hỏi tăng dần độ khó
         boolean mixDifficulty = "ALL".equals(d) || "MIX".equals(d) || "RANDOM".equals(d);
+        if(!mixTopic && available().stream().noneMatch(q->q.getTopic().equals(t)))return List.of();
 
         List<Question> filtered = new ArrayList<>();
 
         if (mixTopic && mixDifficulty) {
             // Xáo trộn cả chủ đề và độ khó → sắp xếp theo độ khó tăng dần
-            filtered.addAll(ALL_QUESTIONS);
+            filtered.addAll(available());
             // Sắp xếp theo độ khó: EASY → MEDIUM → HARD
             filtered.sort((a, b) -> {
                 int orderA = getDifficultyOrder(a.getDifficulty());
@@ -153,14 +158,14 @@ public class QuestionBank {
             });
         } else if (mixTopic) {
             // Xáo trộn chủ đề, giữ độ khó cố định
-            for (Question q : ALL_QUESTIONS) {
+            for (Question q : available()) {
                 if (q.getDifficulty().equals(d)) {
                     filtered.add(q);
                 }
             }
         } else if (mixDifficulty) {
             // Giữ chủ đề, tăng dần độ khó
-            for (Question q : ALL_QUESTIONS) {
+            for (Question q : available()) {
                 if (q.getTopic().equals(t)) {
                     filtered.add(q);
                 }
@@ -172,7 +177,7 @@ public class QuestionBank {
             });
         } else {
             // Lọc chính xác theo chủ đề và độ khó
-            for (Question q : ALL_QUESTIONS) {
+            for (Question q : available()) {
                 boolean topicMatch = q.getTopic().equals(t);
                 boolean diffMatch = q.getDifficulty().equals(d);
                 if (topicMatch && diffMatch) {
@@ -183,7 +188,7 @@ public class QuestionBank {
 
         // Nếu số câu chưa đủ, lấy thêm từ kho chung (giữ nguyên logic cũ)
         if (filtered.size() < count) {
-            for (Question q : ALL_QUESTIONS) {
+            for (Question q : available()) {
                 if (!filtered.contains(q)) {
                     filtered.add(q);
                     if (filtered.size() >= count) break;
@@ -200,7 +205,7 @@ public class QuestionBank {
         List<Question> result = new ArrayList<>();
         for (int i = 0; i < resultCount; i++) {
             Question src = filtered.get(i);
-            result.add(new Question(i + 1, src.getText(), src.getOptions(), src.getCorrect(), src.getTopic(), src.getDifficulty()));
+            result.add(new Question(i + 1, src.getText(), src.getOptions(), src.getCorrect(), src.getTopic(), src.getDifficulty(), src.getExplanation()));
         }
         return result;
     }
@@ -209,7 +214,7 @@ public class QuestionBank {
     public static List<Question> getArenaQuestions(String topic, String difficulty, int count) {
         String t = topic == null ? "ALL" : topic.trim().toUpperCase(Locale.ROOT);
         String d = difficulty == null ? "MIX" : difficulty.trim().toUpperCase(Locale.ROOT);
-        if (!Set.of("ALL", "MIX", "RANDOM", "NETWORKING", "SCIENCE", "HISTORY").contains(t)
+        if (!(Set.of("ALL", "MIX", "RANDOM").contains(t) || available().stream().anyMatch(q -> q.getTopic().equals(t)))
                 || !Set.of("ALL", "MIX", "RANDOM", "EASY", "MEDIUM", "HARD").contains(d) || count <= 0) {
             throw new IllegalArgumentException("Chủ đề, độ khó hoặc số câu hỏi không hợp lệ.");
         }
@@ -218,7 +223,7 @@ public class QuestionBank {
         List<List<Question>> buckets = new ArrayList<>();
         for (String level : List.of("EASY", "MEDIUM", "HARD")) {
             List<Question> bucket = new ArrayList<>();
-            for (Question q : ALL_QUESTIONS) {
+            for (Question q : available()) {
                 if ((allTopics || t.equals(q.getTopic())) && level.equals(q.getDifficulty())
                         && (progressive || d.equals(level))) bucket.add(q);
             }
@@ -242,7 +247,7 @@ public class QuestionBank {
         List<Question> result = new ArrayList<>();
         for (int i = 0; i < 3; i++) {
             for (Question q : buckets.get(i).subList(0, sizes[i])) {
-                result.add(new Question(result.size() + 1, q.getText(), q.getOptions(), q.getCorrect(), q.getTopic(), q.getDifficulty()));
+                result.add(new Question(result.size() + 1, q.getText(), q.getOptions(), q.getCorrect(), q.getTopic(), q.getDifficulty(), q.getExplanation()));
             }
         }
         return result;

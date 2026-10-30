@@ -9,3 +9,30 @@ out/
 # Dữ liệu người dùng cục bộ
 data/
 *.db
+*.db-wal
+*.db-shm
+
+# Isolated portal QA data and browser profiles
+scratch/portal-test-*/
+scratch/portal-regressions-*/
+scratch/portal-browser-*/
+scratch/portal-desktop.png
+scratch/portal-mobile.png
+scratch/admin-test-*/
+scratch/admin-browser-*/
+scratch/admin-desktop.png
+scratch/admin-mobile.png
+scratch/server-*.stdout.log
+scratch/server-*.stderr.log
+scratch/account-test-*/
+scratch/account-browser-*/
+scratch/account-*.png
+scratch/password-reset-test-*/
+scratch/mail-diagnostic/
+scratch/account-live-tools/
+scratch/race-test-*/
+scratch/race-browser-*/
+scratch/race-*.png
+scratch/admin-ranking-test-*/
+scratch/admin-ranking-*.png
+scratch/world-*.png

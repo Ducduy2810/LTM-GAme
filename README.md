@@ -1,6 +1,34 @@
 # 🎮 GAME PORTAL - BÀI TẬP LỚN LẬP TRÌNH MẠNG (JAVA BACKEND THUẦN TÚY)
 
-Dự án triển khai một Cổng Trò Chơi Mạng đa nền tảng với **Backend viết 100% bằng Java thuần túy (Pure Java SE 17)**, không phụ thuộc vào bất kỳ framework nặng nề nào (không cần Maven, Spring Boot, hay thư viện bên ngoài), sử dụng giao tiếp **TCP ServerSocket**, chuẩn **WebSocket RFC 6455**, và **HTTP REST**.
+## Tài khoản và các địa chỉ trên máy hiện tại
+
+- Trang người chơi: **http://localhost:3000/**
+- Trang quản trị: **http://localhost:3000/admin**
+- Tài khoản admin hiện tại: **`admin_portal`**
+- Mật khẩu admin hiện tại: **`admin1234567`**
+- Chạy `run.bat` từ thư mục dự án để biên dịch và mở server. Giữ cửa sổ server hoạt động khi chơi hoặc xác nhận email.
+- Trong admin: **Thông báo toàn server** phát/tắt dòng chữ chạy trên tất cả client; **Người chơi** khóa, mở khóa hoặc ngắt phiên có lý do; **Google & Email** xem URI Google cần đăng ký và kiểm tra TLS/xác thực SMTP.
+- Người chơi mở **Hồ sơ của tôi** để xem rank hiện tại, rank cao nhất và đổi mật khẩu. Đổi mật khẩu sẽ kết thúc các phiên cũ. **Đường đua Kiến thức** đã mở đấu rank; cả ba game cũ vẫn không tăng rank.
+
+Thông tin đăng nhập trên thuộc database tại máy này. Đồng đội pull source code cần giữ database đang dùng trên server hoặc chạy `setup-admin.bat` để tạo admin riêng; pull code không sao chép tài khoản trong database. Sau khi đổi mật khẩu trong admin, dùng mật khẩu mới.
+
+Hướng dẫn Google, email, thông báo và kiểm thử: [Cập nhật tài khoản và thông báo](report/tai-khoan-va-thong-bao.md).
+
+> **Quản trị riêng:** mở `http://localhost:3000/admin`; chạy `setup-admin.bat` để tạo tài khoản quản trị. Quản lý người chơi, phòng, câu hỏi/ô chữ, CSV, nhật ký, bảo trì và sao lưu. Chủ phòng được bắt đầu trận, kick và xóa phòng riêng khi đang chờ/đã kết thúc; không được xóa lúc thi đấu hoặc tạm dừng. Xem [hướng dẫn quản trị và triển khai cùng đồng đội](report/quan-tri-server.md).
+
+> **Đường đua Kiến thức:** mở [đấu rank](http://localhost:3000/race.html?mode=ranked), [đấu thường](http://localhost:3000/race.html?mode=casual), [luyện máy](http://localhost:3000/race.html?mode=bot) hoặc [thử thách ngày](http://localhost:3000/race.html?mode=daily). Rank mặc định **15 giây/câu**, điền bot sau **60 giây**; năm bậc từ Đồng đến Kim Cương, mỗi bậc ba cấp. Admin quản lý tại **Đường đua & Rank**. Xem [luật, database, vận hành và kiểm thử](report/duong-dua-xep-hang.md).
+
+> **Ba game ban đầu:** trang chủ bản đồ học tập, phòng luyện câu hỏi, lối vào chơi máy/PvP và lịch sử chung vẫn được giữ nguyên. Ba game này chỉ phục vụ giải trí/đấu thường, không cộng rank. Xem [hướng dẫn bản cập nhật trước](report/huong-dan-ban-cap-nhat.md).
+
+**Trang chủ bản đồ:** Sau khi đăng nhập, bấm trực tiếp vào sáu đảo trên nền trời: **Thử thách ngày**, **Đấu xếp hạng**, **Bảng xếp hạng**, **Đấu thường**, **Phòng học**, **Đấu với máy**. Hồ sơ và rank ở góc trên phải; hồ sơ, lịch sử và **Góc giải trí · 3 game** nằm ở thanh dưới. Trên điện thoại có thể vuốt ngang bản đồ hoặc dùng sáu biểu tượng chuyển nhanh. Xem [hướng dẫn giao diện bản đồ](report/giao-dien-ban-do.md).
+
+**Phòng học & Bảng danh vọng:** Hai mục mở toàn màn hình theo tông kem–nâu–vàng. Phòng học có thiết lập chủ đề/độ khó, chấm đáp án và thống kê trong phiên. Bảng danh vọng có bục Top 3, danh sách Top 100 và làm mới mỗi 30 giây. Trang đăng nhập người chơi và admin dùng chung video nền do chủ dự án cung cấp, phát lặp không tiếng, có nút dừng/phát. Xem [hướng dẫn giao diện ôn luyện, xếp hạng và video](report/phong-hoc-danh-vong.md).
+
+**Điều hướng chế độ:** Thử thách hằng ngày nằm ở đảo riêng, tách khỏi đấu rank. Đường đua Kiến thức có thẻ riêng ở **Đấu thường PvP** và **Chơi với máy**. Đấu thường có **Tìm trận đấu thường** để ghép tự động (mặc định điền bot sau 60 giây, không tính RP), cùng phần tạo/tham gia phòng riêng; luyện máy có cấu hình bot riêng. Trang đấu rank chỉ có giao diện ghép rank, không còn tab gộp các chế độ.
+
+**Quản trị:** **Bảng xếp hạng server** xem toàn bộ người đã có trận rank, tìm kiếm và phân trang ngoài Top 100. **Cấu hình & bảo trì** chứa bật/tắt, thời gian, điều kiện thưởng và cấp lại lượt **Thử thách hằng ngày**; các thiết lập này được tách khỏi mục rank.
+
+Dự án triển khai cổng trò chơi học tập với **backend Java SE 17**, không dùng Spring Boot hoặc Maven. Giao tiếp bằng **TCP ServerSocket**, **WebSocket RFC 6455** và **HTTP**; dữ liệu dùng SQLite JDBC cùng các JAR trong `lib/`.
 
 ---
 
@@ -12,7 +40,7 @@ Dự án triển khai một Cổng Trò Chơi Mạng đa nền tảng với **Ba
 - **Quyền trợ giúp:** Chỉ người chơi chính dùng trong lượt chính, trước khi chốt đáp án. Mỗi loại dùng một lần mỗi trận; yêu cầu sai thời điểm hoặc không có người phù hợp để hỏi sẽ không tiêu tốn quyền.
 - **Chấm điểm & Loại trừ (Elimination):** Người chơi chính trả lời đúng thì loại các đối thủ trả lời sai/không trả lời. Người chính trả lời sai hoặc hết giờ thì thua; loại hết đối thủ thì thắng.
 - **Độ khó và chủ đề:** Dễ/Trung bình/Khó chỉ lấy câu hỏi đúng cấu hình. Tăng dần phân bổ Dễ → Trung bình → Khó, xáo trộn trong mỗi nhóm. Thiếu câu sẽ dùng số lượng khả dụng và thông báo rõ, không lấy bù sai độ khó/chủ đề. Bot trả lời theo độ khó của từng câu.
-- **Xóa phòng:** Chủ phòng hoặc admin có thể xác nhận xóa phòng đang chờ hoặc đang chơi. Hệ thống hủy timer, đưa thành viên về sảnh và không ghi thắng/thua cho trận bị hủy. Phòng mặc định `DT100` được bảo vệ.
+- **Quản lý phòng:** Chủ phòng được kick thành viên và xóa phòng riêng khi đang chờ/đã kết thúc; không được xóa trong trận. Admin tại `/admin` có thể hủy trận đang chạy. Phòng mặc định `DT100` chỉ do admin quản lý, được tạo lại rỗng sau khi admin hủy.
 - **Đồng bộ trạng thái:** Tự động phát kết quả vòng thi và số lượng người còn sống sót cho toàn bộ client.
 
 ### Trò chơi 2: Chiếc Nón Kỳ Diệu (Wheel of Fortune)
@@ -22,10 +50,10 @@ Dự án triển khai một Cổng Trò Chơi Mạng đa nền tảng với **Ba
 - **Khả năng chịu lỗi (Fault Tolerance):** Nếu một người chơi rớt mạng/disconnect giữa chừng lúc đang đến lượt mình, máy chủ tự động thu hồi timer và chuyển lượt mượt mà, không làm crash server.
 
 ### Trò chơi 3: Đấu Trường Sinh Tử (Survival Arena)
-- **Tạm dừng / Tiếp tục:** Chủ phòng hoặc admin được dừng khi chuẩn bị câu hỏi, đang trả lời hoặc đang xem kết quả. Thời gian còn lại được giữ nguyên; server không nhận đáp án trong lúc tạm dừng.
+- **Điều khiển trận:** Chủ phòng bắt đầu trận và kick thành viên; không có quyền tạm dừng/tiếp tục. Admin có thể hủy trận có lý do tại trang quản trị.
 - **Công bố sớm:** Khi mọi người chơi còn sống đang tham gia vòng đã chốt đáp án, server công bố ngay. Người đã bị loại/đang xem không làm vòng đấu phải chờ. Nếu còn người chưa trả lời, vòng đấu chờ hết thời gian; mỗi người chỉ chốt được một đáp án hợp lệ.
 - **Thông báo kết quả cá nhân:** Hiện cả chữ cái và nội dung đáp án đúng, lựa chọn của người chơi, kết luận ĐÚNG/SAI hoặc không trả lời và HP thực tế bị trừ. Người đã bị loại ở vòng trước được ghi nhận là đang xem, không bị báo sai hay trừ HP thêm. Điểm thưởng mốc sinh tồn được trình bày riêng.
-- **Xóa phòng:** Chủ phòng hoặc admin có thể xóa phòng ở sảnh hoặc bằng nút trên thanh điều khiển trong phòng. Hệ thống hủy các timer, thông báo hủy trận và đưa thành viên về sảnh. Phòng mặc định `DTST` được bảo vệ.
+- **Hủy phòng:** Chủ phòng được xóa phòng riêng lúc đang chờ/đã kết thúc; chỉ admin được hủy khi đang thi đấu. Hệ thống thông báo và đưa thành viên về sảnh. Phòng mặc định `DTST` chỉ do admin quản lý, được tạo lại rỗng sau khi hủy.
 
 Kiểm thử Sinh tử: biên dịch project rồi chạy `scratch/test_survival_rules.ps1` và `node scratch/test_survival_ui.mjs`. Kiểm tra giao diện nạp đúng `arena_sound.js` như trang thực tế, thử các vòng đúng → sai → đúng và mô phỏng thiết bị âm thanh lỗi để bảo đảm thông báo luôn cập nhật đúng câu, đáp án vẫn được gửi. Các bài kiểm thử dùng dữ liệu riêng, không gửi email hoặc thay đổi tài khoản thật.
 
@@ -77,7 +105,7 @@ java -cp "bin;lib/*" vn.game.Main
    👉 `http://192.168.1.203:3000` (hoặc IP hiển thị trên màn hình Console)
 3. Đăng ký tài khoản, đăng nhập và chọn một trong hai game để bắt đầu đấu trường!
 
-Trong Đấu trường 100, chọn **Tạo phòng mới** để cài thời gian lượt phụ/lượt chính và chế độ chọn người chính. Trong phòng chờ, chủ phòng có thể chọn một người đang có mặt hoặc chuyển sang chế độ ngẫu nhiên. Người được chọn rời phòng trước khi bắt đầu thì cần chọn lại. Nút **Xóa phòng** xuất hiện cho chủ phòng/admin trong phòng chờ, khi đang chơi và trên danh sách phòng. Khi chơi, các nút trả lời/trợ giúp được mở đúng lượt; tạm dừng giữ nguyên thời gian còn lại của lượt hiện tại.
+Trong Đấu trường 100, chọn **Tạo phòng mới** để cài thời gian lượt phụ/lượt chính và chế độ chọn người chính. Trong phòng chờ, chủ phòng có thể chọn người đang có mặt hoặc chế độ ngẫu nhiên. Người được chọn rời phòng trước khi bắt đầu thì cần chọn lại. Mở **Quản lý thành viên · Chủ phòng** để kick hoặc **Xóa phòng chờ**; người bị kick về sảnh và không thể vào lại phòng hiện tại. Các nút trả lời/trợ giúp mở đúng lượt. Chỉ admin tại `/admin` được hủy phòng khi trận đang diễn ra.
 
 Trong trận Đấu trường 100, bục của người chơi chính có viền vàng, biểu tượng 👑 và nhãn **CHÍNH** trên màn hình của mọi người. Tên đầy đủ luôn hiện phía trên khán đài; tên và vai trò được đồng bộ lại khi tải lại/kết nối thay thế. Bục của bản thân nếu chỉ là người chơi phụ dùng màu xanh để phân biệt với người chơi chính.
 
@@ -99,7 +127,7 @@ SMTP_PORT=465
 APP_BASE_URL=http://localhost:3000
 ```
 
-`GMAIL_USER` là hộp thư gửi mã của hệ thống; người chơi nhập email đã đăng ký của họ để nhận mã. Dùng mật khẩu ứng dụng Google, không dùng mật khẩu đăng nhập Gmail. Cần bật Xác minh 2 bước trước khi tạo mật khẩu ứng dụng: https://support.google.com/accounts/answer/185833?hl=vi . SMTP sử dụng SSL/TLS trực tiếp; không đặt cổng 587 cho cấu hình này. Không đưa mật khẩu thật vào `.env.example` hoặc commit `.env`.
+`GMAIL_USER` là hộp thư gửi mã của hệ thống; người chơi nhập email đã đăng ký của họ để nhận mã. Dùng mật khẩu ứng dụng Google, không dùng mật khẩu đăng nhập Gmail. Cần bật Xác minh 2 bước trước khi tạo mật khẩu ứng dụng: https://support.google.com/accounts/answer/185833?hl=vi . SMTP hỗ trợ TLS trực tiếp cổng 465 và STARTTLS cổng 587 (`SMTP_SECURITY=auto` tự chọn theo cổng); không gửi mật khẩu qua kết nối chưa mã hóa. Không đưa mật khẩu mail thật vào `.env.example` hoặc commit `.env`.
 
 Chọn **Quên mật khẩu → Gửi mã xác nhận**, rồi nhập email, mã 6 số, mật khẩu mới (8–128 ký tự) và xác nhận mật khẩu. Có thể gửi lại mã sau 60 giây; mã cũ sẽ mất hiệu lực khi mã mới được cấp. Nếu hết hạn hoặc nhập sai 5 lần, cần yêu cầu mã mới. Email chưa đăng ký sẽ nhận lỗi rõ ràng và không được chuyển tới màn hình nhập mã. Trong thời gian chờ gửi lại, API trả lỗi 429 thay vì báo đã gửi mã mới. Chỉ báo gửi thành công sau khi SMTP tiếp nhận thư; cần kiểm tra cả mục thư rác trong hộp thư nhận. Lỗi cấu hình hoặc lỗi SMTP sẽ được báo rõ và không in mã ra terminal. Cấu hình gửi mail trong `.env` được đọc lại ở mỗi yêu cầu gửi mã; không cần khởi động lại chỉ để thay mật khẩu ứng dụng Gmail.
 

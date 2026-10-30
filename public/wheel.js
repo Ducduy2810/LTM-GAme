@@ -4,6 +4,7 @@
 
 const wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
 const socket = new WebSocket(wsUrl);
+const escapeGameHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 let currentUsername = null;
 let isCurrentUserAdmin = false;
@@ -155,6 +156,10 @@ socket.onopen = () => {
 
 socket.onmessage = (event) => {
     const data = JSON.parse(event.data);
+    if(data.type === "auth_error" && window.SystemClient){window.SystemClient.handleAuthError(data);return;}
+
+    window.RoomHostTools?.observe(data,{currentUsername,roomCode:currentRoomCode,game:'wheel',send:payload=>socket.send(JSON.stringify(payload))});
+
     if (data.type === 'player_disconnected') {
         if (data.roomCode === currentRoomCode) window.RoomNotices?.show(data);
         return;
@@ -220,7 +225,7 @@ socket.onmessage = (event) => {
     if (data.type === 'wheel_chat') {
         const box = document.getElementById('wheel-chat-box');
         if (box) {
-            box.innerHTML += `<div>> ${data.message}</div>`;
+            box.innerHTML += `<div>&gt; ${escapeGameHtml(data.message)}</div>`;
             box.scrollTop = box.scrollHeight;
         }
     }
@@ -243,7 +248,7 @@ socket.onmessage = (event) => {
                 item.style.borderRadius = '8px';
                 item.style.fontWeight = '800';
                 item.style.color = '#fde047';
-                item.innerHTML = `🎖️ Quán Quân: <strong>${w}</strong>`;
+                item.innerHTML = `🎖️ Quán Quân: <strong>${escapeGameHtml(w)}</strong>`;
                 listContainer.appendChild(item);
             });
         }
@@ -270,19 +275,19 @@ function renderRoomList(rooms) {
         const statusText = isPlaying ? 'Đang Đấu' : 'Đang Chờ';
 
         let adminDeleteBtn = '';
-        if (isCurrentUserAdmin && r.roomCode !== 'CNKD') {
+        if ((isCurrentUserAdmin||(r.hostUsername||'').toLowerCase()===(currentUsername||'').toLowerCase()) && ['WAITING','END'].includes(r.gameState) && r.roomCode !== 'CNKD') {
             adminDeleteBtn = `<button class="btn-join-card" style="background:#ef4444; color:#fff; margin-left:6px;" onclick="closeRoomByAdmin('${r.roomCode}')">Đóng</button>`;
         }
 
         card.innerHTML = `
             <div>
                 <div class="room-card-header">
-                    <h4 class="room-card-title">${r.roomName}</h4>
+                    <h4 class="room-card-title">${escapeGameHtml(r.roomName)}</h4>
                     <span class="room-status-badge ${statusClass}">${statusText}</span>
                 </div>
                 <div class="room-card-details">
                     <div>🔑 Mã phòng: <strong style="color:#facc15;">${r.roomCode}</strong></div>
-                    <div>👑 Chủ phòng: <strong>${r.hostUsername}</strong></div>
+                    <div>👑 Chủ phòng: <strong>${escapeGameHtml(r.hostUsername)}</strong></div>
                     <div>💡 Chủ đề: <strong>${r.topicName || r.topic}</strong></div>
                     <div>⏱️ Lượt đoán: <strong>${r.timeLimit}s</strong></div>
                     <div>👥 Người chơi: <strong style="color:#38bdf8;">${r.playerCount} / ${r.maxPlayers || 4}</strong></div>
@@ -334,7 +339,7 @@ function renderWaitingPodiums(players, hostUsername, allReady) {
 
             slot.innerHTML = `
                 <div class="podium-avatar">👤</div>
-                <div class="podium-username">${p.username}</div>
+                <div class="podium-username">${escapeGameHtml(p.username)}</div>
                 <div>${roleTag}</div>
                 <div>${readyTag}</div>
             `;
@@ -426,7 +431,7 @@ function handleWheelState(data) {
             slot.className = `podium-slot occupied ${isTurn ? 'active-turn' : ''}`;
             slot.innerHTML = `
                 <div class="podium-avatar">${isTurn ? '⭐' : '👤'}</div>
-                <div class="podium-username">${p.username}</div>
+                <div class="podium-username">${escapeGameHtml(p.username)}</div>
                 <div class="podium-score">${p.score || 0} đ</div>
                 ${isTurn ? '<span class="ready-badge is-ready" style="margin-top:4px;">LƯỢT QUAY</span>' : ''}
             `;
@@ -494,7 +499,7 @@ function handleWheelState(data) {
             waitText.innerText = '⏳ Đang chờ hệ thống xử lý...';
         }
     } else {
-        turnIndicator.innerHTML = `🔴 ĐANG LÀ LƯỢT CỦA [${activePlayer ? activePlayer.username : '...'}]`;
+        turnIndicator.innerText = `🔴 ĐANG LÀ LƯỢT CỦA [${activePlayer ? activePlayer.username : '...'}]`;
         turnIndicator.style.color = '#facc15';
 
         spinBox.style.display = 'none';
@@ -551,6 +556,7 @@ window.joinRoom = function(code) {
 
 // Super Admin đóng phòng
 window.closeRoomByAdmin = function(code) {
+    if(!isCurrentUserAdmin&&!isMyHost)return;
     if (confirm(`Bạn có chắc chắn muốn đóng phòng [${code}]?`)) {
         socket.send(JSON.stringify({ type: 'admin_close_wheel_room', roomCode: code }));
     }

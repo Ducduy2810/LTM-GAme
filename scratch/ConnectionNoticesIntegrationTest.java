@@ -71,7 +71,8 @@ public class ConnectionNoticesIntegrationTest {
                     if(game.equals("S")) {
                         owner.await(p->"survival_new_question".equals(p.get("type")),4000);
                         owner.send(Map.of("type","pause_survival_game"));
-                        owner.await(p->"survival_game_paused".equals(p.get("type")),4000);
+                        owner.await(p->"survival_error".equals(p.get("type")),4000);
+                        check(owner.count(p->"survival_game_paused".equals(p.get("type")))==0,"host pause denied over real WebSocket");
                     }
                     abrupt.close();
                     owner.await(p->isLost(p,"abrupt_"+game),4000);

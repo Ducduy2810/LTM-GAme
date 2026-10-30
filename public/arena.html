@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="arena_theme.css?v=presence-1">
     <link rel="stylesheet" href="room_notices.css">
+<link rel="stylesheet" href="/system_client.css">
+<script src="/system_client.js" defer></script>
 </head>
 <body>
     <div id="room-notices" class="room-notices" role="log" aria-live="polite" aria-relevant="additions"></div>
@@ -72,7 +74,7 @@
                 <!-- BẢNG XẾP HẠNG -->
                 <div id="leaderboard-panel" style="margin-top: 18px; background: rgba(0,0,0,0.35); border: 1px solid rgba(245,158,11,0.3); border-radius: 14px; padding: 16px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
-                        <h3 style="color: #fde047; margin: 0; font-size: 15px; text-transform: uppercase; letter-spacing: 1px;">🏆 Bảng Xếp Hạng Toàn Cầu</h3>
+                        <h3 style="color: #fde047; margin: 0; font-size: 15px; text-transform: uppercase; letter-spacing: 1px;">🏆 Thành tích cũ · Không phải rank</h3>
                         <button id="btn-admin-clear-leaderboard" style="display:none; background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; transition: 0.2s;" title="Đặc quyền Admin: Xóa toàn bộ dữ liệu bảng xếp hạng">🗑️ Xóa Bảng Xếp Hạng (Admin)</button>
                     </div>
                     <div style="overflow-x: auto;">
@@ -271,7 +273,7 @@
 
                 <!-- Mini bảng xếp hạng sau trận -->
                 <div id="end-leaderboard-panel" style="background: rgba(0,0,0,0.25); border: 1px solid rgba(245,158,11,0.2); border-radius: 12px; padding: 14px; margin-bottom: 16px; display:none;">
-                    <div style="color:#fde047; font-size:13px; font-weight:700; text-transform:uppercase; margin-bottom:8px;">🏆 Bảng Xếp Hạng Top 10</div>
+                    <div style="color:#fde047; font-size:13px; font-weight:700; text-transform:uppercase; margin-bottom:8px;">🏆 Thành tích cũ · Trận này không cộng rank</div>
                     <div id="end-leaderboard-body"></div>
                 </div>
 
@@ -384,6 +386,9 @@
 
     <script src="arena_sound.js"></script>
     <script src="room_notices.js"></script>
+    <script src="room_host_tools.js"></script>
     <script src="arena.js?v=presence-1"></script>
+<script src="legacy_modes.js"></script>
+<script src="game_catalog.js"></script>
 </body>
 </html>

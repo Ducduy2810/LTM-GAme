@@ -1,6 +1,7 @@
 package vn.game.games;
 
 import vn.game.db.UserRepository;
+import vn.game.model.MatchService;
 import vn.game.model.WheelPhrase;
 import vn.game.model.WheelPhraseBank;
 import vn.game.server.WebSocketClient;
@@ -127,6 +128,13 @@ public class WheelRoom {
     private final int maxBotCount; // Số bot tối đa chủ phòng cho phép thêm
     private static final int MAX_PLAYERS = 4;
 
+    private final Set<String> kickedUsernames=new HashSet<>();
+    public synchronized void banPlayer(String username) {
+        int score=players.values().stream().filter(p -> username.equalsIgnoreCase(p.username)).mapToInt(p -> p.score).findFirst().orElse(0);
+        vn.game.model.MatchService.departure(matchId,username,score,"KICKED");
+        kickedUsernames.add(username.toLowerCase(Locale.ROOT));
+    }
+    private String matchId;
     private final UserRepository userRepository;
     private final ScheduledExecutorService scheduler;
     private final Random random = new Random();
@@ -173,7 +181,7 @@ public class WheelRoom {
         this.maxBotCount = Math.max(0, Math.min(3, maxBotCount)); // 0–3 bot
         this.userRepository = userRepository;
         this.scheduler = scheduler;
-        this.currentPhrase = WheelPhraseBank.getRandomPhrase(this.topic);
+        this.currentPhrase = new WheelPhrase(this.topic,"Chưa bắt đầu","");
     }
 
     /** Constructor tương thích ngược — mặc định 1 bot tối đa */
@@ -215,7 +223,6 @@ public class WheelRoom {
 
     public boolean isSuperAdmin(String username) {
         if (username == null) return false;
-        if ("admin".equalsIgnoreCase(username) || "DuyNguyen".equalsIgnoreCase(username)) return true;
         return userRepository != null && userRepository.isAdmin(username);
     }
 
@@ -242,6 +249,7 @@ public class WheelRoom {
     public synchronized boolean addPlayer(WebSocketClient client) {
         String username = client.getUsername();
         if (username == null) return false;
+        if(kickedUsernames.contains(username.toLowerCase(Locale.ROOT))){sendError(client,"Bạn đã bị kick khỏi phòng này.");return false;}
 
         // Chặn người mới hoàn toàn khi đang chơi; cho phép người đã từng trong phòng vào lại
         boolean gameActive = "PLAYING".equals(gameState);
@@ -308,6 +316,7 @@ public class WheelRoom {
             PlayerSlot s = orderedPlayers.get(i);
             if (!s.isBot() && s.real == removed) { removeIdx = i; break; }
         }
+        boolean removedCurrent = removeIdx == turnIndex;
         if (removeIdx >= 0) orderedPlayers.remove(removeIdx);
 
         String removedUsername = removed.username;
@@ -318,6 +327,7 @@ public class WheelRoom {
         } else broadcastChat("🚪 [" + removedUsername + "] đã rời phòng.");
 
         if (players.isEmpty()) {
+            MatchService.finish(matchId,true,"Không còn người chơi",List.of());
             gameState = "WAITING";
             cancelTimer();
             orderedPlayers.clear(); // Xóa luôn bot
@@ -340,7 +350,7 @@ public class WheelRoom {
         if ("PLAYING".equals(gameState)) {
             if (removeIdx >= 0 && removeIdx < turnIndex) turnIndex--;
             if (turnIndex >= orderedPlayers.size()) turnIndex = 0;
-            if (removeIdx == turnIndex || orderedPlayers.isEmpty()) {
+            if (removedCurrent || orderedPlayers.isEmpty()) {
                 currentAction = "SPIN";
                 cancelTimer();
                 if (!orderedPlayers.isEmpty()) {
@@ -379,12 +389,14 @@ public class WheelRoom {
     }
 
     private synchronized void startGame() {
+        WheelPhrase selected;
+        try{selected=WheelPhraseBank.getRandomPhrase(topic);}catch(IllegalArgumentException e){broadcast(Map.of("type","wheel_error","message",e.getMessage()));return;}
         gameState = "PLAYING";
         turnIndex = 0;
         currentAction = "SPIN";
         currentSpinValue = 0;
         revealedLetters.clear();
-        currentPhrase = WheelPhraseBank.getRandomPhrase(topic);
+        currentPhrase = selected;
 
         // Reset điểm tất cả người thật
         for (PlayerSlot s : orderedPlayers) {
@@ -405,6 +417,8 @@ public class WheelRoom {
             broadcastChat("🤖 Bot [" + bot.username + "] đã tham gia để đủ người chơi!");
         }
 
+        matchId = MatchService.start("WHEEL", roomCode, orderedPlayers.stream().anyMatch(PlayerSlot::isBot),
+                Map.of("topic",topic,"timeLimit",timeLimit,"phrase",currentPhrase.getPhrase(),"hint",currentPhrase.getHint(),"explanation",currentPhrase.getExplanation()), players.values().stream().map(p -> p.username).toList());
         broadcastChat("🎬 Trò chơi bắt đầu! Chủ đề: [" + WheelPhraseBank.getTopicDisplayName(currentPhrase.getTopic()) + "]");
         broadcastChat("💡 Gợi ý: " + currentPhrase.getHint());
 
@@ -654,6 +668,7 @@ public class WheelRoom {
     }
 
     public synchronized void close() {
+        MatchService.finish(matchId, true, "Room closed", List.of());
         gameState = "CLOSED";
         cancelTimer();
         players.clear();
@@ -665,6 +680,7 @@ public class WheelRoom {
     }
 
     private synchronized void endGame(String reason) {
+        if (!"PLAYING".equals(gameState)) return;
         gameState = "END";
         cancelTimer();
 
@@ -676,6 +692,15 @@ public class WheelRoom {
         if (winner != null && winner.getScore() > 0)
             winners.add(winner.getUsername() + " (" + winner.getScore() + "đ)");
 
+        List<PlayerSlot> sorted = new ArrayList<>(orderedPlayers);
+        sorted.sort(Comparator.comparingInt(PlayerSlot::getScore).reversed());
+        List<MatchService.Result> results = new ArrayList<>();
+        for (PlayerSlot p : sorted) {
+            if (!p.isBot()) results.add(new MatchService.Result(p.getUsername(),p.getScore(),
+                    1+(int)sorted.stream().filter(other -> other.getScore()>p.getScore()).count(),
+                    p.getScore()==sorted.get(0).getScore() ? "WIN" : "LOSS"));
+        }
+        MatchService.finish(matchId,false,reason,results);
         broadcastChat(reason);
         broadcastState();
 
@@ -685,6 +710,7 @@ public class WheelRoom {
         endMsg.put("winner", winner != null ? winner.getUsername() : "Không có");
         endMsg.put("winners", winners);
         endMsg.put("fullPhrase", currentPhrase.getPhrase());
+        endMsg.put("explanation",currentPhrase.getExplanation());
         broadcast(endMsg);
     }
 
@@ -727,6 +753,7 @@ public class WheelRoom {
         Map<String, Object> msg = new HashMap<>();
         msg.put("type", "update_wheel_players");
         msg.put("players", list);
+        msg.put("gameState",gameState);
         msg.put("hostUsername", getEffectiveHostUsername());
         msg.put("allReady", allReady);
         msg.put("hasAdminInRoom", isSuperAdmin(getEffectiveHostUsername()));
@@ -772,7 +799,12 @@ public class WheelRoom {
         msg.put("gameState", gameState);
         msg.put("turnIndex", turnIndex);
         msg.put("currentTurnUsername", current.getUsername());
-        msg.put("phrase", currentPhrase.getPhrase());
+        // Never put the secret phrase on the wire before the match ends.
+        StringBuilder visible = new StringBuilder();
+        for (char letter : currentPhrase.getPhrase().toCharArray()) {
+            visible.append("END".equals(gameState) || letter == ' ' || revealedLetters.contains(letter) ? letter : '_');
+        }
+        msg.put("phrase", visible.toString());
         msg.put("topic", currentPhrase.getTopic());
         msg.put("topicName", WheelPhraseBank.getTopicDisplayName(currentPhrase.getTopic()));
         msg.put("hint", currentPhrase.getHint());

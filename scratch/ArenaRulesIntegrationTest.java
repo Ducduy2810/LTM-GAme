@@ -1,4 +1,6 @@
 import vn.game.db.DatabaseManager;
+import vn.game.db.UserRepository;
+import vn.game.model.User;
 import vn.game.games.ArenaGame;
 import vn.game.games.ArenaRoom;
 import vn.game.model.Leaderboard;
@@ -15,10 +17,14 @@ import java.util.concurrent.*;
 
 public class ArenaRulesIntegrationTest {
     private static int checks;
+    private static UserRepository users;
+    private static final Client ADMIN=new Client("operator");
 
     public static void main(String[] args) throws Exception {
         if (!Files.exists(Path.of(".arena-test"))) throw new IllegalStateException("Use test_arena_rules.ps1");
         DatabaseManager.getInstance().init();
+        users=new UserRepository(DatabaseManager.getInstance());
+        User operator=users.register("operator",null,"TestOnlyPass123");operator.setRole("admin");users.update(operator);
         try {
             questionSelection();
             roleSelection();
@@ -116,12 +122,12 @@ public class ArenaRulesIntegrationTest {
             int unauthorized = trial.opponent.count("arena_error");
             trial.room.handlePauseGame(trial.opponent);
             check(trial.opponent.count("arena_error") == unauthorized + 1, "opponent cannot pause");
-            trial.room.handlePauseGame(trial.host);
+            trial.room.handlePauseGame(ADMIN);
             Thread.sleep(1100);
             check(trial.host.count("arena_main_player_turn") == 0, "pause freezes opponent phase without premature transition");
             trial.room.handleSubmitAnswer(trial.opponent, correct);
             check(trial.opponent.count("arena_answer_locked") == 1, "paused game accepts no new answer");
-            trial.room.handleResumeGame(trial.host);
+            trial.room.handleResumeGame(ADMIN);
             trial.host.await("arena_main_player_turn", 0, 2000);
             check(trial.host.last("arena_main_player_turn").get("phase").equals("MAIN"), "server starts separate main phase");
             check(number(trial.host.last("arena_main_player_turn"), "timeLimit") == 2, "main receives full configured time");
@@ -138,10 +144,10 @@ public class ArenaRulesIntegrationTest {
             trial.room.handleLifeTrust(trial.host);
             trial.room.handleLifeSurvey(trial.host);
             check(trial.host.count("arena_life_trust") == 1 && trial.host.count("arena_life_survey") == 1, "lifelines single-use");
-            trial.room.handlePauseGame(trial.host);
+            trial.room.handlePauseGame(ADMIN);
             trial.room.handleSubmitAnswer(trial.host, correct);
             check(trial.host.count("arena_answer_locked") == 0, "main cannot answer while paused");
-            trial.room.handleResumeGame(trial.host);
+            trial.room.handleResumeGame(ADMIN);
             trial.room.handleSubmitAnswer(trial.host, correct);
             check(trial.host.count("arena_answer_locked") == 1, "main can answer after resume");
             Map<String, Object> result = trial.host.await("arena_round_result", 0, 3500);
@@ -171,7 +177,7 @@ public class ArenaRulesIntegrationTest {
     }
 
     private static void roomOwnershipAndDeletion() throws Exception {
-        try (ArenaGame game = new ArenaGame()) {
+        try (ArenaGame game = new ArenaGame(users)) {
             Client owner = new Client("owner");
             Client guest = new Client("guest");
             Client outsider = new Client("outsider");
@@ -190,12 +196,12 @@ public class ArenaRulesIntegrationTest {
             check(owner.last("arena_game_started").get("mainPlayer").equals("guest"), "game routes manual main selection");
             Map<String, Object> question = owner.await("arena_new_question", 0, 2500);
             check(question.get("difficulty").equals("HARD") && question.get("topic").equals("NETWORKING"), "actual match respects selected difficulty and topic");
-            game.handleAdminCloseRoom(owner, "RULES");
-            check(owner.count("arena_room_closed") == 1 && guest.count("arena_room_closed") == 1, "host deletion returns all members to lobby");
+            game.handleAdminCloseRoom(ADMIN, "RULES");
+            check(owner.count("arena_room_closed") == 1 && guest.count("arena_room_closed") == 1, "admin cancellation returns all members to lobby");
             check(game.getRoomsSummaryList().stream().noneMatch(r -> r.get("roomCode").equals("RULES")), "deleted room removed from list");
             Thread.sleep(1200);
             check(guest.count("arena_main_player_turn") == 0 && guest.count("arena_round_result") == 0, "deletion cancels pending game timers");
-            game.handleAdminCloseRoom(new Client("admin"), "DT100");
+            game.handleAdminCloseRoom(ADMIN, "DT100");
             check(game.getRoomsSummaryList().stream().anyMatch(r -> r.get("roomCode").equals("DT100")), "default room protected even from admin deletion");
             config.put("roomCode", "BAD"); config.put("timeLimit", 0);
             game.handleCreateRoom(owner, config);
@@ -238,7 +244,7 @@ public class ArenaRulesIntegrationTest {
         final Client opponent = new Client("opponent");
         final ArenaRoom room;
         Trial(int opponentTime, int mainTime, int bots) {
-            room = new ArenaRoom("TRIAL", "Trial", "owner", "SCIENCE", "EASY", 2, opponentTime, bots, null, scheduler);
+            room = new ArenaRoom("TRIAL", "Trial", "owner", "SCIENCE", "EASY", 2, opponentTime, bots, users, scheduler);
             room.configureInitialMainPlayer(mainTime, "MANUAL");
             room.handleJoin(host); room.handleJoin(opponent); room.handleToggleReady(opponent);
         }

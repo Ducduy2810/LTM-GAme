@@ -13,7 +13,8 @@ $keystorePath = Join-Path $testRoot 'smtp-test.p12'
 & $keytoolPath -genkeypair -alias smtp-test -keyalg RSA -keysize 2048 -storetype PKCS12 -keystore $keystorePath -storepass local-test-only -keypass local-test-only -dname 'CN=localhost' -ext 'SAN=dns:localhost' -validity 2 -noprompt
 if ($LASTEXITCODE -ne 0) { throw 'Cannot create local test certificate.' }
 $classpath = (Join-Path $projectRoot 'bin') + ';' + (Join-Path $projectRoot 'lib\*')
-& $compilerPath --release 17 -encoding UTF-8 -cp $classpath -d $testRoot (Join-Path $PSScriptRoot 'PasswordResetIntegrationTest.java')
+$sources=(Get-ChildItem (Join-Path $projectRoot 'src') -Recurse -Filter *.java).FullName
+& $compilerPath --release 17 -encoding UTF-8 -d $testRoot $sources (Join-Path $PSScriptRoot 'PasswordResetIntegrationTest.java')
 if ($LASTEXITCODE -ne 0) { throw 'Cannot compile integration test.' }
 
 Push-Location $testRoot

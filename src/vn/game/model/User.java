@@ -27,7 +27,7 @@ public class User {
         this.email = email;
         this.salt = generateSalt();
         this.passwordHash = hashPassword(password, this.salt);
-        this.role = (email != null && "mainung28@gmail.com".equalsIgnoreCase(email)) || "admin".equalsIgnoreCase(username) ? "admin" : "user";
+        this.role = "user";
     }
 
     public static String generateSalt() {
@@ -50,8 +50,19 @@ public class User {
 
     public boolean verifyPassword(String inputPassword) {
         if (this.salt == null || this.passwordHash == null) return false;
+        if(inputPassword == null) return false;
+        if(passwordHash.startsWith("pbkdf2$")) {
+            return MessageDigest.isEqual(secureHashPassword(inputPassword,salt).getBytes(StandardCharsets.UTF_8),passwordHash.getBytes(StandardCharsets.UTF_8));
+        }
         String computed = hashPassword(inputPassword, this.salt);
         return computed.equals(this.passwordHash);
+    }
+
+    public static String secureHashPassword(String password,String salt) {
+        javax.crypto.spec.PBEKeySpec spec=new javax.crypto.spec.PBEKeySpec(password.toCharArray(),salt.getBytes(StandardCharsets.UTF_8),600000,256);
+        try {return "pbkdf2$600000$"+Base64.getEncoder().encodeToString(javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded());}
+        catch(java.security.GeneralSecurityException e){throw new IllegalStateException(e);}
+        finally{spec.clearPassword();}
     }
 
     public void updatePassword(String newPassword) {
@@ -88,8 +99,6 @@ public class User {
         
         if (map.get("role") != null) {
             u.setRole((String) map.get("role"));
-        } else if ("admin".equalsIgnoreCase(u.getUsername()) || (u.getEmail() != null && "mainung28@gmail.com".equalsIgnoreCase(u.getEmail()))) {
-            u.setRole("admin");
         } else {
             u.setRole("user");
         }
@@ -97,8 +106,7 @@ public class User {
     }
 
     public boolean isAdmin() {
-        return "admin".equalsIgnoreCase(role) || "admin".equalsIgnoreCase(username) ||
-                (email != null && "mainung28@gmail.com".equalsIgnoreCase(email));
+        return "admin".equalsIgnoreCase(role);
     }
 
     // Getters and Setters

@@ -66,12 +66,12 @@
     let lastQuestionOptions = [];
 
     function refreshRoomControls() {
-        const canControl = isMyHost || isCurrentUserAdmin;
+        const canControl = isCurrentUserAdmin;
         const canPause = ['STARTING', 'QUESTION', 'RESULT'].includes(roomGameState);
         document.getElementById('survival-room-controls').style.display = currentRoomCode ? 'flex' : 'none';
         document.getElementById('btn-survival-pause').style.display = canControl && canPause && !gamePaused ? 'inline-block' : 'none';
         document.getElementById('btn-survival-resume').style.display = canControl && canPause && gamePaused ? 'inline-block' : 'none';
-        document.getElementById('btn-survival-delete').style.display = canControl && currentRoomCode !== 'DTST' ? 'inline-block' : 'none';
+        document.getElementById('btn-survival-delete').style.display = (isMyHost||isCurrentUserAdmin) && ['WAITING','END'].includes(roomGameState) && currentRoomCode !== 'DTST' ? 'inline-block' : 'none';
         document.getElementById('survival-pause-status').textContent = gamePaused ? '⏸ Trận đấu đang tạm dừng.' : '';
         document.querySelectorAll('.answer-btn').forEach(button => {
             button.disabled = !activeQuestion || !answerWindowOpen || gamePaused || !myIsAlive || myAnswerLocked;
@@ -280,6 +280,10 @@
     // ── 3. ROUTER XỬ LÝ MESSAGE WEBSOCKET ────────────────────────────
     function handleSocketMessage(data) {
         if (!data || !data.type) return;
+    if(data.type === "auth_error" && window.SystemClient){window.SystemClient.handleAuthError(data);return;}
+
+    window.RoomHostTools?.observe(data,{currentUsername,roomCode:currentRoomCode,game:'survival',send:payload=>socket.send(JSON.stringify(payload))});
+
 
         switch (data.type) {
             case 'player_disconnected':
@@ -489,7 +493,7 @@
             const statusText  = isPlaying ? 'Đang Diễn Ra' : 'Đang Chờ';
 
             let adminCloseBtn = '';
-            if ((isCurrentUserAdmin || r.hostUsername.toLowerCase() === currentUsername.toLowerCase()) && r.roomCode !== 'DTST') {
+            if ((isCurrentUserAdmin||(r.hostUsername||'').toLowerCase()===(currentUsername||'').toLowerCase()) && ['WAITING','END'].includes(r.gameState) && r.roomCode !== 'DTST') {
                 adminCloseBtn = `
                     <button class="btn-join-card" style="background:#7f1d1d; border-color:#dc2626; margin-left:6px;" 
                             onclick="window.survivalAdminCloseRoom('${r.roomCode}')">
@@ -537,6 +541,7 @@
         // Host xác định
         const hostUsername = data.hostUsername;
         isMyHost = (currentUsername === hostUsername);
+        roomGameState=data.gameState||roomGameState;
         refreshRoomControls();
 
         // Nút Bắt đầu cho Host
@@ -1140,6 +1145,8 @@
 
     // Admin đóng phòng
     window.survivalAdminCloseRoom = function (code) {
+        if(!isCurrentUserAdmin&&!isMyHost)return;
+        if(!isCurrentUserAdmin&&!['WAITING','END'].includes(roomGameState))return;
         if (confirm(`Bạn có chắc chắn muốn đóng phòng [${code}]?`)) {
             socket.send(JSON.stringify({
                 type: 'close_survival_room',
@@ -1149,9 +1156,11 @@
     };
 
     document.getElementById('btn-survival-pause').addEventListener('click', () => {
+        if(!isCurrentUserAdmin)return;
         socket.send(JSON.stringify({ type: 'pause_survival_game' }));
     });
     document.getElementById('btn-survival-resume').addEventListener('click', () => {
+        if(!isCurrentUserAdmin)return;
         socket.send(JSON.stringify({ type: 'resume_survival_game' }));
     });
     document.getElementById('btn-survival-delete').addEventListener('click', () => {

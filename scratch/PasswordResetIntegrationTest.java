@@ -148,6 +148,17 @@ public class PasswordResetIntegrationTest {
                 check(forgot("player@example.com").statusCode() == 503, "removed credential does not retain previous cached password");
                 check(smtp.messages.isEmpty(), "no unexpected email sent");
                 check(smtp.failure == null, "fake SMTP exchange completed correctly");
+                configure(smtp.port(),"local-test-password");
+                vn.game.util.SmtpTransport.checkConnection();
+                check(smtp.messages.isEmpty(),"implicit TLS connection check sends no email");
+                try(FakeSmtp startTls=new FakeSmtp(ssl,true)){
+                    Files.writeString(Path.of(".env"),"GMAIL_USER=sender@example.com\nGMAIL_APP_PASSWORD=local-test-password\nSMTP_HOST=localhost\nSMTP_PORT="+startTls.port()+"\nSMTP_SECURITY=starttls\n",StandardCharsets.UTF_8);
+                    vn.game.util.SmtpTransport.checkConnection();
+                    check(startTls.messages.isEmpty(),"STARTTLS connection check sends no email");
+                    new vn.game.util.PasswordResetMailer().sendCode("local@example.com","123456");
+                    check(startTls.take().code().equals("123456"),"STARTTLS upgrades before authentication and delivers MIME email");
+                    check(startTls.failure==null,"STARTTLS local exchange completed correctly");
+                }
                 System.out.println("PASS: " + checks + " registration and password reset integration checks (local TLS SMTP, isolated DB).");
             } finally {
                 server.stop();
@@ -278,16 +289,21 @@ public class PasswordResetIntegrationTest {
     }
 
     private static class FakeSmtp implements AutoCloseable {
-        final SSLServerSocket listener;
+        final ServerSocket listener;
+        final SSLContext context;final boolean startTls;
         final BlockingQueue<Mail> messages = new LinkedBlockingQueue<>();
         volatile boolean rejectAuthentication;
         volatile Throwable failure;
         final Thread thread;
         FakeSmtp(SSLContext context) throws IOException {
-            listener = (SSLServerSocket) context.getServerSocketFactory().createServerSocket(0, 10, InetAddress.getLoopbackAddress());
+            this(context,false);
+        }
+        FakeSmtp(SSLContext context,boolean startTls) throws IOException {
+            this.context=context;this.startTls=startTls;
+            listener = startTls?new ServerSocket(0,10,InetAddress.getLoopbackAddress()):context.getServerSocketFactory().createServerSocket(0, 10, InetAddress.getLoopbackAddress());
             thread = new Thread(() -> {
                 while (!listener.isClosed()) {
-                    try (SSLSocket socket = (SSLSocket) listener.accept()) { exchange(socket); }
+                    try (Socket socket = listener.accept()) { exchange(socket); }
                     catch (Exception e) { if (!listener.isClosed()) failure = e; }
                 }
             });
@@ -300,20 +316,27 @@ public class PasswordResetIntegrationTest {
             if (mail == null) throw new AssertionError("No email received", failure);
             return mail;
         }
-        void exchange(SSLSocket socket) throws IOException {
+        void exchange(Socket socket) throws IOException {
             socket.setSoTimeout(5000);
             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
             BufferedWriter out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.US_ASCII));
             reply(out, "220 localhost test SMTP");
             require(in, "EHLO [127.0.0.1]");
             reply(out, "250-localhost\r\n250 AUTH LOGIN");
+            if(startTls){
+                require(in,"STARTTLS");reply(out,"220 upgrade TLS");
+                SSLSocket tls=(SSLSocket)context.getSocketFactory().createSocket(socket,"localhost",socket.getPort(),true);tls.setUseClientMode(false);tls.startHandshake();
+                in=new BufferedReader(new InputStreamReader(tls.getInputStream(),StandardCharsets.US_ASCII));out=new BufferedWriter(new OutputStreamWriter(tls.getOutputStream(),StandardCharsets.US_ASCII));
+                require(in,"EHLO [127.0.0.1]");reply(out,"250 AUTH LOGIN");
+            }
             require(in, "AUTH LOGIN"); reply(out, "334 username");
             require(in, Base64.getEncoder().encodeToString("sender@example.com".getBytes(StandardCharsets.UTF_8)));
             reply(out, "334 password");
             require(in, Base64.getEncoder().encodeToString("local-test-password".getBytes(StandardCharsets.UTF_8)));
             if (rejectAuthentication) { reply(out, "535 Authentication failed"); return; }
             reply(out, "235 authenticated");
-            require(in, "MAIL FROM:<sender@example.com>"); reply(out, "250 sender ok");
+            String command=in.readLine();if("QUIT".equals(command)){reply(out,"221 bye");return;}
+            if(!"MAIL FROM:<sender@example.com>".equals(command))throw new IOException("Unexpected sender command");reply(out, "250 sender ok");
             String recipient = in.readLine();
             if (recipient == null || !recipient.startsWith("RCPT TO:<") || !recipient.endsWith(">")) throw new IOException("Invalid recipient command");
             reply(out, "250 recipient ok");

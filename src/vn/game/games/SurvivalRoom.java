@@ -1,6 +1,7 @@
 package vn.game.games;
 
 import vn.game.db.UserRepository;
+import vn.game.model.MatchService;
 import vn.game.model.Question;
 import vn.game.model.QuestionBank;
 import vn.game.server.WebSocketClient;
@@ -86,6 +87,13 @@ public class SurvivalRoom {
     private volatile int totalRounds;
     private volatile int maxPlayers;
 
+    private final Set<String> kickedUsernames=new HashSet<>();
+    public synchronized void banPlayer(String username) {
+        int score=players.values().stream().filter(p -> username.equalsIgnoreCase(p.username)).mapToInt(p -> p.score).findFirst().orElse(0);
+        vn.game.model.MatchService.departure(matchId,username,score,"KICKED");
+        kickedUsernames.add(username.toLowerCase(Locale.ROOT));
+    }
+    private String matchId;
     private final UserRepository userRepository;
     private final ScheduledExecutorService scheduler;
 
@@ -146,7 +154,6 @@ public class SurvivalRoom {
 
     public boolean isSuperAdmin(String username) {
         if (username == null) return false;
-        if ("admin".equalsIgnoreCase(username) || "DuyNguyen".equalsIgnoreCase(username)) return true;
         return userRepository != null && userRepository.isAdmin(username);
     }
 
@@ -203,6 +210,7 @@ public class SurvivalRoom {
     // ─── 7. THAM GIA / RỜI PHÒNG / SẴN SÀNG ─────────────────────────────────
 
     public synchronized boolean canJoin(String username) {
+        if(username==null||kickedUsernames.contains(username.toLowerCase(Locale.ROOT)))return false;
         return username != null && !closed && ("WAITING".equals(gameState) || "END".equals(gameState)
                 || recentlyLeftUsernames.contains(username.toLowerCase(Locale.ROOT))
                 || players.values().stream().anyMatch(p -> p.username.equalsIgnoreCase(username)));
@@ -390,6 +398,10 @@ public class SurvivalRoom {
         List<Question> finalQuestions = QuestionBank.getQuestions(topic, "HARD", 5);
         questions.addAll(finalQuestions);
 
+        if(questions.isEmpty()){gameState="WAITING";broadcast(Map.of("type","survival_error","message","Chưa có câu hỏi đã xuất bản phù hợp."));return;}
+        matchId = MatchService.start("SURVIVAL", roomCode, false,
+                Map.of("topic",topic,"totalRounds",totalRounds,"startingHp",startingHp,"questions",questions.stream().map(Question::snapshot).toList()),
+                players.values().stream().map(p -> p.username).toList());
         // Phát thông báo bắt đầu trận đấu
         Map<String, Object> startMsg = new HashMap<>();
         startMsg.put("type", "survival_game_started");
@@ -513,7 +525,7 @@ public class SurvivalRoom {
     }
 
     public synchronized void handlePauseGame(WebSocketClient client) {
-        if (closed || !canControl(client.getUsername())) { sendError(client, "Chỉ chủ phòng hoặc admin được tạm dừng."); return; }
+        if (closed || !isSuperAdmin(client.getUsername())) { sendError(client, "Chỉ quản trị viên được tạm dừng."); return; }
         if (isPaused || pendingAction == null || !Set.of("STARTING", "QUESTION", "RESULT").contains(gameState)
                 || remainingTimerMs() <= 0) { sendError(client, "Không thể tạm dừng ở thời điểm này."); return; }
         remainingBeforePauseMs = remainingTimerMs();
@@ -526,7 +538,7 @@ public class SurvivalRoom {
     }
 
     public synchronized void handleResumeGame(WebSocketClient client) {
-        if (closed || !canControl(client.getUsername())) { sendError(client, "Chỉ chủ phòng hoặc admin được tiếp tục."); return; }
+        if (closed || !isSuperAdmin(client.getUsername())) { sendError(client, "Chỉ quản trị viên được tiếp tục."); return; }
         if (!isPaused || pendingAction == null) { sendError(client, "Trận đấu chưa được tạm dừng."); return; }
         isPaused = false;
         questionStartNanos += System.nanoTime() - pauseStartNanos;
@@ -538,6 +550,7 @@ public class SurvivalRoom {
     }
 
     public synchronized void close() {
+        MatchService.finish(matchId, true, "Room closed", List.of());
         closed = true;
         isPaused = false;
         gameState = "CLOSED";
@@ -648,6 +661,7 @@ public class SurvivalRoom {
         resultMsg.put("type", "survival_round_result");
         resultMsg.put("correctAnswerIndex", correctIndex);
         resultMsg.put("correctAnswerText", q.getOptions().get(correctIndex));
+        resultMsg.put("explanation",q.getExplanation());
         resultMsg.put("options", q.getOptions());
         resultMsg.put("playerAnswerResults", playerAnswerResults); // YÊU CẦU 1: Gửi thông tin đáp án của người chơi
         resultMsg.put("round", currentRound);
@@ -684,7 +698,7 @@ public class SurvivalRoom {
     // ─── 12. KẾT THÚC TRẬN ĐẤU ───────────────────────────────────────────────
 
     private synchronized void endGame(String overrideReason, String winnerOverride) {
-        if (closed) return;
+        if (closed || "END".equals(gameState) || "WAITING".equals(gameState)) return;
         gameState = "END";
         if (currentTimer != null) {
             currentTimer.cancel(false);
@@ -736,6 +750,12 @@ public class SurvivalRoom {
         }
 
         Map<String, Object> endMsg = new HashMap<>();
+        List<MatchService.Result> results = new ArrayList<>();
+        for (int i=0; i<standings.size(); i++) {
+            PlayerState p=standings.get(i);
+            results.add(new MatchService.Result(p.username,p.score,i+1,p.username.equals(winner) ? "WIN" : "LOSS"));
+        }
+        MatchService.finish(matchId,false,reason,results);
         endMsg.put("type", "survival_end_game");
         endMsg.put("reason", reason);
         endMsg.put("winner", winner != null ? winner : "Không có");
@@ -861,6 +881,7 @@ public class SurvivalRoom {
         Map<String, Object> msg = new HashMap<>();
         msg.put("type", "survival_update_players");
         msg.put("players", list);
+        msg.put("gameState",gameState);
         msg.put("hostUsername", getEffectiveHostUsername());
         msg.put("roomCode", roomCode);
         msg.put("roomName", roomName);

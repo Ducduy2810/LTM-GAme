@@ -63,7 +63,7 @@ const noticeCount = element('room-notices').children.length;
 receive({ type: 'player_disconnected', roomCode: 'OTHER', username: 'outside' });
 assert.equal(element('room-notices').children.length, noticeCount);
 assert.match(element('room-settings-summary').innerText, /Phụ 3s → Chính 8s/);
-assert.equal(element('btn-delete-room').style.display, 'inline-block');
+assert.equal(element('btn-delete-room').style.display, 'inline-block', 'host can delete waiting room');
 receive({ type: 'update_arena_players', players: [
     { username: 'owner', isHost: true, isReady: true }, { username: 'guest', isReady: true }
 ], hostUsername: 'owner', allReady: true, mainSelectionMode: 'MANUAL', selectedMainPlayer: 'guest' });
@@ -73,6 +73,7 @@ assert.equal(packets.at(-1).type, 'select_arena_main_player');
 assert.equal(packets.at(-1).username, 'guest');
 
 receive({ type: 'arena_game_started', mainPlayer: 'guest', totalOpponents: 1 });
+assert.equal(element('btn-delete-room').style.display, 'none', 'delete hidden once match starts');
 assert.match(element('arena-main-player-label').textContent, /guest/);
 assert.match(element('podium-2').className, /main-player/);
 assert.ok(element('podium-2').children.some(child => child.textContent === '👑'));
@@ -121,11 +122,11 @@ const previousPackets = packets.length;
 element('create-main-time').value = '0';
 element('btn-submit-create-room').listeners.click();
 assert.equal(packets.length, previousPackets, 'invalid time blocked before creating room');
+const beforeDelete = packets.length;
 element('btn-delete-room-game').listeners.click();
-assert.equal(packets.at(-1).type, 'close_arena_room');
-assert.equal(packets.at(-1).roomCode, 'CUSTOM');
+assert.equal(packets.length, beforeDelete, 'host cannot send deletion from hidden handler');
 receive({ type: 'arena_room_closed', message: 'Closed' });
 assert.ok(element('lobby-screen').classList.contains('active'), 'deleted room returns to lobby');
 assert.equal(packets.at(-1).type, 'get_rooms');
 assert.equal(timers.size, 0, 'no local countdown left after deleting room');
-console.log('PASS: Arena setup, manual main selection, sequential answer/lifeline controls, pause/resume, answer lock and deletion UI.');
+console.log('PASS: Arena setup, main selection, answer/lifeline controls, answer lock, host delete removal and admin cancellation feedback.');

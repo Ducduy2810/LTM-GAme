@@ -29,6 +29,7 @@ public class Env {
             String line;
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
+                if(line.startsWith("\uFEFF"))line=line.substring(1).trim();
                 if (line.isEmpty() || line.startsWith("#")) continue;
                 int idx = line.indexOf('=');
                 if (idx > 0) {

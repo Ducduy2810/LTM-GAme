@@ -1,5 +1,8 @@
 document.addEventListener("DOMContentLoaded", () => {
     checkAuth();
+    const googleErrors={google_not_configured:'Đăng nhập Google chưa được cấu hình đầy đủ trên server.',google_redirect_config:'Địa chỉ callback Google chưa hợp lệ. Kiểm tra GOOGLE_REDIRECT_URI/APP_BASE_URL.',google_state_invalid:'Phiên đăng nhập Google đã hết hạn hoặc khác trình duyệt. Hãy bấm đăng nhập Google lại.',google_cancelled:'Bạn đã hủy đăng nhập Google.',google_token_failed:'Google từ chối mã đăng nhập. Kiểm tra Client ID, Client Secret và callback đã đăng ký.',google_network_failed:'Server không kết nối được Google. Kiểm tra quyền truy cập Internet.',google_email_unverified:'Google chưa xác nhận email của tài khoản này.',google_profile_failed:'Không lấy được thông tin tài khoản Google.',google_account_restricted:'Tài khoản Google không được phép đăng nhập ở cổng người chơi.',google_account_failed:'Chưa hoàn tất được đăng nhập Google. Hãy thử lại.',google_busy:'Nhiều yêu cầu đăng nhập Google. Vui lòng thử lại sau.'};
+    const errorCode=typeof URLSearchParams==='undefined'?null:new URLSearchParams(window.location.search).get('error');
+    if(googleErrors[errorCode]){document.getElementById('auth-msg').innerText=googleErrors[errorCode];history.replaceState(null,'',window.location.pathname);}
 
     const loginForm = document.getElementById('login-form');
     const registerForm = document.getElementById('register-form');
@@ -111,6 +114,7 @@ document.addEventListener("DOMContentLoaded", () => {
             } else {
                 msgBox.style.color = '#ef4444';
                 msgBox.innerText = data.error || 'Sai tên đăng nhập hoặc mật khẩu!';
+                if(data.accountNotice)window.SystemClient?.showNotice(data.accountNotice,data.error);
             }
         } catch (e) {
             msgBox.style.color = '#ef4444';
@@ -161,6 +165,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // 4. Đăng xuất
     document.getElementById('btn-logout').onclick = async (e) => {
         e.preventDefault();
+        window.SystemClient?.expectLogout();
         await fetch('/auth/logout', { method: 'POST' });
         checkAuth();
     };
@@ -170,15 +175,21 @@ async function checkAuth() {
     try {
         const res = await fetch('/auth/me');
         const data = await res.json();
+        if(res.ok===false){document.getElementById('auth-msg').innerText=data.error||'Chưa kết nối được máy chủ.';return;}
+        window.SystemClient?.setAccount(data.loggedIn?data.user:null,data.accountNotice);
 
         if (data.loggedIn) {
             document.getElementById('auth-section').classList.add('hidden');
             document.getElementById('portal-section').classList.remove('hidden');
             const roleBadge = data.user.isAdmin ? ' 👑 (Admin)' : '';
             document.getElementById('display-name').innerText = data.user.username + roleBadge;
+            document.body?.classList.add('signed-in');
+            window.portalSignedIn?.(data.user);
         } else {
             document.getElementById('portal-section').classList.add('hidden');
             document.getElementById('auth-section').classList.remove('hidden');
+            document.body?.classList.remove('signed-in');
+            window.portalSignedOut?.();
         }
     } catch (e) {
         console.error('checkAuth error:', e);

@@ -8,3 +8,8 @@
     background: #451a03; color: #fef3c7; box-shadow: 0 6px 24px #0008;
     font: 700 14px/1.5 'Segoe UI', sans-serif; overflow-wrap: anywhere;
 }
+.host-tools{position:fixed;right:15px;bottom:15px;z-index:1500;width:min(310px,calc(100vw - 30px));background:#183a35;border:1px solid #78a28b;border-radius:10px;color:#e9f2e5;box-shadow:0 8px 25px #0005;font:12px/1.6 'Segoe UI',sans-serif}
+.host-tools[hidden]{display:none}.host-tools summary{padding:11px 15px;cursor:pointer;font-weight:600}.host-tools-members{padding:0 15px 10px;max-height:230px;overflow:auto}.host-tools-member{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid #456657}.host-tools-member span{overflow-wrap:anywhere}.host-tools-member button{border:1px solid #bc8070;background:#704c40;color:#fff3e7;border-radius:5px;padding:4px 10px;cursor:pointer;font:inherit}.host-tools p{color:#a4bfa8;font-size:11px}
+#pause-controls,#btn-delete-room-game,#btn-survival-pause,#btn-survival-resume{display:none!important}
+.host-tools-delete{margin:0 15px 12px;padding:7px 11px;border:1px solid #bd806c;border-radius:6px;background:#744a3e;color:#fff2e7;font:inherit;cursor:pointer}
+.learning-explanation{font:14px/1.7 'Segoe UI',sans-serif;color:#bfddbf;border:1px solid #54745b;background:#183c30;padding:12px 16px;border-radius:8px;max-width:750px;margin:20px auto}

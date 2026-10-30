@@ -1,30 +1,21 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <title>Cổng Game Mạng - Java Network Programming</title>
-    <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; text-align: center; margin: 0;}
-        .container { background: #1e293b; padding: 30px; border-radius: 10px; width: 400px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        input { width: 85%; padding: 12px; margin: 10px 0; border-radius: 5px; border: none; font-size: 16px; background:#334155; color:white;}
-        input:focus { outline: 2px solid #3b82f6;}
-        button { width: 92%; padding: 14px; margin: 10px 0; background: #3b82f6; color: white; border: none; border-radius: 5px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.3s;}
-        button:hover { background: #2563eb; }
-        .hidden { display: none !important; }
-        .portal-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 140px; text-decoration: none; color: white; border-radius: 10px; font-weight: bold; font-size: 1.2rem; margin: 15px 0; transition: 0.3s;}
-        .btn-arena { background: linear-gradient(135deg, #e11d48, #be123c); }
-        .btn-wheel { background: linear-gradient(135deg, #2563eb, #1d4ed8); }
-        .btn-survival { background: linear-gradient(135deg, #dc2626, #7f1d1d); }
-        .portal-btn:hover { transform: scale(1.05); }
-        .badge { background: #3b82f6; font-size: 12px; padding: 3px 8px; border-radius: 10px; vertical-align: middle; }
-        .social-btn { display: flex; align-items: center; justify-content: center; background: white; color: black; border: 1px solid #ccc; font-weight: normal; }
-        .social-btn:hover { background: #f1f5f9; }
-        .social-btn img { height: 20px; margin-right: 10px; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#187bc2">
+  <title>Vũ Môn · Hành trình tri thức</title>
+  <link rel="stylesheet" href="portal.css">
+  <link rel="stylesheet" href="/world_portal.css">
+  <link rel="stylesheet" href="/study_rank.css">
+  <link rel="stylesheet" href="/login_scene.css">
+  <script src="/login_scene.js" defer></script>
+<link rel="stylesheet" href="/system_client.css">
+<script src="/system_client.js" defer></script>
 </head>
-<body>
-    <div id="auth-section" class="container">
-        <h2 style="color:#facc15; margin-top:0;">🔐 Đăng Nhập <span class="badge">Java Backend</span></h2>
+<body class="game-portal">
+  <section id="auth-section" class="auth-layout"><div class="container">
+        <h2 style="color:#facc15; margin-top:0;">Chào bạn, nhà khám phá! <span class="badge">Vũ Môn</span></h2>
         <p id="auth-msg" style="color:#ef4444; font-size:0.9em; min-height: 1.2em;"></p>
         
         <!-- FORM ĐĂNG NHẬP -->
@@ -61,31 +52,76 @@
         <hr style="border-color: #334155; margin: 20px 0;">
         <p style="font-size: 0.9em; color:#94a3b8;">Hoặc đăng nhập bằng</p>
         <button class="social-btn" onclick="window.location.href='/auth/google'">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" alt="G"> Đăng nhập bằng Google
+            <span class="google-mark" aria-hidden="true">G</span> Đăng nhập bằng Google
         </button>
-    </div>
-
-    <!-- SẢNH GAME SAU KHI ĐĂNG NHẬP -->
-    <div id="portal-section" class="container hidden" style="width: 720px; max-width: 95%;">
-        <h1 style="color:#facc15; margin-bottom: 5px;">🎮 Game Portal</h1>
-        <p style="font-size: 1.1em;">Xin chào, <strong id="display-name" style="color:#60a5fa; font-size: 1.2em;"></strong>! <a href="#" id="btn-logout" style="color:#f87171; font-size:0.9em; margin-left:10px;">(Đăng xuất)</a></p>
-        
-        <div style="display:flex; gap:16px; justify-content:center; margin-top:25px; flex-wrap:wrap;">
-            <a href="arena.html" class="portal-btn btn-arena" style="flex:1; min-width:180px;">
-                <span style="font-size:2.2rem; margin-bottom:8px;">🏆</span>Đấu Trường 100
-                <small style="font-size: 0.8rem; opacity: 0.8;">(100 Clients - Đồng thời)</small>
-            </a>
-            <a href="wheel.html" class="portal-btn btn-wheel" style="flex:1; min-width:180px;">
-                <span style="font-size:2.2rem; margin-bottom:8px;">🎡</span>Chiếc Nón Kỳ Diệu
-                <small style="font-size: 0.8rem; opacity: 0.8;">(4 Players - Theo lượt)</small>
-            </a>
-            <a href="survival.html" class="portal-btn btn-survival" style="flex:1; min-width:180px;">
-                <span style="font-size:2.2rem; margin-bottom:8px;">💀</span>Đấu Trường Sinh Tử
-                <small style="font-size: 0.8rem; opacity: 0.8;">(Sinh Tồn - Trừ HP)</small>
-            </a>
+    </div></section>
+  <div id="portal-section" class="app game-shell hidden">
+    <header class="game-hud" id="game-hud">
+      <button class="world-brand" data-view="home" aria-label="Vũ Môn · Về bản đồ"><span class="world-brand-mark">V</span><span>VŨ MÔN<small>HÀNH TRÌNH TRI THỨC</small></span></button>
+      <div class="world-title"><span>✦</span> QUẦN ĐẢO VŨ MÔN <span>✦</span><small>CHỌN MỘT HÒN ĐẢO · BẮT ĐẦU HÀNH TRÌNH</small></div>
+      <div class="hud-player-area"><span id="server-state" class="connection">Đang kết nối…</span><details class="player-menu" id="player-menu"><summary class="player-card"><span class="avatar" id="avatar-initial">H</span><span class="player-identity"><strong id="display-name">Học viên</strong><small id="hud-rank">Đồng 3 · 0 RP</small></span><span class="player-chevron">▾</span></summary><div class="player-menu-content"><button data-view="profile">♙ Hồ sơ &amp; mật khẩu</button><button data-view="history">◷ Lịch sử trận đấu</button><a id="admin-nav" href="/admin" target="_blank" rel="noopener">⚙ Cổng quản trị ↗</a><button id="btn-logout" class="logout">↪ Đăng xuất</button></div></details></div>
+    </header>
+    <main id="main-content">
+      <section id="view-home" class="view">
+        <div class="world-map" id="world-map" aria-label="Bản đồ sáu đảo tương tác của Vũ Môn">
+          <div class="world-viewport" id="world-viewport"><div class="world-canvas" id="world-canvas">
+            <img class="world-background" src="/assets/world/sky-world.png" width="1376" height="768" alt="Quần đảo Vũ Môn lơ lửng giữa bầu trời, nối với nhau bằng các cây cầu" fetchpriority="high" draggable="false">
+            <svg class="world-hotspots" viewBox="0 0 1376 768" aria-label="Các đảo chế độ chơi">
+              <a href="#daily" data-view="daily" class="map-zone zone-daily" aria-label="Thử thách hằng ngày"><title>Thử thách hằng ngày · 10 câu hỏi · Nhận thẻ</title><polygon points="940,28 1087,50 1139,207 1154,291 1092,405 1017,450 927,400 852,334 831,252 867,171 926,146"></polygon></a>
+              <a href="#rank" data-view="rank" class="map-zone zone-rank" aria-label="Đấu xếp hạng"><title>Đấu xếp hạng · Chinh phục bậc rank</title><polygon points="1022,381 1128,383 1226,436 1256,552 1213,685 1124,750 1021,730 944,641 930,542 974,466"></polygon></a>
+              <a href="#leaderboard" data-view="leaderboard" class="map-zone zone-leaderboard" aria-label="Bảng xếp hạng"><title>Bảng xếp hạng · Những người dẫn đầu</title><polygon points="621,503 726,503 777,583 776,684 723,768 613,768 552,692 548,607 575,556"></polygon></a>
+              <a href="#pvp" data-view="pvp" class="map-zone zone-pvp" aria-label="Đấu thường PvP"><title>Đấu thường PvP · Cùng bạn bè tranh tài</title><polygon points="640,258 787,250 878,316 906,426 858,526 814,611 709,646 621,558 586,452 595,355"></polygon></a>
+              <a href="#practice" data-view="practice" class="map-zone zone-practice" aria-label="Phòng học"><title>Phòng học · Ôn luyện kiến thức</title><polygon points="235,139 365,114 492,139 553,241 557,331 509,400 435,447 341,445 271,373 218,293"></polygon></a>
+              <a href="#bot" data-view="bot" class="map-zone zone-bot" aria-label="Chơi với máy"><title>Chơi với máy · Luyện tập cùng bot</title><polygon points="300,371 456,361 516,415 546,529 506,637 450,708 343,726 241,667 196,585 184,501 229,432"></polygon></a>
+            </svg>
+            <button class="island-sign sign-daily" data-view="daily" style="--island-x:73.5%;--island-y:39.8%" tabindex="-1"><span>THỬ THÁCH NGÀY</span><small>10 câu hỏi · Nhận thẻ</small></button>
+            <button class="island-sign sign-rank" data-view="rank" style="--island-x:80%;--island-y:80.5%" tabindex="-1"><span>ĐẤU XẾP HẠNG</span><small>Chinh phục bậc rank</small></button>
+            <button class="island-sign sign-leaderboard" data-view="leaderboard" style="--island-x:48.4%;--island-y:82.5%" tabindex="-1"><span>BẢNG XẾP HẠNG</span><small>Những người dẫn đầu</small></button>
+            <button class="island-sign sign-pvp" data-view="pvp" style="--island-x:54.1%;--island-y:63%" tabindex="-1"><span>ĐẤU THƯỜNG</span><small>Cùng bạn bè tranh tài</small></button>
+            <button class="island-sign sign-practice" data-view="practice" style="--island-x:27.8%;--island-y:42.8%" tabindex="-1"><span>PHÒNG HỌC</span><small>Ôn luyện kiến thức</small></button>
+            <button class="island-sign sign-bot" data-view="bot" style="--island-x:24.5%;--island-y:75.3%" tabindex="-1"><span>ĐẤU VỚI MÁY</span><small>Luyện tập cùng bot</small></button>
+          </div></div>
+          <div class="world-vignette" aria-hidden="true"></div>
+          <div class="world-corner-note"><span class="compass-star">✧</span><div>THẾ GIỚI CỦA BẠN<small>Chạm vào đảo để khám phá</small></div></div>
+          <div class="world-pan-hint" id="world-pan-hint">↔ Vuốt bản đồ để khám phá các đảo</div>
         </div>
-    </div>
-
-    <script src="auth.js"></script>
-</body>
-</html>
+      </section>
+      <dialog id="portal-window" class="portal-window" aria-labelledby="breadcrumb-name"><header class="portal-window-header"><button data-view="home" class="window-back">← Bản đồ</button><div class="scene-brand"><span class="scene-brand-mark">V</span><div><strong>VŨ MÔN</strong><small id="scene-subtitle">Hành trình tri thức</small></div></div><h2 id="breadcrumb-name">Khám phá</h2><span id="study-streak" class="study-streak">Chuỗi đúng: <strong id="practice-streak">0</strong></span><button data-view="home" class="window-close" aria-label="Đóng cửa sổ">×</button></header><div class="portal-window-content">
+        <section id="view-games" class="view hidden"><div class="page-heading compact"><div><p class="eyebrow">CHƠI VUI, HỌC ĐIỀU HAY</p><h1>Quảng trường giải trí</h1><p>Giữ trọn ba trò chơi quen thuộc. Mọi trận ở đây đều không tính rank.</p></div></div><div id="games-list" class="game-grid"></div></section>
+        <section id="view-bot" class="view hidden"><div class="page-heading compact"><span class="destination-emblem emblem-bot" aria-hidden="true"><img src="/assets/world/bot.png" alt="" loading="lazy" decoding="async"></span><div><p class="eyebrow">LUYỆN TẬP KHÔNG ÁP LỰC</p><h1>Thử sức cùng máy</h1><p>Chọn Đường đua Kiến thức, Đấu Trường 100 hoặc Chiếc Nón để tạo phòng luyện với máy.</p></div></div><div id="bot-list" class="game-grid"></div><p class="info-note">Trong sảnh game, chọn “Tạo phòng”. Số bot được điền sẵn; khi bắt đầu, máy chủ sẽ điều khiển bot. Sinh Tử hiện dành cho người chơi thật.</p></section>
+        <section id="view-pvp" class="view hidden"><div class="page-heading compact"><span class="destination-emblem emblem-pvp" aria-hidden="true"><img src="/assets/world/pvp.png" alt="" loading="lazy" decoding="async"></span><div><p class="eyebrow">CÙNG BẠN BÈ TRANH TÀI</p><h1>Đấu thường PvP</h1><p>Tìm trận tự động hoặc tạo phòng riêng để cùng bạn bè tranh tài. Không cộng hoặc trừ rank.</p></div></div><div id="pvp-list" class="game-grid"></div><div id="room-summary" class="panel room-panel"></div></section>
+        <section id="view-practice" class="view hidden study-scene" aria-label="Phòng học ôn luyện">
+  <div class="study-layout">
+    <aside class="study-settings parchment-panel"><div class="study-settings-heading"><span class="study-emblem" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="M16 7C11 3 5 5 5 5v21s6-2 11 2c5-4 11-2 11-2V5s-6-2-11 2ZM16 7v21M9 10h3m-3 5h3m8-5h3m-3 5h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><h1>Thiết lập ôn luyện</h1><p>Tùy chỉnh chủ đề và độ khó</p></div></div>
+      <label for="practice-topic">CHỦ ĐỀ MÔN HỌC</label><select id="practice-topic"><option value="ALL">Tất cả chủ đề</option><option value="NETWORKING">Lập trình &amp; mạng máy tính</option><option value="SCIENCE">Khoa học &amp; công nghệ</option><option value="HISTORY">Lịch sử</option></select>
+      <label for="practice-difficulty">ĐỘ KHÓ THỬ THÁCH</label><select id="practice-difficulty" class="accessible-select"><option value="EASY">Dễ · Khởi động</option><option value="MEDIUM">Trung bình · Thử sức</option><option value="HARD">Khó · Chinh phục</option></select>
+      <div class="difficulty-choices" role="group" aria-label="Độ khó thử thách"><button type="button" data-difficulty="EASY" aria-pressed="true" class="selected"><strong>Dễ</strong><small>Khởi động</small></button><button type="button" data-difficulty="MEDIUM" aria-pressed="false"><strong>Trung bình</strong><small>Thử sức</small></button><button type="button" data-difficulty="HARD" aria-pressed="false"><strong>Khó</strong><small>Chinh phục</small></button></div>
+      <button id="practice-next" class="button primary study-start">Lưu và lấy câu hỏi mới <span>→</span></button>
+      <dl class="study-statistics" aria-live="polite"><div><dt>Đã trả lời</dt><dd id="practice-answered">0 câu</dd></div><div><dt>Số câu đúng</dt><dd id="practice-correct">0 câu</dd></div><div><dt>Chính xác</dt><dd id="practice-accuracy">0%</dd></div></dl><p class="study-session-note">Thống kê trong phiên đăng nhập.<br>Ôn luyện không ảnh hưởng rank.</p>
+    </aside>
+    <article class="study-question parchment-panel"><div class="study-question-heading"><span>GÓC LUYỆN TRÍ</span><small id="practice-context">Chọn chủ đề · Bắt đầu ôn luyện</small></div>
+      <div id="practice-stage" class="practice-stage is-empty"><span class="study-emblem" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="M16 7C11 3 5 5 5 5v21s6-2 11 2c5-4 11-2 11-2V5s-6-2-11 2ZM16 7v21M9 10h3m-3 5h3m8-5h3m-3 5h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><h2 id="practice-question">Chưa có câu hỏi</h2><div id="practice-options"></div><p id="practice-feedback" role="status" aria-live="polite">Chọn chủ đề và độ khó trong bảng Thiết lập ôn luyện, sau đó bấm “Lưu và lấy câu hỏi mới” để bắt đầu.</p></div>
+    </article>
+  </div>
+</section>
+        <section id="view-daily" class="view hidden"><div class="page-heading compact"><span class="destination-emblem emblem-daily" aria-hidden="true"><img src="/assets/world/daily.png" alt="" loading="lazy" decoding="async"></span><div><p class="eyebrow">KHÁM PHÁ THẾ GIỚI · MỖI NGÀY MỘT THỬ THÁCH</p><h1>Thử thách hằng ngày</h1><p>Một lượt mỗi ngày để ôn tập kiến thức Lập trình mạng và nhận thẻ thưởng.</p></div></div><article class="panel"><h2>10 câu hỏi Khó · Một cơ hội mỗi ngày</h2><p class="muted">Chinh phục các câu hỏi trong thời gian giới hạn. Đạt mục tiêu để nhận thẻ bảo vệ và thẻ x2 RP; kết quả thử thách không thay đổi rank. Lượt mới bắt đầu lúc 00:00 giờ Việt Nam.</p><a href="/race.html?mode=daily" class="button primary">Vào thử thách hằng ngày →</a></article></section>
+        <section id="view-rank" class="view hidden"><article class="coming-soon"><span class="destination-emblem emblem-rank" aria-hidden="true"><img src="/assets/world/rank.png" alt="" loading="lazy" decoding="async"></span><span class="large-icon">♜</span><p class="eyebrow">ĐƯỜNG ĐUA KIẾN THỨC · LẬP TRÌNH MẠNG</p><h1>Đỉnh vinh quang</h1><p>2–4 người, cùng một bộ 10–15 câu hỏi. Đúng và nhanh để tiến lên từ Đồng 3 đến Kim Cương 1.</p><div class="rank-rules"><p>✓ Mặc định 15 giây/câu; server chấm điểm</p><p>✓ Ghép theo rank gần nhau, điền bot sau 60 giây</p><p>✓ Bảo vệ khi lên bậc, không có chuỗi thăng hạng</p></div><a href="/race.html?mode=ranked" class="button primary">Bắt đầu đường đua xếp hạng →</a></article></section>
+        <section id="view-leaderboard" class="view hidden glory-scene" aria-label="Bảng xếp hạng toàn server">
+  <header class="glory-banner parchment-panel"><div><p class="eyebrow">VINH DANH CAO THỦ</p><h1>Bảng danh vọng</h1><p>Những nhà thám hiểm xuất sắc nhất trên toàn server</p></div><span class="destination-emblem emblem-leaderboard" aria-hidden="true"><img src="/assets/world/leaderboard.png" alt="" decoding="async"></span></header>
+  <div id="portal-ranked-board" class="glory-layout" aria-live="polite"><p class="parchment-panel board-state">Đang tải bảng xếp hạng…</p></div>
+  <footer class="glory-footer"><p>Xếp theo bậc rank và RP · Ba game giải trí không cộng điểm rank.</p><button type="button" id="refresh-rank-board" class="glory-refresh">↻ Cập nhật bảng</button><a href="/race.html?mode=ranked">Vào đấu xếp hạng →</a><small id="board-updated"></small></footer>
+  <details class="legacy-archive parchment-panel"><summary>Thành tích Đấu Trường 100 trước đây</summary><p>Dữ liệu cũ để tham khảo, tách biệt với bảng rank hiện tại.</p><div id="legacy-leaderboard"></div></details>
+</section>
+        <section id="view-history" class="view hidden"><div class="page-heading compact"><div><p class="eyebrow">TỪNG LƯỢT CHƠI ĐỀU CÓ DẤU ẤN</p><h1>Lịch sử trận của bạn</h1><p>30 trận gần nhất kể từ bản cập nhật này, được lưu tại máy chủ.</p></div><button id="refresh-history" class="button secondary">↻ Làm mới</button></div><article class="panel"><div id="full-history"></div></article><article class="panel"><h2>Đường đua · Rank / Đấu thường / Thử thách ngày</h2><div id="portal-race-history"></div></article></section>
+        <section id="view-profile" class="view hidden"><div class="page-heading compact"><div><p class="eyebrow">HỒ SƠ HỌC VIÊN</p><h1>Hành trình của tôi</h1></div></div><div class="profile-layout"><article class="panel profile-card"><span id="profile-avatar" class="avatar large">H</span><h2 id="profile-name"></h2><p id="profile-email" class="muted"></p><span id="profile-role" class="status-pill"></span><div class="profile-ranks"><div><small>RANK HIỆN TẠI</small><strong id="profile-current-rank">Chưa xếp hạng</strong><span id="profile-current-points">0 điểm</span></div><div><small>RANK CAO NHẤT</small><strong id="profile-highest-rank">Chưa xếp hạng</strong><span id="profile-highest-points">0 điểm</span></div></div><p class="muted">Đường đua xếp hạng đã mở. Ba game giải trí vẫn không cộng rank.</p><button data-view="history" class="button secondary">Xem lịch sử trận →</button></article><article class="panel profile-password"><h2>Đổi mật khẩu</h2><p class="muted">Sau khi đổi, các phiên đăng nhập của tài khoản sẽ kết thúc.</p><form id="player-password-form"><label for="player-current-password">Mật khẩu hiện tại</label><input id="player-current-password" type="password" autocomplete="current-password" required maxlength="128"><label for="player-new-password">Mật khẩu mới · 8–128 ký tự</label><input id="player-new-password" type="password" autocomplete="new-password" required minlength="8" maxlength="128"><label for="player-confirm-password">Xác nhận mật khẩu mới</label><input id="player-confirm-password" type="password" autocomplete="new-password" required minlength="8" maxlength="128"><p id="player-password-message" role="status" aria-live="polite"></p><button id="player-password-submit" class="button primary">Đổi mật khẩu</button></form><div id="google-password-help" class="hidden"><p class="muted">Bạn đăng nhập bằng Google và chưa biết mật khẩu hiện tại? Nhận mã qua email để đặt mật khẩu.</p><button id="player-password-reset" class="button secondary" type="button">Nhận mã đặt mật khẩu →</button></div></article></div></section>
+        <p id="portal-message" class="portal-message hidden" role="status" aria-live="polite"></p>
+      </div></dialog>
+    </main>
+    <nav class="world-quick-islands" aria-label="Lối tắt tới các đảo trên điện thoại"><button data-view="daily" aria-label="Thử thách hằng ngày" title="Thử thách hằng ngày"><span class="quick-art quick-daily"><img src="/assets/world/daily.png" alt="" loading="lazy" decoding="async"></span><small>Thử thách</small></button><button data-view="rank" aria-label="Đấu xếp hạng" title="Đấu xếp hạng"><span class="quick-art quick-rank"><img src="/assets/world/rank.png" alt="" loading="lazy" decoding="async"></span><small>Đấu hạng</small></button><button data-view="leaderboard" aria-label="Bảng xếp hạng" title="Bảng xếp hạng"><span class="quick-art quick-leaderboard"><img src="/assets/world/leaderboard.png" alt="" loading="lazy" decoding="async"></span><small>Xếp hạng</small></button><button data-view="pvp" aria-label="Đấu thường PvP" title="Đấu thường PvP"><span class="quick-art quick-pvp"><img src="/assets/world/pvp.png" alt="" loading="lazy" decoding="async"></span><small>Đấu thường</small></button><button data-view="practice" aria-label="Phòng học" title="Phòng học"><span class="quick-art quick-practice"><img src="/assets/world/practice.png" alt="" loading="lazy" decoding="async"></span><small>Phòng học</small></button><button data-view="bot" aria-label="Chơi với máy" title="Chơi với máy"><span class="quick-art quick-bot"><img src="/assets/world/bot.png" alt="" loading="lazy" decoding="async"></span><small>Đấu máy</small></button></nav>
+    <nav class="game-dock" id="game-dock" aria-label="Cá nhân và giải trí"><button data-view="profile"><span>♙</span> Hồ sơ</button><button data-view="history"><span>◷</span> Lịch sử</button><button data-view="games" class="dock-games"><span>🎮</span> Góc giải trí <small>3 GAME</small></button><button id="btn-fullscreen" aria-label="Bật toàn màn hình"><span>⛶</span> Toàn màn hình</button></nav>
+    <div class="world-signature" aria-hidden="true">VŨ MÔN <span>✦</span> CHƠI ĐỂ KHÁM PHÁ</div>
+    <p id="world-toast" class="world-toast hidden" role="status" aria-live="polite"></p>
+  </div>
+  <script src="auth.js"></script>
+  <script src="portal.js"></script>
+</body></html>

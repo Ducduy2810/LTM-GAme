@@ -5,6 +5,7 @@
 
 const wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
 const socket = new WebSocket(wsUrl);
+const escapeGameHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 const screens = {
     lobby:   document.getElementById('lobby-screen'),
@@ -40,6 +41,13 @@ let isCurrentUserAdmin  = false;
 let currentRoomCode     = '';
 let currentRoomInfo     = null;
 let isMyHost            = false;
+let ownerRoomState      = 'WAITING';
+function refreshOwnerDeleteControls(state=ownerRoomState){
+    ownerRoomState=state;
+    const allowed=(isMyHost||isCurrentUserAdmin)&&['WAITING','END'].includes(state)&&currentRoomCode&&currentRoomCode!=='DT100';
+    document.getElementById('btn-delete-room').style.display=allowed?'inline-block':'none';
+    document.getElementById('btn-delete-room-game').style.display='none';
+}
 
 // Vai trò trong trận
 let amIMainPlayer = false;     // Tôi có là Người Chơi Chính không?
@@ -211,6 +219,10 @@ socket.onclose = () => console.log('WebSocket đóng kết nối');
 
 socket.onmessage = (event) => {
     const data = JSON.parse(event.data);
+    if(data.type === "auth_error" && window.SystemClient){window.SystemClient.handleAuthError(data);return;}
+
+    window.RoomHostTools?.observe(data,{currentUsername,roomCode:currentRoomCode,game:'arena',send:payload=>socket.send(JSON.stringify(payload))});
+
 
     if (data.type === 'auth_error' || data.type === 'arena_error') {
         alert(data.message);
@@ -244,9 +256,7 @@ socket.onmessage = (event) => {
                 `[${data.topicName || data.topic}] • [${data.difficultyName || data.difficulty}] • ${data.questionCount} câu • ⏱️ Phụ ${data.timeLimit}s → Chính ${data.mainPlayerTimeLimit}s • Bot: ${data.botCount}`;
 
             isMyHost = Boolean(data.isHost);
-            const mayDelete = (isMyHost || isCurrentUserAdmin) && data.roomCode !== 'DT100';
-            document.getElementById('btn-delete-room').style.display = mayDelete ? 'inline-block' : 'none';
-            document.getElementById('btn-delete-room-game').style.display = mayDelete ? 'inline-block' : 'none';
+            refreshOwnerDeleteControls(data.gameState||'WAITING');
             if (data.gameState === 'WAITING' || data.gameState === 'END') showScreen('waiting');
             break;
         }
@@ -298,12 +308,12 @@ socket.onmessage = (event) => {
         case 'arena_life_trust':
             lifeTrustUsed = true;
             updateLifelineButtons();
-            showLifelineResult(`👁 ${data.opponentUsername} đã chọn đáp án: <strong>${'ABCD'[data.opponentAnswer]}</strong>`);
+            showLifelineResult(`👁 ${escapeGameHtml(data.opponentUsername)} đã chọn đáp án: <strong>${'ABCD'[data.opponentAnswer]}</strong>`);
             break;
         case 'arena_life_ask':
             lifeAskUsed = true;
             updateLifelineButtons();
-            showLifelineResult(`👁 ${data.opponentUsername} đã chọn đáp án: <strong>${'ABCD'[data.opponentAnswer]}</strong>`);
+            showLifelineResult(`👁 ${escapeGameHtml(data.opponentUsername)} đã chọn đáp án: <strong>${'ABCD'[data.opponentAnswer]}</strong>`);
             break;
 
         case 'arena_life_survey':
@@ -363,7 +373,7 @@ function handleUpdatePlayers(data) {
         else if (p.isReady)             readyTag = '<span class="ready-badge is-ready" style="margin-left:6px;">✅ Sẵn sàng</span>';
         else                            readyTag = '<span class="ready-badge not-ready" style="margin-left:6px;">⏳ Chưa sẵn sàng</span>';
 
-        chip.innerHTML = `👤 ${p.username} ${roleTag} ${readyTag}`;
+        chip.innerHTML = `👤 ${escapeGameHtml(p.username)} ${roleTag} ${readyTag}`;
         list.appendChild(chip);
     });
 
@@ -381,6 +391,7 @@ function handleUpdatePlayers(data) {
     renderPodiums(data.players);
 
     isMyHost = (data.hostUsername && data.hostUsername === currentUsername);
+    refreshOwnerDeleteControls(data.gameState||ownerRoomState);
     const canIControl = isMyHost || isCurrentUserAdmin;
     const mainMode = document.getElementById('waiting-main-mode');
     const mainPlayer = document.getElementById('waiting-main-player');
@@ -461,6 +472,7 @@ function handleUpdatePlayers(data) {
 
 // ── 5. HANDLER: BẮT ĐẦU TRẬN ────────────────────────────────────
 function handleGameStarted(data) {
+    refreshOwnerDeleteControls('STARTING');
     resetGameState();
     totalInitialOpponents = data.totalOpponents || 0;
     aliveOpponents        = totalInitialOpponents;
@@ -543,7 +555,7 @@ function handleNewQuestion(data) {
         btn.className = 'answer-btn option-btn';
         btn.innerHTML = `
             <span class="answer-letter">${letters[index] || ''}</span>
-            <span class="answer-text">${opt}</span>
+            <span class="answer-text">${escapeGameHtml(opt)}</span>
         `;
         if (!canAnswer) btn.disabled = true;
         btn.onclick = () => selectAnswer(index, btn);
@@ -566,7 +578,7 @@ function handleNewQuestion(data) {
     // YÊU CẦU 5: Hiển thị nút pause/resume cho host/admin
     const pauseControls = document.getElementById('pause-controls');
     if (pauseControls) {
-        pauseControls.style.display = (isMyHost || isCurrentUserAdmin) ? 'flex' : 'none';
+        pauseControls.style.display = isCurrentUserAdmin ? 'flex' : 'none';
     }
     document.getElementById('btn-pause-game').style.display = gamePaused ? 'none' : 'inline-block';
     document.getElementById('btn-resume-game').style.display = gamePaused ? 'inline-block' : 'none';
@@ -819,7 +831,7 @@ function renderLeaderboard(entries = [], tbodyId, directEl) {
             const isMe = e.username === currentUsername;
             html += `<div style="display:flex; align-items:center; gap:10px; padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.06); ${isMe ? 'color:#fde047;' : 'color:#e2e8f0;'}">
                 <span style="width:22px; text-align:center;">${medals[i] || (i+1)}</span>
-                <span style="flex:1; font-weight:${isMe?'800':'400'};">${e.username}</span>
+                <span style="flex:1; font-weight:${isMe?'800':'400'};">${escapeGameHtml(e.username)}</span>
                 <span style="color:#10b981; font-size:12px;">${e.rankPoints || 0} pts</span>
                 <span style="color:#94a3b8; font-size:11px;">${e.totalWins || 0}W</span>
             </div>`;
@@ -832,7 +844,7 @@ function renderLeaderboard(entries = [], tbodyId, directEl) {
             const isMe = e.username === currentUsername;
             html += `<tr style="${isMe ? 'color:#fde047; font-weight:700; background:rgba(253,224,71,0.05);' : ''}">
                 <td style="padding:6px 8px;">${medals[i] || (i+1)}</td>
-                <td style="padding:6px 8px;">${e.username}</td>
+                <td style="padding:6px 8px;">${escapeGameHtml(e.username)}</td>
                 <td style="padding:6px 8px; text-align:center; color:#10b981; font-weight:700;">${e.rankPoints || 0}</td>
                 <td style="padding:6px 8px; text-align:center;">${e.totalWins || 0}</td>
                 <td style="padding:6px 8px; text-align:center;">${e.totalGames || 0}</td>
@@ -863,7 +875,7 @@ function renderRoomList(rooms = []) {
         const statusText  = isPlaying ? 'Đang Đấu'  : 'Đang Chờ';
 
         let adminDeleteBtn = '';
-        if ((isCurrentUserAdmin || r.hostUsername.toLowerCase() === currentUsername.toLowerCase()) && r.roomCode !== 'DT100') {
+        if ((isCurrentUserAdmin||(r.hostUsername||'').toLowerCase()===(currentUsername||'').toLowerCase()) && ['WAITING','END'].includes(r.gameState) && r.roomCode !== 'DT100') {
             adminDeleteBtn = `<button class="btn-join-card" style="background:#ef4444; border-color:#dc2626; margin-left:6px;" onclick="closeRoomByAdmin('${r.roomCode}')">Đóng</button>`;
         }
 
@@ -873,8 +885,8 @@ function renderRoomList(rooms = []) {
                     <span class="room-code-badge">${r.roomCode}</span>
                     <span class="room-status-badge ${statusClass}">${statusText}</span>
                 </div>
-                <div class="room-card-title">${r.roomName}</div>
-                <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">👑 Chủ phòng: <strong>${r.hostUsername}</strong></div>
+                <div class="room-card-title">${escapeGameHtml(r.roomName)}</div>
+                <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">👑 Chủ phòng: <strong>${escapeGameHtml(r.hostUsername)}</strong></div>
                 <div class="room-card-tags">
                     <span class="room-tag">📚 ${r.topicName}</span>
                     <span class="room-tag">⚡ ${r.difficultyName}</span>
@@ -900,6 +912,8 @@ window.joinRoomByCode = function(code) {
 };
 
 window.closeRoomByAdmin = function(code) {
+    if(!isCurrentUserAdmin&&!isMyHost)return;
+    if(!isCurrentUserAdmin&&!['WAITING','END'].includes(ownerRoomState))return;
     if (confirm(`Bạn có chắc chắn muốn đóng phòng [${code}]?`)) {
         socket.send(JSON.stringify({ type: 'close_arena_room', roomCode: code }));
     }
@@ -1128,9 +1142,11 @@ window.addEventListener('beforeunload', () => socket.close());
 
 // YÊU CẦU 5: Tạm dừng và tiếp tục trận đấu
 document.getElementById('btn-pause-game').addEventListener('click', () => {
+    if(!isCurrentUserAdmin)return;
     socket.send(JSON.stringify({ type: 'arena_pause_game' }));
 });
 document.getElementById('btn-resume-game').addEventListener('click', () => {
+    if(!isCurrentUserAdmin)return;
     socket.send(JSON.stringify({ type: 'arena_resume_game' }));
 });
 

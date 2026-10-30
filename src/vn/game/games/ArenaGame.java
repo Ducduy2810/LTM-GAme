@@ -32,7 +32,7 @@ public class ArenaGame implements AutoCloseable {
 
     private void initDefaultRoom() {
         ArenaRoom defaultRoom = new ArenaRoom(
-                DEFAULT_ROOM_CODE, "Sàn Đấu Mặc Định VTV3", "DuyNguyen",
+                DEFAULT_ROOM_CODE, "Sàn Đấu Mặc Định VTV3", "",
                 "ALL", "MEDIUM", 15, 5, 100,
                 userRepository, scheduler
         );
@@ -41,7 +41,6 @@ public class ArenaGame implements AutoCloseable {
 
     public boolean isAdmin(String username) {
         if (username == null) return false;
-        if ("admin".equalsIgnoreCase(username) || "DuyNguyen".equalsIgnoreCase(username)) return true;
         if (userRepository != null) {
             return userRepository.isAdmin(username);
         }
@@ -102,6 +101,9 @@ public class ArenaGame implements AutoCloseable {
     // 2. TẠO PHÒNG MỚI (CREATE ROOM)
     // ==========================================
     public synchronized void handleCreateRoom(WebSocketClient client, Map<String, Object> req) {
+        String denied=vn.game.db.AdminStore.newMatchDenied("ARENA");
+        if(denied!=null){sendError(client,denied);return;}
+        req=vn.game.db.AdminStore.applyDefaults("ARENA",req);
         String username = client.getUsername();
         if (username == null) return;
 
@@ -113,6 +115,7 @@ public class ArenaGame implements AutoCloseable {
             if (code.isEmpty()) code = "P" + (1000 + new Random().nextInt(9000));
         }
 
+        if (!code.matches("[A-Z0-9_-]{1,32}")) {sendError(client,"Invalid room code: use 1-32 letters, digits, _ or -.");return;}
         if (rooms.containsKey(code)) {
             sendError(client, "Mã phòng [" + code + "] đã tồn tại! Vui lòng chọn mã khác.");
             return;
@@ -237,6 +240,8 @@ public class ArenaGame implements AutoCloseable {
     }
 
     public void handleStartGame(WebSocketClient client) {
+        String denied=vn.game.db.AdminStore.newMatchDenied("ARENA");
+        if(denied!=null){sendError(client,denied);return;}
         ArenaRoom room = clientRoomMap.get(client);
         if (room != null) {
             room.handleStartGame(client);
@@ -338,25 +343,93 @@ public class ArenaGame implements AutoCloseable {
         }
     }
 
-    public synchronized void handleAdminCloseRoom(WebSocketClient client, String roomCode) {
-        if (roomCode == null) return;
-        roomCode = roomCode.trim().toUpperCase(Locale.ROOT);
-        ArenaRoom room = rooms.get(roomCode);
-        if (room == null) { sendError(client, "Phòng không còn tồn tại."); return; }
-        if (!room.isHost(client.getUsername()) && !isAdmin(client.getUsername())) {
-            sendError(client, "Chỉ chủ phòng hoặc admin được xóa phòng."); return;
+    public synchronized void handleAdminCloseRoom(WebSocketClient client, String code) {
+        if(code==null){sendError(client,"Thiếu mã phòng.");return;}
+        code=code.trim().toUpperCase(Locale.ROOT);
+        ArenaRoom room=rooms.get(code);
+        if(room==null){sendError(client,"Phòng không còn tồn tại.");return;}
+        if(isAdmin(client.getUsername())) {
+            adminCancelRoom(code,"Quản trị viên hủy phòng");return;
         }
-        if (DEFAULT_ROOM_CODE.equalsIgnoreCase(roomCode)) { sendError(client, "Không thể xóa phòng mặc định."); return; }
-        rooms.remove(roomCode);
+        // Starting a match and checking its idle state use the same room monitor.
+        synchronized(room) {
+            if(clientRoomMap.get(client)!=room||!room.isHost(client.getUsername())) {
+                sendError(client,"Chỉ chủ phòng được xóa phòng chờ của mình.");return;
+            }
+            if(DEFAULT_ROOM_CODE.equalsIgnoreCase(code)) {sendError(client,"Không được xóa phòng mặc định.");return;}
+            if(!Set.of("WAITING","END").contains(room.getGameState())) {
+                sendError(client,"Trận đấu đang diễn ra. Chủ phòng chỉ được xóa khi ở sảnh chờ.");return;
+            }
+            try{vn.game.db.AdminStore.audit(client.getUsername(),"HOST_ROOM_DELETE","ARENA:"+code,Map.of("state",room.getGameState()));}
+            catch(java.sql.SQLException e){sendError(client,"Không ghi được nhật ký. Vui lòng thử lại.");return;}
+            adminCancelRoom(code,"Chủ phòng đã xóa phòng chờ");
+        }
+    }
+
+    public synchronized void adminCancelRoom(String code,String reason) {
+        if(code==null)throw new IllegalArgumentException("Thiếu mã phòng.");
+        code=code.trim().toUpperCase(Locale.ROOT);
+        ArenaRoom room=rooms.remove(code);
+        if(room==null)throw new IllegalArgumentException("Phòng không còn tồn tại.");
+        String notification=reason+(Set.of("WAITING","END").contains(room.getGameState())?".":". Trận đấu đã hủy.");
         room.close();
-        for (Map.Entry<WebSocketClient, ArenaRoom> entry : new ArrayList<>(clientRoomMap.entrySet())) {
-            if (entry.getValue() == room) {
-                WebSocketClient member = entry.getKey();
-                clientRoomMap.remove(member);
-                lobbyClients.add(member);
-                member.send(JsonUtil.toJson(Map.of("type", "arena_room_closed", "message", "Phòng đã bị xóa bởi chủ phòng hoặc admin. Trận đấu được hủy.")));
+        for (Map.Entry<WebSocketClient,ArenaRoom> entry:new ArrayList<>(clientRoomMap.entrySet())) {
+            if(entry.getValue()==room) {
+                WebSocketClient member=entry.getKey();clientRoomMap.remove(member);
+                member.send(JsonUtil.toJson(Map.of("type","arena_room_closed","message",notification)));
+                registerLobbyClient(member);
             }
         }
+        if(DEFAULT_ROOM_CODE.equalsIgnoreCase(code))initDefaultRoom();
+        broadcastRoomListToLobby();
+    }
+
+    public synchronized List<Map<String,Object>> adminRooms() {
+        List<Map<String,Object>> result=new ArrayList<>();
+        for(ArenaRoom room:rooms.values()) {
+            Map<String,Object> row=new LinkedHashMap<>(room.toSummaryMap());
+            row.put("game","ARENA");
+            List<Map<String,Object>> members=new ArrayList<>();
+            for(Map.Entry<WebSocketClient,ArenaRoom> entry:clientRoomMap.entrySet())if(entry.getValue()==room)
+                members.add(Map.of("username",entry.getKey().getUsername(),"host",room.isHost(entry.getKey().getUsername())));
+            row.put("members",members);result.add(row);
+        }return result;
+    }
+
+    public synchronized void adminNotice(String code,String message) {
+        ArenaRoom room=rooms.get(code.toUpperCase(Locale.ROOT));
+        if(room==null)throw new IllegalArgumentException("Phòng không còn tồn tại.");
+        for(Map.Entry<WebSocketClient,ArenaRoom> entry:clientRoomMap.entrySet())if(entry.getValue()==room)
+            entry.getKey().send(JsonUtil.toJson(Map.of("type","server_notice","message",message)));
+    }
+
+    public synchronized void adminKick(String code,String target,String actor,String reason) {
+        ArenaRoom room=rooms.get(code.toUpperCase(Locale.ROOT));
+        if(room==null)throw new IllegalArgumentException("Phòng không còn tồn tại.");
+        kickMember(room,target,actor,true,reason);
+    }
+
+    public synchronized void handleHostKick(WebSocketClient actor,String target) {
+        ArenaRoom room=clientRoomMap.get(actor);
+        if(room==null||!room.isHost(actor.getUsername())) {sendError(actor,"Chỉ chủ phòng được kick thành viên.");return;}
+        try {kickMember(room,target,actor.getUsername(),false,"Chủ phòng đã mời bạn rời phòng.");}
+        catch(IllegalArgumentException e){sendError(actor,e.getMessage());}
+    }
+
+    private void kickMember(ArenaRoom room,String target,String actor,boolean admin,String reason) {
+        if(target==null||target.isBlank())throw new IllegalArgumentException("Hãy chọn người chơi cần kick.");
+        if(!admin&&(actor.equalsIgnoreCase(target)||isAdmin(target)))throw new IllegalArgumentException("Không thể kick bản thân hoặc quản trị viên.");
+        WebSocketClient member=null;
+        for(Map.Entry<WebSocketClient,ArenaRoom> entry:clientRoomMap.entrySet())
+            if(entry.getValue()==room&&target.equalsIgnoreCase(entry.getKey().getUsername())){member=entry.getKey();break;}
+        if(member==null)throw new IllegalArgumentException("Người chơi không ở trong phòng này.");
+        try {vn.game.db.AdminStore.audit(actor,admin?"ADMIN_KICK":"HOST_KICK","ARENA:"+room.getRoomCode(),Map.of("target",target,"reason",reason));}
+        catch(java.sql.SQLException e){throw new IllegalStateException("Không ghi được nhật ký kick.",e);}
+        room.banPlayer(target);
+        handleLeaveRoom(member);
+        member.send(JsonUtil.toJson(Map.of("type","room_kicked","game","ARENA","roomCode",room.getRoomCode(),"message",reason)));
+        for(Map.Entry<WebSocketClient,ArenaRoom> entry:clientRoomMap.entrySet())if(entry.getValue()==room)
+            entry.getKey().send(JsonUtil.toJson(Map.of("type","server_notice","message",target+" đã bị mời rời phòng.")));
         broadcastRoomListToLobby();
     }
 

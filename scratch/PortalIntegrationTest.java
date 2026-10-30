@@ -122,8 +122,17 @@ public class PortalIntegrationTest {
                 check(guest.last("left_wheel_room")!=null,"closed wheel room returns members to lobby");
                 System.out.println("PASS: "+checks+" portal integration checks");
                 if(args.length>1 && args[1].equals("preview")){
+                    if(args.length>2 && args[2].equals("study")){
+                        // Only populate the isolated preview database, never the application database.
+                        for(int i=0;i<12;i++){
+                            String name="Explorer"+(i+1);repo.register(name,name+"@example.com","TestOnlyPass123");
+                            try(var c=AdminStore.connect();var ps=c.prepareStatement("INSERT INTO player_ranks(user_id,current_tier,current_step,current_points,highest_tier,highest_step,highest_points,ranked_games,ranked_wins,updated_at) SELECT id,'DIAMOND',14,?,'DIAMOND',14,?,10,5,? FROM users WHERE username=?")){
+                                ps.setInt(1,250-i*12);ps.setInt(2,250-i*12);ps.setLong(3,System.currentTimeMillis());ps.setString(4,name);ps.executeUpdate();
+                            }
+                        }
+                    }
                     System.out.println("PREVIEW_URL="+base);
-                    long until=System.currentTimeMillis()+300_000;
+                    long until=System.currentTimeMillis()+900_000;
                     while(!Files.exists(Path.of("stop-preview"))&&System.currentTimeMillis()<until)Thread.sleep(250);
                 }
             }finally{server.stop();thread.join(2000);}

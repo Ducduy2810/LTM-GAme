@@ -1,4 +1,7 @@
 import vn.game.games.SurvivalGame;
+import vn.game.db.DatabaseManager;
+import vn.game.db.UserRepository;
+import vn.game.model.User;
 import vn.game.games.SurvivalRoom;
 import vn.game.model.Question;
 import vn.game.model.QuestionBank;
@@ -12,8 +15,14 @@ import java.util.concurrent.*;
 
 public class SurvivalRulesIntegrationTest {
     private static int checks;
+    private static UserRepository repository;
+    private static final Client ADMIN=new Client("operator");
     public static void main(String[] args) throws Exception {
         if (!Files.exists(Path.of(".survival-test"))) throw new IllegalStateException("Use test_survival_rules.ps1");
+        DatabaseManager.getInstance().init();
+        repository=new UserRepository(DatabaseManager.getInstance());
+        User operator=repository.register("operator",null,"TestOnlyPass123");operator.setRole("admin");repository.update(operator);
+        try {
         earlyResultsAndFeedback();
         timeoutAndEliminatedPlayers();
         pauseAndResume();
@@ -21,6 +30,7 @@ public class SurvivalRulesIntegrationTest {
         reconnectAndDeadline();
         deleteRooms();
         System.out.println("PASS: " + checks + " Survival rules integration checks.");
+        } finally { DatabaseManager.getInstance().close(); }
     }
 
     private static void earlyResultsAndFeedback() throws Exception {
@@ -83,7 +93,7 @@ public class SurvivalRulesIntegrationTest {
             t.start();
             t.room.handlePauseGame(t.clients.get(1));
             check(t.clients.get(1).count("survival_error") == 1, "guest cannot pause");
-            t.room.handlePauseGame(t.owner);
+            t.room.handlePauseGame(ADMIN);
             Map<String,Object> paused = t.owner.last("survival_game_paused");
             double remaining = ((Number)paused.get("remainingTime")).doubleValue();
             check(remaining > 0 && remaining <= 1.001, "pause saves exact remaining question time");
@@ -94,7 +104,7 @@ public class SurvivalRulesIntegrationTest {
             check(t.owner.count("survival_answer_locked") == 0 && t.clients.get(1).count("survival_answer_locked") == 0, "pause blocks all submissions");
             t.room.handleResumeGame(t.clients.get(1));
             check(t.clients.get(1).count("survival_error") == 2, "guest cannot resume");
-            t.room.handleResumeGame(t.owner);
+            t.room.handleResumeGame(ADMIN);
             check(((Number)t.owner.last("survival_game_resumed").get("remainingTime")).doubleValue() == remaining, "resume uses saved remaining time");
             Map<String,Object> result = t.owner.await("survival_round_result",0,1800);
             check(personal(result).get("status").equals("UNANSWERED"), "resumed timeout scores no answer accurately");
@@ -104,17 +114,17 @@ public class SurvivalRulesIntegrationTest {
     private static void pauseStartingAndResult() throws Exception {
         try (Trial t = new Trial(2,100,20)) {
             t.room.handleStartGame(t.owner);
-            t.room.handlePauseGame(t.owner);
+            t.room.handlePauseGame(ADMIN);
             Thread.sleep(1600);
             check(t.owner.count("survival_new_question") == 0, "pause freezes starting countdown");
-            t.room.handleResumeGame(t.owner);
+            t.room.handleResumeGame(ADMIN);
             int correct = correct(t.owner.await("survival_new_question",0,2200));
             t.room.handleSubmitAnswer(t.owner,correct); t.room.handleSubmitAnswer(t.clients.get(1),correct);
-            t.room.handlePauseGame(t.owner);
+            t.room.handlePauseGame(ADMIN);
             check(t.owner.last("survival_game_paused").get("gameState").equals("RESULT"), "result interval can also be paused");
             Thread.sleep(5100);
             check(t.owner.count("survival_new_question") == 1, "paused result does not advance to next question");
-            t.room.handleResumeGame(t.owner);
+            t.room.handleResumeGame(ADMIN);
             check(((Number)t.owner.last("survival_game_resumed").get("remainingTime")).doubleValue() > 4.5, "result countdown resumes with preserved time");
         }
     }
@@ -123,7 +133,7 @@ public class SurvivalRulesIntegrationTest {
         try (Trial t = new Trial(2,100,20)) {
             int correct = correct(t.start());
             t.room.handleSubmitAnswer(t.owner,correct);
-            t.room.handlePauseGame(t.owner);
+            t.room.handlePauseGame(ADMIN);
             Client replacement = new Client("owner");
             check(t.room.handleJoin(replacement), "existing player may reconnect");
             Map<String,Object> q = replacement.last("survival_new_question");
@@ -131,7 +141,7 @@ public class SurvivalRulesIntegrationTest {
             check(num(q,"selectedAnswer") == correct, "reconnect preserves selected answer");
             t.room.handleLeave(t.owner);
             check(t.room.isHost("owner"), "old connection cannot transfer host after replacement");
-            t.room.handleResumeGame(replacement);
+            t.room.handleResumeGame(ADMIN);
             t.room.handleSubmitAnswer(t.clients.get(1),correct);
             check(replacement.count("survival_round_result") == 1, "replacement connection participates in all-answered logic");
         }
@@ -151,7 +161,10 @@ public class SurvivalRulesIntegrationTest {
     }
 
     private static void deleteRooms() throws Exception {
-        try (SurvivalGame game = new SurvivalGame()) {
+        UserRepository users=new UserRepository(DatabaseManager.getInstance());
+        User adminUser=users.register("admin","admin@example.com","TestOnlyPass123");
+        adminUser.setRole("admin");users.update(adminUser);
+        try (SurvivalGame game = new SurvivalGame(users)) {
             Client owner = new Client("owner"), guest = new Client("guest"), outsider = new Client("outsider");
             game.handleCreateRoom(owner,Map.of("roomCode","RULES","roomName","Rules","topic","ALL","startingHp",100,"totalRounds",5));
             game.handleJoinRoom(guest,"RULES");
@@ -159,17 +172,17 @@ public class SurvivalRulesIntegrationTest {
             check(outsider.count("survival_error") == 1, "outsider cannot delete room");
             game.handleToggleReady(guest); game.handleStartGame(owner);
             game.handlePauseGame(owner);
-            check(owner.count("survival_game_paused") == 1, "game routes pause request");
+            check(owner.count("survival_game_paused") == 0, "owner pause request denied");
             game.handleResumeGame(owner);
-            check(owner.count("survival_game_resumed") == 1, "game routes resume request");
-            game.handleAdminCloseRoom(owner,"RULES");
-            check(owner.count("survival_room_closed") == 1 && guest.count("survival_room_closed") == 1, "owner deletion notifies all members");
+            check(owner.count("survival_game_resumed") == 0, "owner resume request denied");
+            game.handleAdminCloseRoom(new Client("admin"),"RULES");
+            check(owner.count("survival_room_closed") == 1 && guest.count("survival_room_closed") == 1, "admin cancellation notifies all members");
             check(game.getRoomsSummaryList().stream().noneMatch(r -> r.get("roomCode").equals("RULES")), "deleted room disappears from lobby");
             Thread.sleep(1600);
             check(owner.count("survival_new_question") == 0, "deleting starting room cancels countdown");
             Client admin = new Client("admin");
             game.handleAdminCloseRoom(admin,"DTST");
-            check(admin.count("survival_error") == 1, "system default room protected");
+            check(game.getRoomsSummaryList().stream().anyMatch(r->r.get("roomCode").equals("DTST")), "system default room recreated after cancellation");
             game.handleCreateRoom(owner,Map.of("roomCode","ADMIN","topic","ALL"));
             game.handleAdminCloseRoom(admin,"ADMIN");
             check(owner.count("survival_room_closed") == 2, "admin can delete custom room");
@@ -185,7 +198,7 @@ public class SurvivalRulesIntegrationTest {
         final ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(1);
         final List<Client> clients = new ArrayList<>(); final Client owner; final SurvivalRoom room;
         Trial(int count,int hp,int seconds) {
-            room = new SurvivalRoom("TRIAL","Trial","owner","ALL",hp,5,null,scheduler) {
+            room = new SurvivalRoom("TRIAL","Trial","owner","ALL",hp,5,repository,scheduler) {
                 @Override public PhaseConfig getPhaseConfig(int round) { return new PhaseConfig("EASY",5,seconds,"EASY"); }
             };
             for (int i=0;i<count;i++) { Client c=new Client(i==0?"owner":"guest"+i); clients.add(c); room.handleJoin(c); if(i>0)room.handleToggleReady(c); }

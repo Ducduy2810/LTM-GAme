@@ -6,6 +6,10 @@ public class WheelPhraseBank {
 
     private static final List<WheelPhrase> ALL_PHRASES = new ArrayList<>();
     private static final Random RANDOM = new Random();
+    private static volatile List<WheelPhrase> databasePhrases;
+    public static List<WheelPhrase> seedPhrases() { return List.copyOf(ALL_PHRASES); }
+    public static void useDatabasePhrases(List<WheelPhrase> phrases) { databasePhrases=List.copyOf(phrases); }
+    private static List<WheelPhrase> available() { List<WheelPhrase> current=databasePhrases;return current==null?ALL_PHRASES:current; }
 
     static {
         // 1. CÔNG NGHỆ THÔNG TIN & MẠNG MÁY TÍNH (IT)
@@ -44,15 +48,14 @@ public class WheelPhraseBank {
     public static WheelPhrase getRandomPhrase(String topic) {
         List<WheelPhrase> filtered = new ArrayList<>();
         if (topic != null && !"ALL".equalsIgnoreCase(topic)) {
-            for (WheelPhrase p : ALL_PHRASES) {
+            for (WheelPhrase p : available()) {
                 if (p.getTopic().equalsIgnoreCase(topic)) {
                     filtered.add(p);
                 }
             }
         }
-        if (filtered.isEmpty()) {
-            filtered.addAll(ALL_PHRASES);
-        }
+        if (topic == null || "ALL".equalsIgnoreCase(topic)) filtered.addAll(available());
+        if (filtered.isEmpty()) throw new IllegalArgumentException("Chưa có ô chữ đã xuất bản cho chủ đề này.");
         return filtered.get(RANDOM.nextInt(filtered.size()));
     }
 

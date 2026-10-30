@@ -49,9 +49,15 @@ public class DatabaseManager {
                 st.execute("PRAGMA journal_mode=WAL");   // Write-Ahead Logging
                 st.execute("PRAGMA synchronous=NORMAL"); // Cân bằng an toàn/tốc độ
                 st.execute("PRAGMA foreign_keys=ON");    // Bật foreign key
+                st.execute("PRAGMA busy_timeout=5000");
             }
 
+            backupBeforeHistoryMigration();
             createTables();
+            vn.game.model.MatchService.init();
+            backupBeforeAdminMigration();
+            AdminStore.init();
+            RaceStore.init();
             System.out.println("✅ SQLite đã kết nối: " + new File(DB_FILE).getAbsolutePath());
 
         } catch (Exception e) {
@@ -60,6 +66,35 @@ public class DatabaseManager {
     }
 
     // ── Tạo bảng ─────────────────────────────────────────────────────────────
+
+    private void backupBeforeHistoryMigration() throws SQLException {
+        boolean hasUsers, hasHistory;
+        try (Statement st=connection.createStatement();
+             ResultSet rs=st.executeQuery("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users','matches')")) {
+            hasUsers=false; hasHistory=false;
+            while(rs.next()) {
+                if ("users".equals(rs.getString(1))) hasUsers=true;
+                if ("matches".equals(rs.getString(1))) hasHistory=true;
+            }
+        }
+        if (hasUsers && !hasHistory) {
+            File backups=new File("data/backups");
+            if (!backups.isDirectory() && !backups.mkdirs()) throw new SQLException("Cannot create backup directory");
+            String path="data/backups/before-history-" + System.currentTimeMillis() + ".db";
+            // SQLite makes a consistent snapshot including committed WAL contents.
+            try (Statement st=connection.createStatement()) { st.execute("VACUUM INTO '"+path+"'"); }
+            System.out.println("Database backup: " + path);
+        }
+    }
+
+    private void backupBeforeAdminMigration() throws Exception {
+        try(Statement st=connection.createStatement();ResultSet rs=st.executeQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='game_questions'")){if(rs.next())return;}
+        try(Statement st=connection.createStatement();ResultSet rs=st.executeQuery("SELECT COUNT(*) FROM users")){if(!rs.next()||rs.getInt(1)==0)return;}
+        java.nio.file.Files.createDirectories(java.nio.file.Path.of("data/backups"));
+        String path="data/backups/before-admin-"+System.currentTimeMillis()+".db";
+        try(Statement st=connection.createStatement()){st.execute("VACUUM INTO '"+path+"'");}
+        System.out.println("Database backup: "+path);
+    }
 
     private void createTables() throws SQLException {
         try (Statement st = connection.createStatement()) {

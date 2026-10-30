@@ -241,11 +241,7 @@ public class UserRepository {
         user.setEmail(email);
         user.setSalt(salt);
         user.setPasswordHash(passwordHash);
-        user.setRole(
-            "admin".equalsIgnoreCase(username) ||
-            (email != null && "mainung28@gmail.com".equalsIgnoreCase(email))
-            ? "admin" : "user"
-        );
+        user.setRole("user");
 
         String sql = """
             INSERT INTO users (username, email, password_hash, salt, google_id,
@@ -307,14 +303,17 @@ public class UserRepository {
      * Đăng nhập Google: tìm theo googleId → email → tạo mới.
      */
     public synchronized User registerOrGetGoogleUser(String googleId, String email, String name) {
+        if(googleId==null||googleId.isBlank()||!vn.game.util.PasswordResetMailer.isEmail(email))throw new IllegalArgumentException("Thông tin Google chưa hợp lệ.");
         // 1. Tìm theo googleId
         User existing = findByGoogleId(googleId);
-        if (existing != null) return existing;
+        if (existing != null) {if(existing.isAdmin())throw new IllegalArgumentException("Tài khoản quản trị dùng trang riêng.");return existing;}
 
         // 2. Tìm theo email, gán googleId
         if (email != null) {
             existing = findByEmail(email);
             if (existing != null) {
+                if(existing.isAdmin())throw new IllegalArgumentException("Tài khoản quản trị dùng trang riêng.");
+                if(existing.getGoogleId()!=null&&!existing.getGoogleId().equals(googleId))throw new IllegalArgumentException("Email đã gắn với tài khoản Google khác.");
                 existing.setGoogleId(googleId);
                 update(existing);
                 return existing;
@@ -326,6 +325,7 @@ public class UserRepository {
                 ? name.replaceAll("[^a-zA-Z0-9_]", "")
                 : (email != null ? email.split("@")[0] : "google_user");
         if (base.isEmpty()) base = "google_user";
+        if(base.length()>48)base=base.substring(0,48);
 
         String finalUsername = base;
         int count = 1;
@@ -337,8 +337,8 @@ public class UserRepository {
         newUser.setUsername(finalUsername);
         newUser.setEmail(email);
         newUser.setGoogleId(googleId);
-        newUser.setSalt(User.generateSalt());
-        newUser.setPasswordHash(User.hashPassword(UUID.randomUUID().toString(), newUser.getSalt()));
+        newUser.setSalt(null);
+        newUser.setPasswordHash(null);
         newUser.setRole("user");
 
         String sql = """
@@ -371,15 +371,12 @@ public class UserRepository {
 
     public boolean isAdmin(String username) {
         if (username == null) return false;
-        if ("admin".equalsIgnoreCase(username) || "DuyNguyen".equalsIgnoreCase(username)) return true;
         User u = findByUsername(username);
         return u != null && u.isAdmin();
     }
 
     public boolean isAdmin(User user) {
         if (user == null) return false;
-        if ("admin".equalsIgnoreCase(user.getUsername()) || "DuyNguyen".equalsIgnoreCase(user.getUsername())) return true;
-        if (user.getEmail() != null && "mainung28@gmail.com".equalsIgnoreCase(user.getEmail())) return true;
         return user.isAdmin();
     }
 

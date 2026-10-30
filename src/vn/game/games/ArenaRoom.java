@@ -1,6 +1,7 @@
 package vn.game.games;
 
 import vn.game.db.UserRepository;
+import vn.game.model.MatchService;
 import vn.game.model.Leaderboard;
 import vn.game.model.Question;
 import vn.game.model.QuestionBank;
@@ -95,6 +96,13 @@ public class ArenaRoom {
     private long phaseStartNanos;
     private long timerGeneration;
 
+    private final Set<String> kickedUsernames=new HashSet<>();
+    public synchronized void banPlayer(String username) {
+        int score=players.values().stream().filter(p -> username.equalsIgnoreCase(p.username)).mapToInt(p -> p.score).findFirst().orElse(0);
+        vn.game.model.MatchService.departure(matchId,username,score,"KICKED");
+        kickedUsernames.add(username.toLowerCase(Locale.ROOT));
+    }
+    private String matchId;
     private final UserRepository userRepository;
     private final ScheduledExecutorService scheduler;
 
@@ -168,6 +176,7 @@ public class ArenaRoom {
     }
 
     public synchronized boolean canJoin(String username) {
+        if(username==null||kickedUsernames.contains(username.toLowerCase(Locale.ROOT)))return false;
         return username != null && !closed && ("WAITING".equals(gameState) || "END".equals(gameState)
                 || players.values().stream().anyMatch(p -> p.username.equalsIgnoreCase(username))
                 || recentlyLeftUsernames.contains(username.toLowerCase(Locale.ROOT)));
@@ -184,6 +193,7 @@ public class ArenaRoom {
     }
 
     public synchronized void close() {
+        MatchService.finish(matchId, true, "Room closed", List.of());
         closed = true;
         gameState = "CLOSED";
         answerPhase = "NONE";
@@ -205,7 +215,6 @@ public class ArenaRoom {
 
     public boolean isSuperAdmin(String username) {
         if (username == null) return false;
-        if ("admin".equalsIgnoreCase(username) || "DuyNguyen".equalsIgnoreCase(username)) return true;
         return userRepository != null && userRepository.isAdmin(username);
     }
 
@@ -260,6 +269,8 @@ public class ArenaRoom {
         // Chỉ gán hostUsername lần đầu tiên, không thay đổi khi host reconnect
         if (hostUsername == null || hostUsername.isEmpty()) {
             hostUsername = username;
+            selectedMainPlayerUsername = username;
+            state.isReady = true;
         }
 
         sendRoomInfo(client);
@@ -357,13 +368,16 @@ public class ArenaRoom {
     }
 
     private synchronized void startGame() {
+        List<Question> selected;
+        try{selected=QuestionBank.getArenaQuestions(topic,difficulty,questionCount);}catch(IllegalArgumentException e){broadcast(Map.of("type","arena_error","message",e.getMessage()));return;}
+        if(selected.isEmpty()){broadcast(Map.of("type","arena_error","message","Chưa có câu hỏi đã xuất bản phù hợp."));return;}
         gameState = "STARTING";
         currentQuestionIndex = 0;
         totalEliminatedOpponents = 0;
         isPaused = false; // YÊU CẦU 5: Reset trạng thái tạm dừng
 
         questions.clear();
-        questions.addAll(QuestionBank.getArenaQuestions(topic, difficulty, questionCount));
+        questions.addAll(selected);
 
         // YÊU CẦU 4: Reset trạng thái người chơi VÀ quyền trợ giúp
         for (PlayerState p : players.values()) {
@@ -396,6 +410,9 @@ public class ArenaRoom {
             bots.add(new BotOpponent("Bot_" + BOT_COUNTER.getAndIncrement()));
         }
 
+        matchId = MatchService.start("ARENA", roomCode, !bots.isEmpty(),
+                Map.of("topic",topic,"difficulty",difficulty,"questionCount",questionCount,"botCount",botCount,"questions",questions.stream().map(Question::snapshot).toList()),
+                players.values().stream().map(p -> p.username).toList());
         int realOpponents = (int) players.values().stream().filter(p -> !p.isMainPlayer).count();
         totalInitialOpponents = realOpponents + bots.size();
 
@@ -575,6 +592,7 @@ public class ArenaRoom {
         Map<String, Object> resultMsg = new HashMap<>();
         resultMsg.put("type", "arena_round_result");
         resultMsg.put("correctAnswerIndex", correctIndex);
+        resultMsg.put("explanation",q.getExplanation());
         resultMsg.put("mainPlayerCorrect", mainCorrect);
         resultMsg.put("mainPlayer", mainPlayerUsername);
         resultMsg.put("eliminatedRealOpponents", eliminatedRealOpponents);
@@ -616,7 +634,7 @@ public class ArenaRoom {
     // ─── 11. KẾT THÚC TRẬN ───────────────────────────────────────────────────
 
     private synchronized void endGame(boolean mainWon, String overrideReason) {
-        if (closed) return;
+        if (closed || "END".equals(gameState) || "WAITING".equals(gameState)) return;
         gameState = "END";
         if (currentTimer != null) { currentTimer.cancel(false); currentTimer = null; }
 
@@ -634,10 +652,13 @@ public class ArenaRoom {
             reason = "Trận đấu kết thúc.";
         }
 
-        // Lưu vào bảng xếp hạng
-        if (mainPlayerUsername != null) {
-            Leaderboard.recordMatch(mainPlayerUsername, totalEliminatedOpponents, totalInitialOpponents, mainWon);
+        // Entertainment results never contribute to competitive rank.
+        List<MatchService.Result> results = new ArrayList<>();
+        for (PlayerState p : players.values()) {
+            boolean won = p.isMainPlayer ? mainWon : !mainWon && p.isAlive;
+            results.add(new MatchService.Result(p.username, p.score, 0, won ? "WIN" : "LOSS"));
         }
+        MatchService.finish(matchId, false, reason, results);
 
         Map<String, Object> endMsg = new HashMap<>();
         endMsg.put("type", "arena_end_game");
@@ -920,7 +941,7 @@ public class ArenaRoom {
     }
 
     public synchronized void handlePauseGame(WebSocketClient client) {
-        if (closed || !canControl(client.getUsername())) { sendError(client, "Chỉ chủ phòng hoặc admin được tạm dừng."); return; }
+        if (closed || !isSuperAdmin(client.getUsername())) { sendError(client, "Chỉ quản trị viên được tạm dừng."); return; }
         if (!"QUESTION".equals(gameState) || isPaused || remainingPhaseMs() <= 0) { sendError(client, "Không thể tạm dừng ở thời điểm này."); return; }
         remainingTimeBeforePause = remainingPhaseMs();
         isPaused = true;
@@ -932,7 +953,7 @@ public class ArenaRoom {
     }
 
     public synchronized void handleResumeGame(WebSocketClient client) {
-        if (closed || !canControl(client.getUsername())) { sendError(client, "Chỉ chủ phòng hoặc admin được tiếp tục."); return; }
+        if (closed || !isSuperAdmin(client.getUsername())) { sendError(client, "Chỉ quản trị viên được tiếp tục."); return; }
         if (!isPaused || !"QUESTION".equals(gameState)) { sendError(client, "Trận đấu chưa được tạm dừng."); return; }
         isPaused = false;
         long now = System.nanoTime();

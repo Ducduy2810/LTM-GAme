@@ -1,4 +1,5 @@
-param([switch]$Preview)
+param([switch]$Preview,[switch]$StudyPreview)
+if ($StudyPreview) { $Preview = $true }
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $compilerPath = (Get-Command javac.exe).Source
@@ -15,6 +16,7 @@ Push-Location $testRoot
 try {
     $testArgs = @((Join-Path $projectRoot 'public'))
     if ($Preview) { $testArgs += 'preview' }
+    if ($StudyPreview) { $testArgs += 'study' }
     & $javaPath --enable-native-access=ALL-UNNAMED -cp "$testRoot;$classpath" PortalIntegrationTest @testArgs
     if ($LASTEXITCODE -ne 0) { throw 'Portal integration test failed.' }
 } finally { Pop-Location }
