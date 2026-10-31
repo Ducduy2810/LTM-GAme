@@ -93,7 +93,11 @@ LAP TRINH MANG,Một môn học chuyên ngành,IT,Kiến thức về kết nối
 
 ## Bảo trì, sao lưu và dữ liệu
 
-Bảo trì hoặc tắt một game sẽ chặn tạo/bắt đầu trận mới tại server. Trận đang chạy vẫn tiếp tục; vẫn cho phép vào lại phòng theo luật game. Cấu hình mặc định chỉ áp dụng cho phòng mới; người tạo phòng giải trí vẫn có thể chọn cấu hình khác trong giới hạn luật hiện có.
+Trong **Cấu hình & bảo trì**, bật **Bảo trì**, chọn **Theo số giờ** (có thể nhập số lẻ) hoặc **Đến ngày giờ cụ thể** theo giờ Việt Nam, nhập thông báo rồi lưu. Server lưu thời điểm kết thúc vào database và tự mở lại khi đến hạn, kể cả sau khi khởi động lại. Admin có thể tắt bảo trì sớm.
+
+Khi bảo trì bắt đầu, mọi phiên người chơi bị đăng xuất, hàng chờ và các trận đang chạy bị hủy; trận rank bị hủy không cộng/trừ RP hoặc tiêu thụ thẻ. Người chơi ở sảnh và trong game nhận thông báo kèm thời gian kết thúc. Đăng nhập bằng mật khẩu, Google, truy cập API người chơi hoặc kết nối game đều bị chặn trong thời gian này. Trang admin và đăng nhập admin vẫn hoạt động. Hết bảo trì, người chơi đăng nhập lại bằng phiên mới.
+
+Công tắc **Nhận trận mới** của từng game chỉ chặn tạo/bắt đầu trận mới cho game đó. Cấu hình mặc định áp dụng cho phòng mới; người tạo phòng giải trí vẫn có thể chọn cấu hình trong giới hạn luật hiện có.
 
 Vẫn dùng SQLite, không yêu cầu MySQL. Trước nâng cấp schema quản trị trên database có người dùng, server tạo `data/backups/before-admin-<timestamp>.db`. Sao lưu thủ công dùng SQLite `VACUUM INTO`, gồm dữ liệu đã commit cả trong WAL. Tệp được lưu ở `data/backups/`; chỉ phiên quản trị hợp lệ mới tải được.
 

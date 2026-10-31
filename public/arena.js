@@ -263,7 +263,7 @@ socket.onmessage = (event) => {
 
         // ── RỜI PHÒNG THÀNH CÔNG ─────────────────────────────────
         case 'arena_room_closed':
-            alert(data.message);
+            if(!window.SystemClient?.showCancellation)alert(data.message);
         case 'left_room_success':
             currentRoomCode = '';
             currentRoomInfo = null;

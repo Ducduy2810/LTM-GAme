@@ -46,7 +46,7 @@ public final class KnowledgeRaceGame implements AutoCloseable {
     }
     private Map<String,Object> allowed(String mode)throws SQLException{
         var settings=RaceStore.settings();var runtime=AdminStore.settings();
-        if(Boolean.TRUE.equals(runtime.get("maintenance")))throw new IllegalArgumentException(Objects.toString(runtime.get("message"),"Máy chủ đang bảo trì."));
+        if(Boolean.TRUE.equals(runtime.get("maintenance")))throw new IllegalArgumentException(AdminStore.maintenanceMessage(runtime));
         if(!Boolean.TRUE.equals(settings.get("enabled"))||mode.equals("RANKED")&&!Boolean.TRUE.equals(settings.get("rankedEnabled"))||mode.equals("DAILY")&&!Boolean.TRUE.equals(settings.get("dailyEnabled")))throw new IllegalArgumentException("Chế độ này đang được admin tạm đóng.");return settings;
     }
     @SuppressWarnings("unchecked") private int rankTotal(String username)throws SQLException{return ((Number)((Map<String,Object>)RaceStore.account(username).get("current")).get("total")).intValue();}
@@ -83,10 +83,11 @@ public final class KnowledgeRaceGame implements AutoCloseable {
         if(e!=null&&!requestedMode.isEmpty()&&!e.mode.equals(requestedMode)){otherMode(client,e.mode);return;}
         if(e!=null){e.client=client;e.disconnected=0;queued(e);return;}
         Room room=membership.get(name);if(room==null){send(client,"race_state",Map.of("phase","IDLE"));return;}
+        Player p=room.players.get(name);
+        if(p.forfeited&&!terminal(room)){departed(client,room);return;}
         if(!requestedMode.isEmpty()&&!room.mode.equals(requestedMode)){
             if(terminal(room))send(client,"race_state",Map.of("phase","IDLE"));else otherMode(client,room.mode);return;
         }
-        Player p=room.players.get(name);if(p.forfeited&&!terminal(room)){send(client,"race_state",Map.of("phase","IDLE","message","Bạn đã rời trận. Kết quả sẽ được ghi khi trận kết thúc."));return;}
         p.client=client;p.disconnected=0;broadcast(room);
     }
     private void otherMode(WebSocketClient client,String activeMode){send(client,"race_state",Map.of("phase","OTHER_MODE","activeMode",activeMode,"message","Tài khoản đang ghép trận hoặc chơi ở chế độ khác. Hãy tiếp tục/rời trận đó trước khi tạo trận mới."));}
@@ -218,20 +219,30 @@ public final class KnowledgeRaceGame implements AutoCloseable {
     private void leave(WebSocketClient client)throws SQLException{
         Entry e=queue.get(client.getUsername());if(e!=null){if(e.client==client)queue.remove(e.name);send(client,"race_state",Map.of("phase","IDLE"));return;}
         Room room=current(client);Player p=room.players.get(client.getUsername());
-        if(room.phase.equals("WAITING"))removeWaiting(room,p);else if(terminal(room))membership.remove(p.name,room);else{p.forfeited=true;p.client=null;broadcast(room);}
-        send(client,"race_state",Map.of("phase","IDLE","message","Đã rời phòng. Trận đang chơi vẫn ghi kết quả; rời trận sẽ xếp sau người ở lại."));
+        if(room.phase.equals("WAITING"))removeWaiting(room,p);else if(terminal(room))membership.remove(p.name,room);else{
+            RaceStore.forfeit(room.id,p.name);
+            p.forfeited=true;p.client=null;broadcast(room);departed(client,room);return;
+        }
+        send(client,"race_state",Map.of("phase","IDLE","matchId",room.id,"message","Đã rời phòng."));
+    }
+    private void departed(WebSocketClient client,Room room){
+        String message=room.mode.equals("RANKED")?"Bạn đã bỏ cuộc và bị tính thua trận xếp hạng này. Không thể vào lại trận. RP được chốt khi trận kết thúc.":"Bạn đã rời trận và không thể vào lại. Kết quả được ghi khi trận kết thúc.";
+        send(client,"race_state",Map.of("phase","IDLE","mode",room.mode,"matchId",room.id,"forfeited",true,"message",message));
     }
     private void cancel(Room room,String reason)throws SQLException{RaceStore.cancel(room.id,reason);room.phase="CANCELLED";room.reason=reason;room.finished=clock.getAsLong();broadcast(room);}
     private void kick(Room room,String target,String reason)throws SQLException{
-        Player p=room.players.get(target);if(p==null||p.bot||target.equals(room.host))throw new IllegalArgumentException("Chọn người chơi khác trong phòng.");room.kicked.add(target);send(p.client,"race_kicked",Map.of("message",reason));
+        Player p=room.players.get(target);if(p==null||p.bot||target.equals(room.host))throw new IllegalArgumentException("Chọn người chơi khác trong phòng.");room.kicked.add(target);notifyKicked(p.client,reason);
         if(room.phase.equals("WAITING"))removeWaiting(room,p);else{p.forfeited=true;p.client=null;broadcast(room);}
+    }
+    private void notifyKicked(WebSocketClient client,String reason){
+        send(client,"race_kicked",Map.of("reason",reason,"message","Bạn đã bị kick khỏi phòng. Lý do: "+reason));
     }
     public synchronized void disconnect(WebSocketClient client){
         Entry e=queue.get(client.getUsername());if(e!=null&&e.client==client){e.client=null;e.disconnected=clock.getAsLong();}
         Room room=membership.get(client.getUsername());if(room!=null){Player p=room.players.get(client.getUsername());if(p.client==client){p.client=null;p.disconnected=clock.getAsLong();broadcast(room);}}
     }
     public synchronized void moderate(String username,String reason){
-        Entry e=queue.remove(username);if(e!=null)send(e.client,"race_state",Map.of("phase","IDLE","message",reason));Room room=membership.get(username);if(room==null||terminal(room))return;Player p=room.players.get(username);
+        Entry e=queue.remove(username);if(e!=null)send(e.client,"race_state",Map.of("phase","IDLE","queueCancelled",true,"reason",reason,"message","Lượt tìm trận đã bị hủy. Lý do: "+reason));Room room=membership.get(username);if(room==null||terminal(room))return;Player p=room.players.get(username);
         try{if(room.phase.equals("WAITING"))removeWaiting(room,p);else{p.forfeited=true;p.client=null;broadcast(room);}}catch(SQLException ex){System.err.println("Race moderation storage failed");}
     }
     public synchronized List<Map<String,Object>> lobby(){return rooms.values().stream().filter(r->r.phase.equals("WAITING")&&Set.of("CASUAL","BOT").contains(r.mode)).map(r->Map.<String,Object>of("roomCode",r.code,"roomName",r.name,"players",r.players.size(),"bots",r.botCount,"host",Objects.toString(r.host,""),"questionCount",r.questions.size(),"seconds",r.seconds)).toList();}
@@ -245,17 +256,21 @@ public final class KnowledgeRaceGame implements AutoCloseable {
         if(Set.of("setRank","setCards","resetDaily").contains(action)){
             if(queue.containsKey(target))throw new IllegalArgumentException("Người chơi đang ghép trận. Xóa khỏi hàng chờ trước.");RaceStore.adminPlayer(actor,target,action,input,reason);return;
         }
-        if(action.equals("dequeue")){Entry e=queue.remove(target);if(e==null)throw new IllegalArgumentException("Người chơi không có trong hàng chờ.");send(e.client,"race_state",Map.of("phase","IDLE","message",reason));}
+        if(action.equals("dequeue")){Entry e=queue.remove(target);if(e==null)throw new IllegalArgumentException("Người chơi không có trong hàng chờ.");send(e.client,"race_state",Map.of("phase","IDLE","queueCancelled",true,"reason",reason,"message","Lượt tìm trận đã bị hủy. Lý do: "+reason));}
         else{
             Room room=rooms.get(text(input,"matchId"));if(room==null||terminal(room))throw new IllegalArgumentException("Trận không còn hoạt động.");
             if(action.equals("cancel"))cancel(room,"Admin: "+reason);
             else if(action.equals("kick")){if(target.equals(room.host)){
-                Player p=room.players.get(target);send(p.client,"race_kicked",Map.of("message",reason));if(room.phase.equals("WAITING"))removeWaiting(room,p);else{p.forfeited=true;p.client=null;broadcast(room);}
-            }else kick(room,target,"Admin: "+reason);}
+                Player p=room.players.get(target);notifyKicked(p.client,reason);if(room.phase.equals("WAITING"))removeWaiting(room,p);else{p.forfeited=true;p.client=null;broadcast(room);}
+            }else kick(room,target,reason);}
             else if(action.equals("notice"))for(Player p:room.players.values())send(p.client,"server_notice",Map.of("message",reason));
             else throw new IllegalArgumentException("Thao tác không hợp lệ.");
         }
         AdminStore.audit(actor,"RACE_"+action.toUpperCase(Locale.ROOT),text(input,"matchId"),input);
     }
     public synchronized void close(){scheduler.shutdownNow();for(Room room:rooms.values())if(!terminal(room))try{cancel(room,"Máy chủ dừng; không tính RP hoặc dùng thẻ");}catch(SQLException ignored){}queue.clear();}
+    public synchronized void maintenance(String reason)throws SQLException{
+        for(Entry e:queue.values())send(e.client,"race_state",Map.of("phase","IDLE","queueCancelled",true,"reason",reason,"message",reason));
+        queue.clear();for(Room room:rooms.values())if(!terminal(room))cancel(room,reason);
+    }
 }

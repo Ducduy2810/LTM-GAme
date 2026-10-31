@@ -31,6 +31,7 @@ public class SessionManager {
     public void removeUserSessions(String username) {
         sessions.entrySet().removeIf(entry -> {if(entry.getValue().equalsIgnoreCase(username)){csrfTokens.remove(entry.getKey());return true;}return false;});
     }
+    public java.util.Set<String> usernames(){return new java.util.HashSet<>(sessions.values());}
     public String getCsrfToken(String sessionId){return sessionId!=null&&sessions.containsKey(sessionId)?csrfTokens.get(sessionId):null;}
     public boolean validCsrf(String sessionId,String token){String expected=getCsrfToken(sessionId);return expected!=null&&token!=null&&java.security.MessageDigest.isEqual(expected.getBytes(java.nio.charset.StandardCharsets.UTF_8),token.getBytes(java.nio.charset.StandardCharsets.UTF_8));}
 }

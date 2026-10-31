@@ -62,6 +62,8 @@ public class HttpAndWebSocketServer {
     private final ScheduledExecutorService heartbeat = Executors.newSingleThreadScheduledExecutor();
     private static final long HEARTBEAT_INTERVAL_MS = 10_000;
     private static final long HEARTBEAT_TIMEOUT_MS = 20_000;
+    private final Object playerAccessLock=new Object();
+    private String lastMaintenance="";
 
     public HttpAndWebSocketServer(int port, File publicDir, UserRepository userRepository,
                                   SessionManager sessionManager, ArenaGame arenaGame,
@@ -81,11 +83,19 @@ public class HttpAndWebSocketServer {
         this.googleOAuth=googleOAuth;
         this.adminController=new AdminController(userRepository,new AdminController.Runtime(){
             public Map<String,Object> rooms(){return Map.of("items",java.util.stream.Stream.of(arenaGame.adminRooms(),wheelGame.adminRooms(),survivalGame.adminRooms()).flatMap(List::stream).toList());}
-            public int connections(){return (int)connections.stream().filter(c->!c.isClosed()).count();}
+            public int connections(){
+                Set<String> online=clientEvents.onlineUsernames();
+                for(WebSocketClient client:connections){
+                    String name=client.getUsername();
+                    if(!client.isClosed()&&name!=null&&sessionManager.getUsername(socketSessions.get(client))!=null)online.add(name.toLowerCase(Locale.ROOT));
+                }
+                return online.size();
+            }
             public void disconnect(String username,String reason){
                 endPlayerSessions(username,"Phiên đã kết thúc bởi quản trị viên. Lý do: "+reason,true);
             }
             public void announce(Map<String,Object> value){clientEvents.broadcast(value);}
+            public void maintenanceChanged(){enforceMaintenance();}
             public Map<String,Object> integrations(){return Map.of("google",googleOAuth.diagnostics(getPort()),"smtp",vn.game.util.SmtpTransport.diagnostics());}
             public Map<String,Object> race()throws java.sql.SQLException{return raceGame.adminView();}
             public void raceAction(String actor,Map<String,Object> input)throws java.sql.SQLException{raceGame.adminAction(actor,input);}
@@ -142,6 +152,7 @@ public class HttpAndWebSocketServer {
 
     private void checkConnections() {
         if (!running) return;
+        try{enforceMaintenance();}catch(Exception e){System.err.println("Maintenance update failed: "+e.getClass().getSimpleName());}
         long now = System.nanoTime();
         for (WebSocketClient client : connections) {
             if (client.isClosed() || client.heartbeatExpired(now, HEARTBEAT_TIMEOUT_MS)) {
@@ -150,6 +161,31 @@ public class HttpAndWebSocketServer {
             }
             byte[] ping = client.prepareHeartbeat(now, HEARTBEAT_INTERVAL_MS);
             if (ping != null && !threadPool.isShutdown()) threadPool.execute(() -> client.sendPing(ping));
+        }
+    }
+    private Map<String,Object> maintenanceStatus(){
+        try{return AdminStore.maintenanceStatus();}catch(java.sql.SQLException e){throw new IllegalStateException("Chưa tải được trạng thái bảo trì.",e);}
+    }
+    private String createPlayerSession(String name){
+        synchronized(playerAccessLock){if(Boolean.TRUE.equals(maintenanceStatus().get("enabled")))return null;return sessionManager.createSession(name);}
+    }
+    private void enforceMaintenance(){
+        synchronized(playerAccessLock){
+            var status=maintenanceStatus();boolean active=Boolean.TRUE.equals(status.get("enabled"));String version=JsonUtil.toJson(status);
+            boolean changed=!version.equals(lastMaintenance);
+            if(changed)clientEvents.maintenance(status);
+            if(active){
+                String message=(String)status.get("message");
+                // Revoke every login, including players with no game socket open.
+                for(String name:sessionManager.usernames())endPlayerSessions(name,message,Map.of("kind","MAINTENANCE","reason",message),false);
+                if(changed){
+                    try{raceGame.maintenance(message);}catch(java.sql.SQLException e){throw new IllegalStateException(e);}
+                    for(var room:arenaGame.adminRooms())arenaGame.adminCancelRoom((String)room.get("roomCode"),message);
+                    for(var room:wheelGame.adminRooms())wheelGame.adminCancelRoom((String)room.get("roomCode"),message);
+                    for(var room:survivalGame.adminRooms())survivalGame.adminCancelRoom((String)room.get("roomCode"),message);
+                }
+            }
+            lastMaintenance=version;
         }
     }
 
@@ -255,13 +291,15 @@ public class HttpAndWebSocketServer {
             out.flush();
 
             String username = sessionManager.getUsername(sessionId);
-            if(username!=null&&(AdminStore.isBlocked(username)||userRepository.isAdmin(username)))username=null;
+            var maintenance=maintenanceStatus();
+            if(Boolean.TRUE.equals(maintenance.get("enabled"))||username!=null&&(AdminStore.isBlocked(username)||userRepository.isAdmin(username)))username=null;
             client = new WebSocketClient(socket, in, out, username);
 
             if (username == null) {
                 Map<String, Object> err = new HashMap<>();
                 err.put("type", "auth_error");
-                err.put("message", "Bạn phải đăng nhập để chơi game!");
+                err.put("message", Boolean.TRUE.equals(maintenance.get("enabled"))?maintenance.get("message"):"Bạn phải đăng nhập để chơi game!");
+                if(Boolean.TRUE.equals(maintenance.get("enabled")))err.put("accountNotice",Map.of("kind","MAINTENANCE","reason",maintenance.get("message")));
                 client.send(JsonUtil.toJson(err));
                 Thread.sleep(200);
                 client.close();
@@ -343,6 +381,7 @@ public class HttpAndWebSocketServer {
 
     private void routeWebSocketMessage(WebSocketClient client, String text) {
         try {
+            if(Boolean.TRUE.equals(maintenanceStatus().get("enabled"))){enforceMaintenance();client.close();return;}
             if(!Objects.equals(client.getUsername(),sessionManager.getUsername(socketSessions.get(client)))||AdminStore.isBlocked(client.getUsername())||userRepository.isAdmin(client.getUsername())){client.close();return;}
             Map<String, Object> req = JsonUtil.parseObject(text);
             String type = (String) req.get("type");
@@ -520,7 +559,8 @@ public class HttpAndWebSocketServer {
             try { contentLength = Integer.parseInt(clStr); } catch (NumberFormatException ignored) {}
         }
 
-        if (contentLength < 0 || contentLength > (path.startsWith("/api/admin/") ? 1500000 : 65536)) {
+        int maxBody=path.equals("/api/admin/backup-upload")?AdminStore.MAX_BACKUP_UPLOAD_BYTES:path.startsWith("/api/admin/")?1500000:65536;
+        if (contentLength < 0 || contentLength > maxBody) {
             sendJson(out, 400, Map.of("error", "Nội dung yêu cầu quá lớn hoặc không hợp lệ."), null);
             socket.close();
             return;
@@ -528,7 +568,7 @@ public class HttpAndWebSocketServer {
         // Content-Length tính theo byte, không phải số ký tự (mật khẩu có thể có dấu).
         byte[] bodyBytes = in.readNBytes(contentLength);
         if (bodyBytes.length != contentLength) throw new EOFException("Thiếu nội dung HTTP.");
-        String body = new String(bodyBytes, StandardCharsets.UTF_8);
+        String body = path.equals("/api/admin/backup-upload")?"":new String(bodyBytes, StandardCharsets.UTF_8);
 
         if("GET".equals(method)&&"/api/events".equals(path)){
             String name=sessionManager.getUsername(sessionId);
@@ -537,12 +577,23 @@ public class HttpAndWebSocketServer {
         }
 
         if(path.startsWith("/api/admin/")){
-            AdminController.Reply reply=adminController.handle(method,path,query,body,headers,socket.getInetAddress().getHostAddress());
+            AdminController.Reply reply=adminController.handle(method,path,query,bodyBytes,headers,socket.getInetAddress().getHostAddress());
             if(reply.file()!=null){
                 String response="HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nCache-Control: no-store\r\nContent-Disposition: attachment; filename=\""+reply.filename()+"\"\r\nContent-Length: "+reply.file().length+"\r\nConnection: close\r\n\r\n";
                 out.write(response.getBytes(StandardCharsets.UTF_8));out.write(reply.file());out.flush();
             }else sendJson(out,reply.status(),reply.data(),reply.cookie());
             socket.close();return;
+        }
+        if("/api/maintenance".equals(path)){sendJson(out,200,maintenanceStatus(),null);socket.close();return;}
+        if(path.startsWith("/api/")||path.startsWith("/auth/")){
+            var maintenance=maintenanceStatus();
+            if(Boolean.TRUE.equals(maintenance.get("enabled"))){
+                String message=(String)maintenance.get("message");
+                if(path.startsWith("/auth/google")){sendRedirect(out,"/?error=maintenance",null);}
+                else if(path.equals("/auth/me"))sendJson(out,200,Map.of("loggedIn",false,"maintenance",maintenance,"accountNotice",Map.of("kind","MAINTENANCE","reason",message)),"session_id=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
+                else sendJson(out,503,Map.of("error",message,"maintenance",maintenance),"session_id=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
+                socket.close();return;
+            }
         }
         if("GET".equals(method)&&"/api/catalog".equals(path)){
             try{sendJson(out,200,Map.of("topics",AdminStore.topics().stream().filter(t->((Number)t.get("active")).intValue()==1).toList(),"settings",AdminStore.settings()),null);}
@@ -756,7 +807,8 @@ public class HttpAndWebSocketServer {
                     try{Map<String,Object> restriction=PlayerAccountStore.restriction(user.getUsername());sendJson(out,403,Map.of("error",PlayerAccountStore.restrictionMessage(restriction),"accountNotice",restriction),null);}catch(java.sql.SQLException e){sendJson(out,403,Map.of("error","Tài khoản đang bị khóa."),null);}return;
                 }
 
-                String newSessionId = sessionManager.createSession(user.getUsername());
+                String newSessionId = createPlayerSession(user.getUsername());
+                if(newSessionId==null){var maintenance=maintenanceStatus();sendJson(out,503,Map.of("error",maintenance.get("message"),"maintenance",maintenance),null);return;}
                 String cookieHeader = playerCookie(newSessionId);
                 Map<String, Object> resp = new HashMap<>();
                 resp.put("success", true);
@@ -778,6 +830,7 @@ public class HttpAndWebSocketServer {
             case "/auth/me": {
                 String username = sessionManager.getUsername(sessionId);
                 Map<String, Object> resp = new HashMap<>();
+                resp.put("maintenance",maintenanceStatus());
                 if(username!=null&&(AdminStore.isBlocked(username)||userRepository.isAdmin(username))){
                     if(!userRepository.isAdmin(username))try{resp.put("accountNotice",PlayerAccountStore.restriction(username));}catch(java.sql.SQLException ignored){}
                     sessionManager.removeSession(sessionId);username=null;
@@ -897,7 +950,7 @@ public class HttpAndWebSocketServer {
                         Map<String,Object> notice=PlayerAccountStore.restriction(user.getUsername());
                         sendRedirect(out,"/",feedbackCookie(notice));return;
                     }
-                    String id=sessionManager.createSession(user.getUsername());sendRedirect(out,"/",playerCookie(id));
+                    String id=createPlayerSession(user.getUsername());if(id==null){sendRedirect(out,"/?error=maintenance",null);return;}sendRedirect(out,"/",playerCookie(id));
                 }catch(GoogleOAuthService.Failure e){sendRedirect(out,"/?error="+e.code,"oauth_state=; Path=/auth/google; HttpOnly; SameSite=Lax; Max-Age=0");}
                 catch(IllegalArgumentException e){sendRedirect(out,"/?error=google_account_restricted",null);}
                 catch(Exception e){System.err.println("Google account completion failed: "+e.getClass().getSimpleName());sendRedirect(out,"/?error=google_account_failed",null);}
@@ -917,6 +970,9 @@ public class HttpAndWebSocketServer {
     }
     private void endPlayerSessions(String username,String message,boolean moderation){
         Map<String,Object> notice=Map.of();if(moderation)try{notice=PlayerAccountStore.latestNotice(username);}catch(java.sql.SQLException ignored){}
+        endPlayerSessions(username,message,notice,moderation);
+    }
+    private void endPlayerSessions(String username,String message,Map<String,Object> notice,boolean moderation){
         Map<String,Object> event=Map.of("username",username,"message",message,"accountNotice",notice);
         clientEvents.notifyUser(username,event);sessionManager.removeUserSessions(username);
         if(moderation)raceGame.moderate(username,message);

@@ -79,7 +79,7 @@ public class RaceIntegrationTest {
             g.disconnect(solo);Client replacement=new Client("observer");act(g,replacement,"race_resume",Map.of("mode","RANKED"));check(replacement.state().get("phase").equals("QUEUED"),"queued account reconnects within grace period");
             now.addAndGet(1100);g.tick();check(replacement.state().get("phase").equals("QUESTION"),"fills bots after 60 seconds");check(list(replacement.state().get("players")).stream().filter(r->Boolean.TRUE.equals(r.get("bot"))).count()==3,"fallback bots explicitly marked");
             long n=solo.errors();act(g,solo,"race_answer",Map.of("matchId",replacement.state().get("matchId"),"questionToken",map(replacement.state().get("question")).get("token"),"answer",0));check(solo.errors()==n+1,"replaced socket cannot answer");String fallback=(String)replacement.state().get("matchId");g.adminAction("operator",Map.of("action","cancel","matchId",fallback,"reason","Isolated cancellation"));check(replacement.state().get("phase").equals("CANCELLED"),"admin cancels ranked match");check(RaceStore.history("observer",false).get(0).get("status").equals("CANCELLED"),"cancel persisted");
-            casual(g,now);casualMatchmaking(g,now);daily(g,now);cards(g,now);configAndForfeits(g,now);timeouts(g,now);
+            casual(g,now);casualMatchmaking(g,now);daily(g,now);cards(g,now);configAndForfeits(g,now);intentionalLeaveAndReconnect(g,now);timeouts(g,now);
         }finally{g.close();}
     }
     static void casual(KnowledgeRaceGame g,AtomicLong now)throws Exception{
@@ -140,6 +140,59 @@ public class RaceIntegrationTest {
         check(p[0].state().get("phase").equals("COMPLETED"),"all AFK match completes");check(num(rank("racer0").get("total"))==total,"no free RP for zero-correct AFK tie");
         for(Client c:p)act(g,c,"race_queue",Map.of("mode","RANKED"));String interrupted=(String)p[0].state().get("matchId");long ledger=count("rank_ledger");RaceStore.recoverInterrupted();check(count("rank_ledger")==ledger,"restart recovery never fabricates RP results");check(RaceStore.history("racer0",false).stream().anyMatch(r->r.get("id").equals(interrupted)&&r.get("status").equals("INTERRUPTED")),"interrupted match persisted");
     }
+    static void kickNotifications()throws Exception{
+        KnowledgeRaceGame game=new KnowledgeRaceGame();
+        try{
+            Client[] players={new Client("racer0"),new Client("racer1"),new Client("racer2"),new Client("racer3")};
+            for(Client p:players)act(game,p,"race_queue",Map.of("mode","RANKED"));
+            String id=(String)players[0].state().get("matchId"),reason="Gửi đáp án gây rối <img src=x>";
+            game.adminAction("operator",Map.of("action","kick","matchId",id,"targetUsername","racer0","reason",reason));
+            check(players[0].last("race_kicked").get("reason").equals(reason),"ranked admin kick sends exact reason");
+            check(players[0].last("race_kicked").get("message").toString().startsWith("Bạn đã bị kick"),"ranked admin kick clearly identifies removal");
+            Client back=new Client("racer0");act(game,back,"race_resume",Map.of("mode","RANKED"));check(back.state().get("phase").equals("IDLE"),"kicked ranked player cannot continue match");
+            Client searching=new Client("observer");act(game,searching,"race_queue",Map.of("mode","RANKED"));
+            game.adminAction("operator",Map.of("action","dequeue","targetUsername","observer","reason","Tạm dừng ghép trận để bảo trì"));
+            check(searching.state().get("phase").equals("IDLE")&&Boolean.TRUE.equals(searching.state().get("queueCancelled")),"admin queue removal explicitly signals cancellation");
+            check(searching.state().get("reason").equals("Tạm dừng ghép trận để bảo trì"),"queue cancellation sends exact reason to searching player");
+            game.adminAction("operator",Map.of("action","cancel","matchId",id,"reason","Kiểm tra hủy trận"));
+            check(players[1].state().get("phase").equals("CANCELLED")&&players[1].state().get("reason").toString().contains("Kiểm tra hủy trận"),"active players receive cancelled state and reason");
+            Client host=new Client("host"),guest=new Client("guest");
+            act(game,host,"race_create",Map.of("withBots",true,"botCount",1,"questionCount",10,"timeLimit",3));act(game,guest,"race_join",Map.of("roomCode",host.state().get("roomCode")));act(game,host,"race_start",Map.of());
+            game.adminAction("operator",Map.of("action","kick","matchId",host.state().get("matchId"),"targetUsername","host","reason","Chủ phòng vi phạm nội quy"));
+            check(host.last("race_kicked").get("reason").equals("Chủ phòng vi phạm nội quy"),"admin kicking active room host also sends reason");
+        }finally{game.close();}
+    }
+    static void intentionalLeaveAndReconnect(KnowledgeRaceGame g,AtomicLong now)throws Exception{
+        Client[] players={new Client("racer0"),new Client("racer1"),new Client("racer2"),new Client("racer3")};
+        for(Client p:players)act(g,p,"race_queue",Map.of("mode","RANKED"));
+        String id=(String)players[0].state().get("matchId"),code=(String)players[0].state().get("roomCode");
+        int right=correct(id,1);answer(g,players[0],right);g.disconnect(players[0]);
+        now.addAndGet(61000);g.tick();
+        Client reconnected=new Client("racer0");act(g,reconnected,"race_resume",Map.of("mode","RANKED"));
+        check(reconnected.state().get("matchId").equals(id),"unexpected disconnect can resume same active ranked match after more than 30 seconds");
+        check(num(reconnected.state().get("myAnswer"))==right,"reconnection preserves submitted answer");
+        check(list(reconnected.state().get("players")).stream().anyMatch(p->p.get("username").equals("racer0")&&!Boolean.TRUE.equals(p.get("forfeited"))&&num(p.get("score"))==3),"unexpected disconnect preserves points and is not a loss");
+        g.disconnect(players[0]);
+        check(list(players[1].state().get("players")).stream().anyMatch(p->p.get("username").equals("racer0")&&Boolean.TRUE.equals(p.get("online"))),"late disconnect of old socket cannot disconnect replacement");
+        now.addAndGet(2300);g.tick();answer(g,reconnected,correct(id,2));
+        check(num(reconnected.state().get("myAnswer"))==correct(id,2),"reconnected player can keep answering");
+        act(g,reconnected,"race_leave",Map.of());
+        check(reconnected.state().get("phase").equals("IDLE")&&Boolean.TRUE.equals(reconnected.state().get("forfeited")),"intentional leave immediately acknowledges forfeited loss");
+        check(reconnected.state().get("message").toString().contains("thua"),"intentional ranked leave explicitly reports loss");
+        check(RaceStore.history("racer0",false).stream().anyMatch(r->r.get("id").equals(id)&&num(r.get("forfeited"))==1&&r.get("status").equals("ACTIVE")),"forfeit saved before match ends");
+        Client returner=new Client("racer0");act(g,returner,"race_resume",Map.of("mode","RANKED"));
+        check(returner.state().get("phase").equals("IDLE")&&Boolean.TRUE.equals(returner.state().get("forfeited")),"new connection cannot resume voluntarily abandoned match");
+        act(g,returner,"race_resume",Map.of("mode","CASUAL"));check(returner.state().get("phase").equals("IDLE"),"other mode cannot offer abandoned match as resumable");
+        long errors=returner.errors();act(g,returner,"race_join",Map.of("roomCode",code));check(returner.errors()==errors+1,"room code cannot bypass forfeit");
+        long oldErrors=players[0].errors();answer(g,players[0],0);check(players[0].errors()==oldErrors+1,"old socket cannot answer after forfeit");
+        act(g,returner,"race_answer",Map.of("matchId",id,"questionToken",map(players[1].state().get("question")).get("token"),"answer",0));check(returner.errors()==errors+2,"forfeited account cannot submit answers using new socket");
+        for(int i=0;i<10&&!players[1].state().get("phase").equals("COMPLETED");i++){now.addAndGet(16000);g.tick();now.addAndGet(2300);g.tick();}
+        check(players[1].state().get("phase").equals("COMPLETED"),"remaining players finish abandoned match normally");
+        var loss=RaceStore.history("racer0",false).stream().filter(r->r.get("id").equals(id)).findFirst().orElseThrow();
+        check(num(loss.get("forfeited"))==1&&num(loss.get("placement"))==4,"forfeiter loses even with higher score than remaining players");
+        check(num(map(loss.get("result")).get("rpDelta"))==-15,"forfeiter receives last-place RP according to existing rules");
+        try(var c=AdminStore.connect()){check(num(AdminStore.rows(c,"SELECT COUNT(*) AS n FROM rank_ledger l JOIN users u ON u.id=l.user_id WHERE l.match_id=? AND u.username='racer0'",id).get(0).get("n"))==1,"forfeit and match completion settle RP exactly once");}
+    }
     static void configAndForfeits(KnowledgeRaceGame g,AtomicLong now)throws Exception{
         Map<String,Object> original=RaceStore.settings(),duel=new HashMap<>(original);duel.put("targetPlayers",2);duel.put("firstRP",50);duel.put("timeLimit",18);
         Client a=new Client("host"),b=new Client("observer");RaceStore.saveSettings("operator",duel);
@@ -194,7 +247,7 @@ public class RaceIntegrationTest {
     public static void main(String[] args)throws Exception{
         if(!Files.exists(Path.of(".race-test")))throw new IllegalStateException("Use test_race.ps1 isolated directory");DatabaseManager db=DatabaseManager.getInstance();db.init();users=new UserRepository(db);
         for(String name:List.of("racer0","racer1","racer2","racer3","host","guest","observer","daily"))users.register(name,name+"@example.com","PlayerPass123");AdminAccount.create(users,"operator","AdminOnlyPass123!");
-        rules();direct();SessionManager sessions=new SessionManager();ArenaGame arena=new ArenaGame(users);WheelGame wheel=new WheelGame(users);SurvivalGame survival=new SurvivalGame(users);HttpAndWebSocketServer server=new HttpAndWebSocketServer(0,new File(args[0]),users,sessions,arena,wheel,survival);
+        rules();direct();kickNotifications();SessionManager sessions=new SessionManager();ArenaGame arena=new ArenaGame(users);WheelGame wheel=new WheelGame(users);SurvivalGame survival=new SurvivalGame(users);HttpAndWebSocketServer server=new HttpAndWebSocketServer(0,new File(args[0]),users,sessions,arena,wheel,survival);
         Thread t=new Thread(()->{try{server.start();}catch(IOException e){throw new RuntimeException(e);}});t.setDaemon(true);t.start();while(server.getPort()==0)Thread.sleep(10);base="http://localhost:"+server.getPort();
         try{live(server);System.out.println("PASS: "+checks+" ranked/casual/daily, RP, cards, reconnect, anti-replay, admin and real WebSocket checks.");if(args.length>1&&args[1].equals("preview")){System.out.println("PREVIEW_URL="+base);long end=System.currentTimeMillis()+1_200_000;while(!Files.exists(Path.of("stop-preview"))&&System.currentTimeMillis()<end)Thread.sleep(200);}}
         finally{server.stop();arena.close();wheel.close();survival.close();db.close();t.join(2000);}

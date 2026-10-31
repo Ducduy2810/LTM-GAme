@@ -9,6 +9,7 @@ import vn.game.util.JsonUtil;
 
 /** Admin persistence uses independent transactions, never the shared auth connection. */
 public final class AdminStore {
+    public static final int MAX_BACKUP_UPLOAD_BYTES=50*1024*1024;
     private AdminStore() {}
     public static Connection connect() throws SQLException {
         Connection c=DriverManager.getConnection("jdbc:sqlite:data/game.db");
@@ -84,7 +85,7 @@ public final class AdminStore {
     }
     public static Map<String,Object> overview() throws SQLException {
         try(Connection c=connect()){
-            return Map.of("counts",rows(c,"SELECT (SELECT COUNT(*) FROM users WHERE LOWER(role)<>'admin') AS players,(SELECT COUNT(*) FROM users WHERE blocked_until=-1 OR blocked_until>?) AS blocked,(SELECT COUNT(*) FROM matches) AS matches,(SELECT COUNT(*) FROM game_questions) AS questions,(SELECT COUNT(*) FROM wheel_phrases) AS phrases",System.currentTimeMillis()).get(0),
+            return Map.of("counts",rows(c,"SELECT (SELECT COUNT(*) FROM users WHERE LOWER(role)<>'admin') AS players,(SELECT COUNT(*) FROM users WHERE blocked_until=-1 OR blocked_until>?) AS blocked,(SELECT COUNT(*) FROM matches) AS matches,((SELECT COUNT(*) FROM matches WHERE status='ACTIVE')+(SELECT COUNT(*) FROM race_matches WHERE status='ACTIVE')) AS activeMatches,(SELECT COUNT(*) FROM game_questions) AS questions,(SELECT COUNT(*) FROM wheel_phrases) AS phrases",System.currentTimeMillis()).get(0),
                     "recentMatches",rows(c,"SELECT id,game_type,room_code,status,started_at,ended_at FROM matches ORDER BY started_at DESC LIMIT 8"),"settings",settings());
         }
     }
@@ -200,19 +201,40 @@ public final class AdminStore {
     public static List<Map<String,Object>> logs(String query,int offset) throws SQLException {try(Connection c=connect()){return rows(c,"SELECT * FROM admin_audit_logs WHERE actor LIKE ? OR action LIKE ? OR target LIKE ? ORDER BY id DESC LIMIT 50 OFFSET ?","%"+query+"%","%"+query+"%","%"+query+"%",offset);}}
     @SuppressWarnings("unchecked")
     public static Map<String,Object> settings() throws SQLException {
-        Map<String,Object> result=new LinkedHashMap<>();result.put("maintenance",false);result.put("message","Máy chủ đang bảo trì. Vui lòng quay lại sau.");
+        Map<String,Object> result=new LinkedHashMap<>();result.put("maintenance",false);result.put("maintenanceUntil",0L);result.put("message","Máy chủ đang bảo trì. Vui lòng quay lại sau.");
         result.put("enabled",Map.of("ARENA",true,"WHEEL",true,"SURVIVAL",true));
         result.put("defaults",Map.of("ARENA",Map.of("questionCount",10,"timeLimit",5,"mainPlayerTimeLimit",15,"botCount",0),"WHEEL",Map.of("timeLimit",10,"botCount",0),"SURVIVAL",Map.of("startingHp",100,"totalRounds",25)));
-        try(Connection c=connect();PreparedStatement ps=c.prepareStatement("SELECT value FROM app_settings WHERE key='runtime'" );ResultSet rs=ps.executeQuery()){if(rs.next())result.putAll((Map<String,Object>)JsonUtil.parse(rs.getString(1)));}return result;
+        try(Connection c=connect();PreparedStatement ps=c.prepareStatement("SELECT value FROM app_settings WHERE key='runtime'" );ResultSet rs=ps.executeQuery()){if(rs.next())result.putAll((Map<String,Object>)JsonUtil.parse(rs.getString(1)));}
+        long until=((Number)result.get("maintenanceUntil")).longValue();
+        if(until>0&&System.currentTimeMillis()>=until)result.put("maintenance",false);
+        return result;
+    }
+    public static String maintenanceMessage(Map<String,Object> settings){
+        long until=((Number)settings.getOrDefault("maintenanceUntil",0L)).longValue();
+        String time=until>0?java.time.format.DateTimeFormatter.ofPattern("HH:mm 'ngày' dd/MM/yyyy").withZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).format(java.time.Instant.ofEpochMilli(until)):"khi có thông báo mới";
+        return "Server đang bảo trì đến "+time+" (giờ Việt Nam). "+settings.get("message");
+    }
+    public static Map<String,Object> maintenanceStatus()throws SQLException{
+        var s=settings();boolean enabled=Boolean.TRUE.equals(s.get("maintenance"));
+        return Map.of("enabled",enabled,"until",s.get("maintenanceUntil"),"message",enabled?maintenanceMessage(s):"");
     }
     @SuppressWarnings("unchecked")
     public static Map<String,Object> applyDefaults(String game,Map<String,Object> request) {
         try{Map<String,Object> result=new HashMap<>((Map<String,Object>)((Map<?,?>)settings().get("defaults")).get(game));result.putAll(request);return result;}catch(SQLException e){throw new IllegalStateException("Chưa tải được cấu hình máy chủ.");}
     }
-    public static String newMatchDenied(String game){try{Map<String,Object> s=settings();if(Boolean.TRUE.equals(s.get("maintenance")))return (String)s.get("message");if(!Boolean.TRUE.equals(((Map<?,?>)s.get("enabled")).get(game)))return "Trò chơi tạm ngừng nhận trận mới.";return null;}catch(SQLException e){return "Chưa tải được trạng thái máy chủ.";}}
+    public static String newMatchDenied(String game){try{Map<String,Object> s=settings();if(Boolean.TRUE.equals(s.get("maintenance")))return maintenanceMessage(s);if(!Boolean.TRUE.equals(((Map<?,?>)s.get("enabled")).get(game)))return "Trò chơi tạm ngừng nhận trận mới.";return null;}catch(SQLException e){return "Chưa tải được trạng thái máy chủ.";}}
     public static void saveSettings(String actor,Map<String,Object> v) throws SQLException {
         if(!(v.get("maintenance") instanceof Boolean)||!(v.get("enabled") instanceof Map<?,?> enabled)||!(v.get("defaults") instanceof Map<?,?> defaults))throw new IllegalArgumentException("Cấu hình không hợp lệ.");
         required(v,"message",500);
+        Map<String,Object> saved=new LinkedHashMap<>(v);long until=0;
+        if(Boolean.TRUE.equals(v.get("maintenance"))){
+            if(v.containsKey("maintenanceHours")){
+                if(!(v.get("maintenanceHours") instanceof Number hours)||!Double.isFinite(hours.doubleValue())||hours.doubleValue()<=0||hours.doubleValue()>8760)throw new IllegalArgumentException("Thời gian bảo trì cần lớn hơn 0 và tối đa 8760 giờ.");
+                until=System.currentTimeMillis()+Math.round(hours.doubleValue()*3600000);
+            }else if(v.get("maintenanceUntil") instanceof Number end&&end.doubleValue()==end.longValue())until=end.longValue();
+            if(until<=System.currentTimeMillis())throw new IllegalArgumentException("Hãy chọn số giờ bảo trì hoặc thời điểm kết thúc trong tương lai.");
+        }
+        saved.remove("maintenanceHours");saved.put("maintenanceUntil",until);
         for(String game:List.of("ARENA","WHEEL","SURVIVAL")){
             if(!(enabled.get(game) instanceof Boolean)||!(defaults.get(game) instanceof Map<?,?> d))throw new IllegalArgumentException("Thiếu cấu hình "+game);
             if(game.equals("ARENA")){range(d,"questionCount",1,100);range(d,"timeLimit",1,120);range(d,"mainPlayerTimeLimit",1,120);range(d,"botCount",0,100);}
@@ -220,8 +242,8 @@ public final class AdminStore {
             if(game.equals("SURVIVAL")){range(d,"startingHp",1,1000);range(d,"totalRounds",5,25);}
         }
         try(Connection c=connect()){c.setAutoCommit(false);try{
-            try(PreparedStatement ps=c.prepareStatement("INSERT INTO app_settings(key,value) VALUES('runtime',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")){ps.setString(1,JsonUtil.toJson(v));ps.executeUpdate();}
-            audit(c,actor,"SETTINGS_SAVE","server",v);c.commit();
+            try(PreparedStatement ps=c.prepareStatement("INSERT INTO app_settings(key,value) VALUES('runtime',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")){ps.setString(1,JsonUtil.toJson(saved));ps.executeUpdate();}
+            audit(c,actor,"SETTINGS_SAVE","server",saved);c.commit();
         }catch(Exception e){c.rollback();throw e;}}
     }
     private static void range(Map<?,?> v,String key,int min,int max){if(!(v.get(key) instanceof Number n)||n.doubleValue()!=n.intValue()||n.intValue()<min||n.intValue()>max)throw new IllegalArgumentException(key+" phải trong khoảng "+min+"–"+max);}
@@ -230,12 +252,36 @@ public final class AdminStore {
         try(Connection c=connect();PreparedStatement ps=c.prepareStatement("VACUUM INTO ?")){ps.setString(1,folder.resolve(name).toString());ps.execute();}
         audit(actor,"DATABASE_BACKUP",name,Map.of());return name;
     }
+    public static String uploadBackup(String actor,byte[] data)throws Exception{
+        byte[] magic="SQLite format 3\0".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        if(data.length<100||data.length>MAX_BACKUP_UPLOAD_BYTES||!Arrays.equals(Arrays.copyOf(data,magic.length),magic))throw new IllegalArgumentException("File phải là dữ liệu SQLite hợp lệ, dung lượng tối đa 50 MB.");
+        Path folder=Path.of("data/backups").toAbsolutePath().normalize();Files.createDirectories(folder);
+        Path temporary=Files.createTempFile(folder,"upload-",".tmp");
+        String name="upload-"+System.currentTimeMillis()+"-"+UUID.randomUUID()+".db";
+        Path destination=folder.resolve(name);
+        boolean saved=false;
+        try{
+            Files.write(temporary,data);
+            try(Connection c=DriverManager.getConnection("jdbc:sqlite:"+temporary.toUri()+"?mode=ro&immutable=1");Statement st=c.createStatement()){
+                try(ResultSet rs=st.executeQuery("PRAGMA quick_check")){if(!rs.next()||!"ok".equalsIgnoreCase(rs.getString(1))||rs.next())throw new SQLException("Invalid SQLite backup");}
+                // Require real application tables, never views supplied by an uploaded file.
+                try(ResultSet rs=st.executeQuery("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('users','leaderboard')")){if(!rs.next()||rs.getInt(1)!=2)throw new SQLException("Not a game database");}
+                Set<String> columns=new HashSet<>();try(ResultSet rs=st.executeQuery("PRAGMA table_info(users)")){while(rs.next())columns.add(rs.getString("name"));}
+                if(!columns.containsAll(Set.of("username","password_hash","salt")))throw new SQLException("Invalid user schema");
+            }catch(SQLException e){throw new IllegalArgumentException("File bị lỗi hoặc không phải dữ liệu của hệ thống trò chơi.");}
+            Files.move(temporary,destination,StandardCopyOption.ATOMIC_MOVE);
+            audit(actor,"BACKUP_UPLOAD",name,Map.of("size",data.length));saved=true;return name;
+        }finally{
+            Files.deleteIfExists(temporary);
+            if(!saved)Files.deleteIfExists(destination);
+        }
+    }
     public static List<Map<String,Object>> backups() throws IOException {
         Path folder=Path.of("data/backups");if(!Files.isDirectory(folder))return List.of();List<Map<String,Object>> result=new ArrayList<>();
-        try(var stream=Files.list(folder)){for(Path p:stream.filter(p->p.getFileName().toString().matches("(?:admin|before-history|before-admin|before-race)-[A-Za-z0-9-]+\\.db")).sorted(Comparator.reverseOrder()).limit(50).toList())result.add(Map.of("name",p.getFileName().toString(),"size",Files.size(p),"created_at",Files.getLastModifiedTime(p).toMillis()));}return result;
+        try(var stream=Files.list(folder)){for(Path p:stream.filter(p->Files.isRegularFile(p)&&!Files.isSymbolicLink(p)&&p.getFileName().toString().matches("(?:upload|admin|before-history|before-admin|before-race)-[A-Za-z0-9-]+\\.db")).sorted((a,b)->{try{return Files.getLastModifiedTime(b).compareTo(Files.getLastModifiedTime(a));}catch(IOException e){return b.compareTo(a);}}).limit(50).toList())result.add(Map.of("name",p.getFileName().toString(),"size",Files.size(p),"created_at",Files.getLastModifiedTime(p).toMillis()));}return result;
     }
     public static byte[] backupFile(String name) throws IOException {
-        if(!name.matches("(?:admin|before-history|before-admin|before-race)-[A-Za-z0-9-]+\\.db"))throw new IllegalArgumentException("Tên bản sao lưu không hợp lệ.");
+        if(!name.matches("(?:upload|admin|before-history|before-admin|before-race)-[A-Za-z0-9-]+\\.db"))throw new IllegalArgumentException("Tên bản sao lưu không hợp lệ.");
         Path folder=Path.of("data/backups").toAbsolutePath().normalize(),file=folder.resolve(name).normalize();
         if(!file.getParent().equals(folder)||!Files.isRegularFile(file)||Files.isSymbolicLink(file))throw new IllegalArgumentException("Không tìm thấy bản sao lưu.");return Files.readAllBytes(file);
     }

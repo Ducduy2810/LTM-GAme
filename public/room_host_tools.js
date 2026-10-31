@@ -9,7 +9,9 @@
     }else if(data.type.endsWith('_round_result')){
       document.querySelectorAll('.learning-explanation').forEach(n=>n.remove());
     }
-    if(data.type==='server_notice'||data.type==='room_kicked'||(data.type==='left_wheel_room'&&data.message))window.RoomNotices?.show({username:'Thông báo',message:data.message});
+    if(data.cancelled&&['arena_room_closed','survival_room_closed','left_wheel_room'].includes(data.type))window.SystemClient?.showCancellation(data);
+    if(data.type==='room_kicked')window.SystemClient?.showKick(data);
+    if(data.type==='server_notice'||(data.type==='left_wheel_room'&&data.message))window.RoomNotices?.show({username:'Thông báo',message:data.message});
     if(['left_room_success','left_wheel_room','left_survival_room','arena_room_closed','survival_room_closed','auth_error','room_kicked'].includes(data.type)){hide(true);return;}
     if(data.roomCode&&context.roomCode&&data.roomCode!==context.roomCode&&!data.type.endsWith('_room_info')&&data.type!=='room_info')return;
     const code=data.roomCode||context.roomCode;

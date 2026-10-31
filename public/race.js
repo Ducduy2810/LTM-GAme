@@ -1,7 +1,8 @@
 (() => {
   'use strict';
   const $=id=>document.getElementById(id),el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);if(cls)n.className=cls;return n;};
-  let socket,user,overview,state={phase:'IDLE'},mode='RANKED',offset=0,answerBusy=false,review=null,reviewId='',terminalSeen='',reconnectTimer,leaving=false,lastQuestion='';
+  let socket,user,overview,state={phase:'IDLE'},mode='RANKED',offset=0,answerBusy=false,review=null,reviewId='',terminalSeen='',reconnectTimer,leaving=false,lastQuestion='',pendingHome=null;
+  const cancelledMatches=new Set();
   const modeNames={RANKED:'Đấu rank',CASUAL:'Đấu thường',BOT:'Luyện với máy',DAILY:'Thử thách ngày'};
   const statusNames={WAITING:'Đang chờ',ACTIVE:'Đang thi đấu',COMPLETED:'Hoàn thành',CANCELLED:'Đã hủy',INTERRUPTED:'Gián đoạn'};
   function message(text){$('race-message').textContent=text||'';$('race-message').classList.toggle('hidden',!text);}
@@ -47,13 +48,16 @@
   async function refresh(){try{overview=await api('/api/race/overview');account(overview);renderMenu();}catch(e){message(e.message);}}
   async function history(){try{const data=await api('/api/race/history');$('race-history').replaceChildren();if(!data.items.length)$('race-history').append(el('p','Chưa có trận Đường đua nào.','empty'));
     const items=data.items.filter(r=>r.mode===mode);if(data.items.length&&!items.length)$('race-history').append(el('p','Chưa có trận ở chế độ này.','empty'));
-    for(const r of items){const row=el('div',undefined,'history-entry'),info=el('div');info.append(el('strong',modeNames[r.mode]+' · '+r.room_name),el('small',new Date(r.started_at).toLocaleString('vi-VN')+' · '+statusNames[r.status]),el('small',r.status==='COMPLETED'?`Hạng ${r.placement} · ${r.correct_count} câu đúng · ${r.mode==='RANKED'?((r.result.rpDelta>=0?'+':'')+r.result.rpDelta+' RP'):'Không tính rank'}`:r.reason||'Chưa hoàn thành'));
+    for(const r of items){const row=el('div',undefined,'history-entry'),info=el('div');const forfeited=r.mode==='RANKED'&&r.forfeited===1&&['ACTIVE','COMPLETED'].includes(r.status);info.append(el('strong',modeNames[r.mode]+' · '+r.room_name),el('small',new Date(r.started_at).toLocaleString('vi-VN')+' · '+(forfeited?'Thua · Bỏ cuộc':statusNames[r.status])),el('small',r.status==='COMPLETED'?`Hạng ${r.placement} · ${r.correct_count} câu đúng · ${r.mode==='RANKED'?((r.result.rpDelta>=0?'+':'')+r.result.rpDelta+' RP'):'Không tính rank'}`:forfeited?'Không thể vào lại trận. RP được chốt khi trận kết thúc.':r.reason||'Chưa hoàn thành'));
       row.append(info);if(!['ACTIVE','WAITING'].includes(r.status))row.append(button('Ôn lại →',()=>loadReview(r.id)));$('race-history').append(row);}
   }catch(e){message(e.message);}}
   async function loadReview(id){try{const data=await api('/api/race/review?id='+encodeURIComponent(id));if(!new URLSearchParams(location.search).has('mode'))choose(data.match.mode);review=data;reviewId=id;$('review-panel').classList.remove('hidden');renderReview();$('review-panel').scrollIntoView({behavior:'smooth',block:'start'});}catch(e){message(e.message);}}
   function renderReview(){const rows=review?.questions||[];const selected=rows.filter(r=>!$('wrong-only').checked||!r.correct);$('review-list').replaceChildren();if(!selected.length)$('review-list').append(el('p',rows.length?'Bạn không có câu sai trong bộ lọc này. Tiếp tục phát huy!':'Trận chưa có câu đã hoàn thành để ôn lại.','empty'));
     for(const r of selected){const q=r.question,box=el('article',undefined,'review-question');box.append(el('h3',`${r.round_no}. ${q.text}`),el('p','Bạn chọn: '+(r.answer===null?'Hết giờ / chưa trả lời':`${'ABCD'[r.answer]}. ${q.options[r.answer]}`)),el('p',`Đáp án đúng: ${'ABCD'[q.correct]}. ${q.options[q.correct]}`,'correct-answer'),el('p',q.explanation));$('review-list').append(box);}}
   function render(data){
+    if(data.queueCancelled)window.SystemClient?.showCancellation(data);
+    if(data.phase==='CANCELLED'&&!cancelledMatches.has(data.matchId)){cancelledMatches.add(data.matchId);window.SystemClient?.showCancellation(data);}
+    if(pendingHome&&data.phase==='IDLE'&&data.matchId===pendingHome.matchId){const destination=pendingHome.href;pendingHome=null;leaving=true;location.assign(destination);return;}
     $('active-session-panel').classList.toggle('hidden',data.phase!=='OTHER_MODE');
     if(data.phase==='OTHER_MODE'){
       state=data;$('menu-panel').classList.add('hidden');$('queue-panel').classList.add('hidden');$('match-panel').classList.add('hidden');$('active-session-message').textContent=data.message;$('resume-other-mode').href='/race.html?mode='+data.activeMode.toLowerCase();return;
@@ -91,15 +95,24 @@
   function connect(){
     clearTimeout(reconnectTimer);socket=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');const active=socket;
     socket.onopen=()=>{$('connection-status').textContent='● Máy chủ trực tuyến';send('race_resume',{mode});};
-    socket.onmessage=event=>{if(socket!==active)return;try{const data=JSON.parse(event.data);if(data.type==='race_state')render(data);else if(data.type==='race_error'){answerBusy=false;message(data.message);if(state.question)render(state);}else if(data.type==='race_kicked'){message(data.message);render({phase:'IDLE'});}else if(data.type==='server_notice')message(data.message);else if(data.type==='auth_error'){leaving=true;window.SystemClient?.handleAuthError(data);}}catch(e){message('Không đọc được cập nhật từ máy chủ.');console.error(e);}};
-    socket.onclose=()=>{if(socket!==active||leaving)return;$('connection-status').textContent='Đang kết nối lại…';message('Mất kết nối. Hệ thống đang thử kết nối lại; thời gian trận vẫn tiếp tục trên server.');reconnectTimer=setTimeout(connect,1500);};
+    socket.onmessage=event=>{if(socket!==active)return;try{const data=JSON.parse(event.data);if(data.type==='race_state')render(data);else if(data.type==='race_error'){pendingHome=null;answerBusy=false;message(data.message);if(state.question)render(state);}else if(data.type==='race_kicked'){pendingHome=null;render({phase:'IDLE',message:data.message});window.SystemClient?.showKick(data);}else if(data.type==='server_notice')message(data.message);else if(data.type==='auth_error'){leaving=true;window.SystemClient?.handleAuthError(data);}}catch(e){message('Không đọc được cập nhật từ máy chủ.');console.error(e);}};
+    socket.onclose=()=>{if(socket!==active||leaving)return;pendingHome=null;$('connection-status').textContent='Đang kết nối lại…';message('Mất kết nối. Hệ thống đang thử kết nối lại; thời gian trận vẫn tiếp tục trên server.');reconnectTimer=setTimeout(connect,1500);};
     socket.onerror=()=>{$('connection-status').textContent='Lỗi kết nối';};
   }
   $('play-button').addEventListener('click',()=>{message('');if(mode==='DAILY')send('race_daily');else if(mode==='RANKED')send('race_queue',{mode,useShield:$('use-shield').checked,useDouble:$('use-double').checked});else if(mode==='CASUAL')send('race_queue',{mode});});
   $('create-form').addEventListener('submit',e=>{e.preventDefault();if(!['CASUAL','BOT'].includes(mode))return;send('race_create',{withBots:mode==='BOT',roomName:$('room-name').value,questionCount:Number($('question-count').value),timeLimit:Number($('question-seconds').value),botCount:mode==='BOT'?Number($('bot-count').value):0});});
   $('join-form').addEventListener('submit',e=>{e.preventDefault();if(mode==='CASUAL')send('race_join',{roomCode:$('join-code').value.trim().toUpperCase(),mode});});
   $('cancel-queue').addEventListener('click',()=>send('race_cancel_queue'));$('start-match').addEventListener('click',()=>send('race_start'));$('delete-room').addEventListener('click',()=>{if(confirm('Xóa phòng chờ này?'))send('race_delete');});
-  $('leave-match').addEventListener('click',()=>{if(!['QUESTION','RESULT'].includes(state.phase)||confirm('Rời trận đang chơi? Bạn sẽ xếp sau người ở lại và kết quả rank vẫn được ghi.'))send('race_leave');});
+  const rankedLeaveWarning='Bạn đang trong trận xếp hạng quan trọng, bạn vẫn rời phòng chứ ?';
+  const inRankedMatch=()=>state.mode==='RANKED'&&['QUESTION','RESULT'].includes(state.phase);
+  document.querySelectorAll('.race-header a[href="/"], #back-to-portal').forEach(link=>link.addEventListener('click',event=>{
+    if(!inRankedMatch())return;
+    event.preventDefault();
+    if(pendingHome||!confirm(rankedLeaveWarning))return;
+    pendingHome={href:link.href,matchId:state.matchId};
+    if(!send('race_leave'))pendingHome=null;
+  }));
+  $('leave-match').addEventListener('click',()=>{if(!['QUESTION','RESULT'].includes(state.phase)||confirm(inRankedMatch()?rankedLeaveWarning:'Rời trận đang chơi? Bạn sẽ xếp sau người ở lại và kết quả rank vẫn được ghi.'))send('race_leave');});
   $('back-menu').addEventListener('click',()=>send('race_leave'));$('view-review').addEventListener('click',()=>loadReview(state.matchId));$('wrong-only').addEventListener('change',renderReview);
   $('refresh-overview').addEventListener('click',refresh);$('refresh-history').addEventListener('click',history);
   window.addEventListener('beforeunload',()=>{leaving=true;socket?.close();});setInterval(updateTimer,200);setInterval(()=>{if(document.hidden)return;if(state.phase==='IDLE')refresh();else if(state.phase==='OTHER_MODE')send('race_resume',{mode});},15000);

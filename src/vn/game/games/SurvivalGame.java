@@ -301,7 +301,7 @@ public class SurvivalGame implements AutoCloseable {
         for (Map.Entry<WebSocketClient,SurvivalRoom> entry:new ArrayList<>(clientRoomMap.entrySet())) {
             if(entry.getValue()==room) {
                 WebSocketClient member=entry.getKey();clientRoomMap.remove(member);
-                member.send(JsonUtil.toJson(Map.of("type","survival_room_closed","message",notification)));
+                member.send(JsonUtil.toJson(Map.of("type","survival_room_closed","cancelled",true,"reason",reason,"message",notification)));
                 registerLobbyClient(member);
             }
         }
@@ -352,7 +352,7 @@ public class SurvivalGame implements AutoCloseable {
         catch(java.sql.SQLException e){throw new IllegalStateException("Không ghi được nhật ký kick.",e);}
         room.banPlayer(target);
         handleLeaveRoom(member);
-        member.send(JsonUtil.toJson(Map.of("type","room_kicked","game","SURVIVAL","roomCode",room.getRoomCode(),"message",reason)));
+        member.send(JsonUtil.toJson(Map.of("type","room_kicked","game","SURVIVAL","roomCode",room.getRoomCode(),"reason",reason,"message","Bạn đã bị kick khỏi phòng. Lý do: "+reason)));
         for(Map.Entry<WebSocketClient,SurvivalRoom> entry:clientRoomMap.entrySet())if(entry.getValue()==room)
             entry.getKey().send(JsonUtil.toJson(Map.of("type","server_notice","message",target+" đã bị mời rời phòng.")));
         broadcastRoomListToLobby();

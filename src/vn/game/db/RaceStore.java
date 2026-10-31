@@ -177,6 +177,12 @@ public final class RaceStore {
     public static void openRound(String match,int round,String token,Question q,long opened,long deadline)throws SQLException{try(Connection c=AdminStore.connect()){update(c,"INSERT INTO race_rounds(match_id,round_no,token,snapshot_json,opened_at,deadline) VALUES(?,?,?,?,?,?)",match,round,token,JsonUtil.toJson(q.snapshot()),opened,deadline);}}
     public static void answer(String match,int round,String name,int answer,long elapsed,int order)throws SQLException{try(Connection c=AdminStore.connect()){update(c,"INSERT INTO race_answers(match_id,round_no,username,answer,elapsed_ms,answer_order) VALUES(?,?,?,?,?,?)",match,round,name,answer,elapsed,order);}}
     public static void closeRound(String match,int round,Map<String,Integer> points)throws SQLException{try(Connection c=AdminStore.connect()){c.setAutoCommit(false);try{for(var entry:points.entrySet())update(c,"UPDATE race_answers SET points=? WHERE match_id=? AND round_no=? AND username=?",entry.getValue(),match,round,entry.getKey());update(c,"UPDATE race_rounds SET closed=1 WHERE match_id=? AND round_no=?",match,round);c.commit();}catch(Exception e){c.rollback();throw e;}}}
+    /** Record an intentional departure immediately; RP is settled once with the match. */
+    public static void forfeit(String match,String username)throws SQLException{
+        try(Connection c=AdminStore.connect()){
+            update(c,"UPDATE race_players SET forfeited=1 WHERE match_id=? AND username=? AND EXISTS(SELECT 1 FROM race_matches WHERE id=? AND status='ACTIVE')",match,username,match);
+        }
+    }
     public record Result(String username,boolean bot,int score,int correct,int place,boolean forfeited,int rp){}
     public static Map<String,Map<String,Object>> finish(String match,List<Result> results)throws SQLException{
         try(Connection c=AdminStore.connect()){

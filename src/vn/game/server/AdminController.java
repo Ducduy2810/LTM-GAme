@@ -17,6 +17,7 @@ public final class AdminController {
         void disconnect(String username,String reason);
         void roomAction(String actor,String game,String room,String action,String target,String reason);
         default void announce(Map<String,Object> announcement){}
+        default void maintenanceChanged(){}
         default Map<String,Object> integrations(){return Map.of();}
         default Map<String,Object> race()throws SQLException{return Map.of();}
         default void raceAction(String actor,Map<String,Object> input)throws SQLException{}
@@ -43,13 +44,22 @@ public final class AdminController {
     private synchronized void failed(String key){attempts.computeIfAbsent(key,k->new Attempt(System.currentTimeMillis())).failures++;}
     @SuppressWarnings("unchecked")
     public Reply handle(String method,String path,String query,String body,Map<String,String> headers,String remoteIp) {
+        return handle(method,path,query,body.getBytes(java.nio.charset.StandardCharsets.UTF_8),headers,remoteIp);
+    }
+    @SuppressWarnings("unchecked")
+    public Reply handle(String method,String path,String query,byte[] body,Map<String,String> headers,String remoteIp) {
         try{
             if(!Set.of("GET","POST").contains(method))return Reply.json(405,Map.of("error","Phương thức không hỗ trợ."));
             if(!validOrigin(headers))return Reply.json(403,Map.of("error","Nguồn yêu cầu không hợp lệ."));
             Map<String,Object> v=Map.of();
+            boolean upload=path.equals("/api/admin/backup-upload");
             if("POST".equals(method)){
+                if(upload){
+                    if(!headers.getOrDefault("content-type","").equalsIgnoreCase("application/octet-stream"))return Reply.json(415,Map.of("error","Hãy tải lên file dữ liệu SQLite."));
+                }else{
                 if(!headers.getOrDefault("content-type","").toLowerCase(Locale.ROOT).startsWith("application/json"))return Reply.json(415,Map.of("error","Yêu cầu cần JSON."));
-                v=JsonUtil.parseObject(body);
+                v=JsonUtil.parseObject(new String(body,java.nio.charset.StandardCharsets.UTF_8));
+                }
             }
             String id=AdminSessions.cookieValue(headers.get("cookie"),"admin_session");
             if("/api/admin/login".equals(path)){
@@ -121,7 +131,7 @@ public final class AdminController {
                 case "/api/admin/topics/save":AdminStore.saveTopic(actor,v);result=Map.of("success",true);break;
                 case "/api/admin/content/save":{String kind=AdminStore.required(v,"kind",10);result=Map.of("id",AdminStore.saveContent(actor,kind,v));break;}
                 case "/api/admin/content/import":result=AdminStore.importContent(actor,AdminStore.required(v,"kind",10),AdminStore.required(v,"csv",450000),Boolean.TRUE.equals(v.get("dryRun")));break;
-                case "/api/admin/settings":AdminStore.saveSettings(actor,v);result=Map.of("success",true);break;
+                case "/api/admin/settings":AdminStore.saveSettings(actor,v);runtime.maintenanceChanged();result=Map.of("success",true);break;
                 case "/api/admin/announcement":vn.game.model.ServerAnnouncement.save(actor,v);runtime.announce(vn.game.model.ServerAnnouncement.publicView());result=Map.of("success",true);break;
                 case "/api/admin/race/settings":RaceStore.saveSettings(actor,v);result=Map.of("success",true);break;
                 case "/api/admin/race/rank-settings":RaceStore.saveScopedSettings(actor,v,"RANK");result=Map.of("success",true);break;
@@ -135,6 +145,7 @@ public final class AdminController {
                     break;
                 }
                 case "/api/admin/backup":result=Map.of("name",AdminStore.backup(actor));break;
+                case "/api/admin/backup-upload":result=Map.of("name",AdminStore.uploadBackup(actor,body));break;
                 default:return Reply.json(404,Map.of("error","Không tìm thấy chức năng."));
             }
             return Reply.json(200,(Map<String,Object>)result);

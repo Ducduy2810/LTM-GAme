@@ -1,6 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
     checkAuth();
-    const googleErrors={google_not_configured:'Đăng nhập Google chưa được cấu hình đầy đủ trên server.',google_redirect_config:'Địa chỉ callback Google chưa hợp lệ. Kiểm tra GOOGLE_REDIRECT_URI/APP_BASE_URL.',google_state_invalid:'Phiên đăng nhập Google đã hết hạn hoặc khác trình duyệt. Hãy bấm đăng nhập Google lại.',google_cancelled:'Bạn đã hủy đăng nhập Google.',google_token_failed:'Google từ chối mã đăng nhập. Kiểm tra Client ID, Client Secret và callback đã đăng ký.',google_network_failed:'Server không kết nối được Google. Kiểm tra quyền truy cập Internet.',google_email_unverified:'Google chưa xác nhận email của tài khoản này.',google_profile_failed:'Không lấy được thông tin tài khoản Google.',google_account_restricted:'Tài khoản Google không được phép đăng nhập ở cổng người chơi.',google_account_failed:'Chưa hoàn tất được đăng nhập Google. Hãy thử lại.',google_busy:'Nhiều yêu cầu đăng nhập Google. Vui lòng thử lại sau.'};
+    const googleErrors={maintenance:'Server đang bảo trì. Vui lòng chờ đến thời gian mở lại.',google_not_configured:'Đăng nhập Google chưa được cấu hình đầy đủ trên server.',google_redirect_config:'Địa chỉ callback Google chưa hợp lệ. Kiểm tra GOOGLE_REDIRECT_URI/APP_BASE_URL.',google_state_invalid:'Phiên đăng nhập Google đã hết hạn hoặc khác trình duyệt. Hãy bấm đăng nhập Google lại.',google_cancelled:'Bạn đã hủy đăng nhập Google.',google_token_failed:'Google từ chối mã đăng nhập. Kiểm tra Client ID, Client Secret và callback đã đăng ký.',google_network_failed:'Server không kết nối được Google. Kiểm tra quyền truy cập Internet.',google_email_unverified:'Google chưa xác nhận email của tài khoản này.',google_profile_failed:'Không lấy được thông tin tài khoản Google.',google_account_restricted:'Tài khoản Google không được phép đăng nhập ở cổng người chơi.',google_account_failed:'Chưa hoàn tất được đăng nhập Google. Hãy thử lại.',google_busy:'Nhiều yêu cầu đăng nhập Google. Vui lòng thử lại sau.'};
     const errorCode=typeof URLSearchParams==='undefined'?null:new URLSearchParams(window.location.search).get('error');
     if(googleErrors[errorCode]){document.getElementById('auth-msg').innerText=googleErrors[errorCode];history.replaceState(null,'',window.location.pathname);}
 
@@ -176,6 +176,7 @@ async function checkAuth() {
         const res = await fetch('/auth/me');
         const data = await res.json();
         if(res.ok===false){document.getElementById('auth-msg').innerText=data.error||'Chưa kết nối được máy chủ.';return;}
+        if(data.maintenance)window.SystemClient?.setMaintenance(data.maintenance);
         window.SystemClient?.setAccount(data.loggedIn?data.user:null,data.accountNotice);
 
         if (data.loggedIn) {

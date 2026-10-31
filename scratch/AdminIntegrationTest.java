@@ -68,8 +68,12 @@ public class AdminIntegrationTest {
                     survival.handleToggleReady(guest);survival.handleStartGame(owner);long errors=owner.count("survival_error");r.handlePauseGame(owner);check(owner.count("survival_error")==errors+1,"survival owner cannot pause");survival.handleHostKick(owner,"guest");check(guest.count("room_kicked")==1&&r.getPlayerCount()==1,"survival host kicks during match");survival.handleJoinRoom(new Client("guest"),code);check(r.getPlayerCount()==1,"survival kicked account cannot reconnect");break;
                 }
             }
+            check(guest.last("room_kicked").get("message").toString().startsWith("Bạn đã bị kick"),"kick notification explicitly identifies kick in "+game);
+            check(guest.last("room_kicked").get("reason").equals("Chủ phòng đã mời bạn rời phòng."),"kick notification preserves reason in "+game);
             post("/rooms/action",Map.of("game",game,"roomCode",code,"action","notice","reason","Thông báo thử"));check(owner.count("server_notice")>=1,"admin broadcasts to room "+game);
             post("/rooms/action",Map.of("game",game,"roomCode",code,"action","cancel","reason","Hủy để kiểm thử"));
+            String closedEvent=game.equals("ARENA")?"arena_room_closed":game.equals("SURVIVAL")?"survival_room_closed":"left_wheel_room";
+            check(Boolean.TRUE.equals(owner.last(closedEvent).get("cancelled"))&&owner.last(closedEvent).get("reason").equals("Hủy để kiểm thử"),"cancelled room notification carries exact reason "+game);
             check(MatchService.history("owner").stream().anyMatch(r->code.equals(r.get("room_code"))&&r.get("status").equals("CANCELLED")),"admin cancellation persisted "+game);
             check(MatchService.history("guest").stream().anyMatch(r->code.equals(r.get("room_code"))),"kicked player remains in match history "+game);
         }
@@ -138,7 +142,7 @@ public class AdminIntegrationTest {
         check(items(get("/content?kind=QUESTION")).size()==before+1,"failed CSV import writes no partial rows");
     }
     @SuppressWarnings("unchecked") static void settings()throws Exception{
-        var s=get("/settings");s.put("maintenance",true);post("/settings",s);
+        var s=get("/settings");s.put("maintenance",true);s.put("maintenanceHours",1);post("/settings",s);
         Client owner=new Client("owner");int count=arena.getRoomsSummaryList().size();arena.handleCreateRoom(owner,Map.of("roomCode","MAINT","topic","ALL"));check(arena.getRoomsSummaryList().size()==count&&owner.count("arena_error")==1,"maintenance blocks new rooms on server");
         s.put("maintenance",false);Map<String,Object> enabled=new LinkedHashMap<>((Map<String,Object>)s.get("enabled"));enabled.put("WHEEL",false);s.put("enabled",enabled);post("/settings",s);
         wheel.handleCreateRoom(owner,Map.of("roomCode","DISABLED","topic","ALL"));check(owner.count("wheel_error")==1,"disabled game blocks new rooms");
@@ -159,6 +163,119 @@ public class AdminIntegrationTest {
         post("/users/action",Map.of("userId",guest,"action","unlock","reason","Kiểm tra mở khóa"));
         check(request("/auth/login",null,Map.of("username","guest","password","TestPlayerPass123"),null,null).statusCode()==200,"unlocked account can log in");
         check(request("/api/admin/users/action",cookie,Map.of("userId",users.findByUsername("operator").getId(),"action","lock","minutes",60,"reason","Không được phép"),csrf,null).statusCode()==400,"player moderation cannot lock admin");
+    }
+    static Socket eventStream(String session)throws Exception{
+        URI uri=URI.create(base);Socket socket=new Socket(uri.getHost(),uri.getPort());socket.setSoTimeout(5000);
+        socket.getOutputStream().write(("GET /api/events HTTP/1.1\r\nHost: "+uri.getAuthority()+"\r\n"+(session==null?"":"Cookie: session_id="+session+"\r\n")+"\r\n").getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+        var reader=new BufferedReader(new InputStreamReader(socket.getInputStream()));
+        check(reader.readLine().contains("200"),"event stream opens");
+        while(!reader.readLine().isEmpty()){}
+        check(reader.readLine().startsWith("event:"),"stream registered before checking online count");return socket;
+    }
+    static int online()throws Exception{return ((Number)get("/overview").get("connections")).intValue();}
+    @SuppressWarnings("unchecked") static int activeMatches()throws Exception{return ((Number)((Map<String,Object>)get("/overview").get("counts")).get("activeMatches")).intValue();}
+    static void overviewStats()throws Exception{
+        String ownerSession=sessions.createSession("owner"),guestSession=sessions.createSession("guest");
+        check(online()==0,"stored login sessions without an open page are offline");
+        try(Socket anonymous=eventStream(null);Socket ownerTab=eventStream(ownerSession);Socket duplicateTab=eventStream(sessions.createSession("owner"));Socket guestTab=eventStream(guestSession)){
+            check(online()==2,"lobby users counted once across tabs; anonymous visitors excluded");
+            LivePeer listener=new LivePeer();
+            var ws=HTTP.newWebSocketBuilder().header("Cookie","session_id="+ownerSession).buildAsync(URI.create(base.replace("http:","ws:")+"/ws"),listener).join();
+            check(online()==2,"game socket and lobby stream count the same player once");
+            sessions.removeUserSessions("owner");check(online()==1,"revoked sessions excluded immediately from streams and game sockets");
+            ws.abort();
+            guestTab.setSoLinger(true,0);guestTab.close();
+            long deadline=System.currentTimeMillis()+16000;
+            while(online()!=0&&System.currentTimeMillis()<deadline)Thread.sleep(250);
+            check(online()==0,"closing the last page removes online user after heartbeat");
+        }finally{sessions.removeUserSessions("owner");sessions.removeUserSessions("guest");}
+        check(activeMatches()==0,"no ongoing matches initially");
+        String waiting=RaceStore.create("STAT_WAIT","Waiting stats","CASUAL",Map.of(),System.currentTimeMillis());
+        check(activeMatches()==0,"waiting race room excluded");
+        String legacy=MatchService.start("ARENA","STAT_ARENA",true,Map.of(),List.of("owner"));
+        check(activeMatches()==1,"active legacy match counted");
+        RaceStore.activate(waiting,Map.of(),false,System.currentTimeMillis());
+        check(activeMatches()==2,"active race and legacy matches combined");
+        MatchService.finish(legacy,false,"stats test",List.of());check(activeMatches()==1,"completed match excluded");
+        RaceStore.cancel(waiting,"stats test");check(activeMatches()==0,"cancelled race excluded");
+    }
+    @SuppressWarnings("unchecked") static void maintenanceControl()throws Exception{
+        var original=get("/settings");var config=RaceStore.settings();var duel=new LinkedHashMap<>(config);duel.put("targetPlayers",2);RaceStore.saveSettings("operator",duel);
+        List<java.net.http.WebSocket> sockets=new ArrayList<>();
+        var events=HTTP.send(HttpRequest.newBuilder(URI.create(base+"/api/events")).build(),HttpResponse.BodyHandlers.ofInputStream());
+        List<String> streamLines=new CopyOnWriteArrayList<>();Thread reader=new Thread(()->{try(var lines=new BufferedReader(new InputStreamReader(events.body(),java.nio.charset.StandardCharsets.UTF_8))){String line;while((line=lines.readLine())!=null)streamLines.add(line);}catch(IOException ignored){}});reader.setDaemon(true);reader.start();
+        try{
+            var invalid=new LinkedHashMap<>(original);invalid.put("maintenance",true);invalid.remove("maintenanceUntil");
+            check(request("/api/admin/settings",cookie,invalid,csrf,null).statusCode()==400,"maintenance requires a future end time");
+            invalid.put("maintenanceHours",0);check(request("/api/admin/settings",cookie,invalid,csrf,null).statusCode()==400,"zero maintenance duration rejected");
+            invalid.put("maintenanceHours",-1);check(request("/api/admin/settings",cookie,invalid,csrf,null).statusCode()==400,"negative maintenance duration rejected");
+            invalid.remove("maintenanceHours");invalid.put("maintenanceUntil",System.currentTimeMillis()-1);check(request("/api/admin/settings",cookie,invalid,csrf,null).statusCode()==400,"past maintenance date rejected");
+            String owner=sessions.createSession("owner"),guest=sessions.createSession("guest"),idle=sessions.createSession("outsider");
+            List<LivePeer> peers=new ArrayList<>();
+            for(String id:List.of(owner,guest)){
+                LivePeer peer=new LivePeer();peers.add(peer);var ws=HTTP.newWebSocketBuilder().header("Cookie","session_id="+id).buildAsync(URI.create(base.replace("http:","ws:")+"/ws"),peer).join();sockets.add(ws);ws.sendText("{\"type\":\"race_queue\",\"mode\":\"RANKED\"}",true).join();
+            }
+            until(()->peers.get(0).packets.stream().anyMatch(p->p.get("type").equals("race_state")&&p.get("phase").equals("QUESTION")),"ranked match active before maintenance");
+            String match=peers.get(0).packets.stream().filter(p->p.get("type").equals("race_state")&&p.get("phase").equals("QUESTION")).map(p->p.get("matchId").toString()).findFirst().orElseThrow();
+            long before=System.currentTimeMillis();var active=new LinkedHashMap<>(original);active.put("maintenance",true);active.put("maintenanceHours",1);active.put("message","Nâng cấp dữ liệu thử nghiệm");post("/settings",active);
+            var current=get("/settings");long until=((Number)current.get("maintenanceUntil")).longValue();check(until>=before+3600000&&until<=System.currentTimeMillis()+3600000,"hour duration converted to persisted end timestamp");
+            check(sessions.getUsername(owner)==null&&sessions.getUsername(guest)==null&&sessions.getUsername(idle)==null,"maintenance revokes online and idle player sessions immediately");
+            until(()->peers.stream().allMatch(peer->peer.packets.stream().anyMatch(p->p.get("type").equals("auth_error")&&p.get("message").toString().contains("Server đang bảo trì đến"))),"maintenance logout includes end time on real sockets");
+            until(()->streamLines.stream().anyMatch(line->line.startsWith("data:")&&line.contains("Server đang bảo trì đến")),"maintenance notice reaches lobby and anonymous SSE visitors");
+            var login=request("/auth/login",null,Map.of("username","owner","password","TestPlayerPass123"),null,null);check(login.statusCode()==503&&login.body().contains("Server đang bảo trì đến"),"player login blocked with maintenance deadline");
+            var me=JsonUtil.parseObject(request("/auth/me","session_id="+owner,null,null,null).body());check(Boolean.FALSE.equals(me.get("loggedIn"))&&((Map<?,?>)me.get("maintenance")).get("until").equals(until),"identity endpoint returns logged-out maintenance status");
+            check(request("/api/race/overview","session_id="+owner,null,null,null).statusCode()==503,"player APIs blocked during maintenance");
+            for(String path:List.of("/auth/google","/auth/google/callback?code=unused")){var response=request(path,null,null,null,null);check(response.statusCode()==302&&response.headers().firstValue("location").orElse("").contains("error=maintenance"),"Google entry and callback blocked before account creation");}
+            check(request("/api/admin/session",cookie,null,null,null).statusCode()==200,"admin session remains usable during maintenance");
+            check(request("/api/admin/login",null,Map.of("username","operator","password",password),null,null).statusCode()==200,"admin can sign in during maintenance");
+            check(RaceStore.history("owner",false).stream().anyMatch(r->r.get("id").equals(match)&&r.get("status").equals("CANCELLED")),"maintenance cancels active ranked match");
+            try(var c=AdminStore.connect()){check(((Number)AdminStore.rows(c,"SELECT COUNT(*) AS n FROM rank_ledger WHERE match_id=?",match).get(0).get("n")).intValue()==0,"maintenance cancellation does not settle rank penalties or rewards");}
+            check(activeMatches()==0,"all ongoing matches cleared by maintenance");
+            active.remove("maintenanceHours");active.put("maintenanceUntil",System.currentTimeMillis()+2500);post("/settings",active);
+            check(Boolean.TRUE.equals(get("/settings").get("maintenance")),"absolute end date activates maintenance");
+            until(()->{try{return Boolean.FALSE.equals(JsonUtil.parseObject(request("/api/maintenance",null,null,null,null).body()).get("enabled"));}catch(Exception e){return false;}},"maintenance expires automatically without another admin save");
+            check(Boolean.FALSE.equals(get("/settings").get("maintenance")),"admin view reflects expired maintenance");
+            check(request("/auth/login",null,Map.of("username","owner","password","TestPlayerPass123"),null,null).statusCode()==200,"player login reopens automatically after expiry");
+            check(Boolean.FALSE.equals(JsonUtil.parseObject(request("/auth/me","session_id="+owner,null,null,null).body()).get("loggedIn")),"revoked old session stays invalid after reopening");
+            active.put("maintenanceHours",1);post("/settings",active);post("/settings",original);
+            check(request("/auth/login",null,Map.of("username","guest","password","TestPlayerPass123"),null,null).statusCode()==200,"admin can end maintenance early");
+        }finally{post("/settings",original);RaceStore.saveSettings("operator",config);events.body().close();for(var ws:sockets)ws.abort();}
+    }
+    static HttpResponse<String> upload(byte[] data,String credential,String token,String origin,String type)throws Exception{
+        var request=HttpRequest.newBuilder(URI.create(base+"/api/admin/backup-upload")).header("Content-Type",type).POST(HttpRequest.BodyPublishers.ofByteArray(data));
+        if(credential!=null)request.header("Cookie",credential);if(token!=null)request.header("X-CSRF-Token",token);if(origin!=null)request.header("Origin",origin);
+        return HTTP.send(request.build(),HttpResponse.BodyHandlers.ofString());
+    }
+    static void backupUploads(byte[] snapshot)throws Exception{
+        String binary="application/octet-stream";
+        check(upload(snapshot,null,csrf,null,binary).statusCode()==401,"anonymous visitors cannot upload backups");
+        check(upload(snapshot,"session_id="+sessions.createSession("owner"),csrf,null,binary).statusCode()==401,"players cannot upload backups");
+        check(upload(snapshot,cookie,null,null,binary).statusCode()==403,"backup upload requires CSRF token");
+        check(upload(snapshot,cookie,csrf,"https://evil.example",binary).statusCode()==403,"cross-origin backup upload rejected");
+        check(upload(snapshot,cookie,csrf,null,"text/plain").statusCode()==415,"backup upload requires binary content type");
+        check(upload(new byte[0],cookie,csrf,null,binary).statusCode()==400,"empty backup rejected");
+        byte[] corrupt=new byte[1024];System.arraycopy("SQLite format 3\0".getBytes(java.nio.charset.StandardCharsets.US_ASCII),0,corrupt,0,16);
+        check(upload(corrupt,cookie,csrf,null,binary).statusCode()==400,"corrupt database rejected even with SQLite header");
+        Path fixture=Path.of("other-database.db");
+        try(Connection c=DriverManager.getConnection("jdbc:sqlite:"+fixture);Statement st=c.createStatement()){st.execute("CREATE TABLE unrelated(id INTEGER)");}
+        check(upload(Files.readAllBytes(fixture),cookie,csrf,null,binary).statusCode()==400,"unrelated SQLite file rejected");
+        var result=upload(snapshot,cookie,csrf,null,binary);check(result.statusCode()==200,"valid backup uploads: "+result.body());
+        String name=(String)JsonUtil.parseObject(result.body()).get("name");check(name.startsWith("upload-"),"uploaded backup uses generated safe name");
+        check(items(get("/backups")).stream().anyMatch(row->row.get("name").equals(name)),"uploaded backup listed");
+        var downloaded=HTTP.send(HttpRequest.newBuilder(URI.create(base+"/api/admin/backup-file?name="+name)).header("Cookie",cookie).build(),HttpResponse.BodyHandlers.ofByteArray());
+        check(downloaded.statusCode()==200&&Arrays.equals(downloaded.body(),snapshot),"uploaded backup downloads byte-for-byte unchanged");
+        var again=upload(snapshot,cookie,csrf,null,binary);check(again.statusCode()==200&&!JsonUtil.parseObject(again.body()).get("name").equals(name),"uploading same file again never overwrites saved backup");
+        Path large=Path.of("large-database.db");Files.write(large,snapshot);
+        try(Connection c=DriverManager.getConnection("jdbc:sqlite:"+large);Statement st=c.createStatement()){st.execute("CREATE TABLE upload_fixture(payload BLOB)");st.execute("INSERT INTO upload_fixture VALUES(zeroblob(2000000))");}
+        check(upload(Files.readAllBytes(large),cookie,csrf,null,binary).statusCode()==200,"backup upload works above old 1.5 MB JSON request limit");
+        URI uri=URI.create(base);
+        try(Socket socket=new Socket(uri.getHost(),uri.getPort())){
+            socket.setSoTimeout(5000);socket.getOutputStream().write(("POST /api/admin/backup-upload HTTP/1.1\r\nHost: "+uri.getAuthority()+"\r\nContent-Length: "+(AdminStore.MAX_BACKUP_UPLOAD_BYTES+1)+"\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+            check(new BufferedReader(new InputStreamReader(socket.getInputStream())).readLine().contains("400"),"oversized upload rejected before reading file body");
+        }
+        try(var files=Files.list(Path.of("data/backups"))){check(files.noneMatch(path->path.toString().endsWith(".tmp")),"validation leaves no temporary uploaded files");}
+        check(users.findByUsername("operator").verifyPassword(password),"upload preserves active accounts and database");
+        check(items(get("/logs")).stream().anyMatch(row->row.get("action").equals("BACKUP_UPLOAD")),"backup upload audit recorded");
     }
     static void idleSessions()throws Exception{
         AdminSessions store=new AdminSessions();String id=store.create("operator");var s=store.get(id);Field seen=s.getClass().getDeclaredField("lastSeen");seen.setAccessible(true);seen.setLong(s,System.currentTimeMillis()-AdminSessions.IDLE_MS-1);check(store.get(id,false)==null,"idle admin sessions expire");
@@ -181,10 +298,11 @@ public class AdminIntegrationTest {
             login();
             check(request("/api/admin/settings",cookie,Map.of(),null,null).statusCode()==403,"admin mutations require CSRF token");
             check(request("/api/admin/overview",cookie,null,null,"https://evil.example").statusCode()==403,"cross-origin admin request denied");
-            get("/overview");get("/users");get("/rooms");get("/matches");idleSessions();hostPermissions();ownerWaitingDeletion();content();settings();accountModeration();
+            overviewStats();get("/overview");get("/users");get("/rooms");get("/matches");idleSessions();hostPermissions();ownerWaitingDeletion();content();settings();accountModeration();maintenanceControl();
             String backup=(String)post("/backup",Map.of()).get("name");check(!items(get("/backups")).isEmpty(),"backup listed");
             var bytes=HTTP.send(HttpRequest.newBuilder(URI.create(base+"/api/admin/backup-file?name="+backup)).header("Cookie",cookie).GET().build(),HttpResponse.BodyHandlers.ofByteArray());
             check(bytes.statusCode()==200&&new String(bytes.body(),0,15,java.nio.charset.StandardCharsets.US_ASCII).equals("SQLite format 3"),"backup downloads a SQLite snapshot");
+            backupUploads(bytes.body());
             check(request("/api/admin/backup-file?name=../../.env",cookie,null,null,null).statusCode()==400,"backup traversal blocked");
             check(items(get("/logs")).stream().anyMatch(r->r.get("action").equals("HOST_KICK")),"host kick audit persisted");
             check(Leaderboard.getTop(20).isEmpty(),"entertainment never contributes rank");

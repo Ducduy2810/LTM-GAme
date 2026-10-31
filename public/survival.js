@@ -321,7 +321,7 @@
 
             // ── RỜI PHÒNG THÀNH CÔNG ─────────────────────────────────
             case 'survival_room_closed':
-                alert(data.message);
+                if(!window.SystemClient?.showCancellation)alert(data.message);
             case 'left_survival_room_success':
             case 'survival_left_room_success':
                 currentRoomCode = '';
