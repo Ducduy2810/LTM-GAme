@@ -40,7 +40,7 @@ public final class RaceStore {
             st.execute("UPDATE player_ranks SET current_tier='BRONZE',current_points=MIN(current_points,99) WHERE current_tier='UNRANKED'");
             st.execute("UPDATE player_ranks SET highest_tier='BRONZE',highest_points=MIN(highest_points,99) WHERE highest_tier='UNRANKED'");
         }
-        seedQuestions();
+        seedQuestions();seedRankedQuestions();
     }
     private static void seedQuestions()throws SQLException{
         try(Connection c=AdminStore.connect()){
@@ -51,14 +51,82 @@ public final class RaceStore {
             }catch(Exception e){c.rollback();throw e;}
         }
     }
+    private static void seedRankedQuestions()throws SQLException{
+        try(Connection c=AdminStore.connect()){
+            c.setAutoCommit(false);try{
+                if(!AdminStore.rows(c,"SELECT value FROM app_settings WHERE key='rank_tier_questions_seeded_v1'").isEmpty()){c.rollback();return;}
+                for(var seed:RankedQuestionBank.seeds()){
+                    Question q=seed.question();
+                    update(c,"INSERT INTO game_questions(text,options_json,correct,topic,difficulty,explanation,status,usage,rank_tier,updated_at) VALUES(?,?,?,'NETWORKING',?,?,'PUBLISHED','RACE',?,?)",q.getText(),JsonUtil.toJson(q.getOptions()),q.getCorrect(),q.getDifficulty(),q.getExplanation(),seed.tier(),System.currentTimeMillis());
+                }
+                update(c,"INSERT INTO app_settings(key,value) VALUES('rank_tier_questions_seeded_v1','true')");c.commit();
+            }catch(Exception e){c.rollback();throw e;}
+        }
+    }
+    public static Map<String,Integer> rankTotals(Collection<String> names)throws SQLException{
+        Map<String,Integer> result=new HashMap<>();List<String> list=new ArrayList<>(names);
+        try(Connection c=AdminStore.connect()){
+            for(int start=0;start<list.size();start+=900){
+                var batch=list.subList(start,Math.min(start+900,list.size()));
+                for(var row:AdminStore.rows(c,"SELECT u.username,r.current_step*100+r.current_points AS total FROM users u JOIN player_ranks r ON r.user_id=u.id WHERE u.username IN ("+String.join(",",Collections.nCopies(batch.size(),"?"))+")",batch.toArray()))result.put((String)row.get("username"),((Number)row.get("total")).intValue());
+            }
+        }
+        return result;
+    }
+    private static final String RANKED_SOURCE=" FROM game_questions q JOIN education_topics t ON t.scope='QUESTION' AND t.code=q.topic WHERE q.topic='NETWORKING' AND q.status='PUBLISHED' AND q.usage='RACE' AND q.rank_tier=? AND t.active=1 AND q.explanation<>''";
+    private static final Random QUESTION_RANDOM=new java.security.SecureRandom();
+    private static Map<String,Integer> remainingQuestions(String tier,int count,List<Question> used){
+        Map<String,Integer> remaining=RankedQuestionBank.requirements(tier,count);Set<Integer> ids=new HashSet<>();
+        for(Question q:used){
+            if(q.getId()<=0||!ids.add(q.getId())||!remaining.containsKey(q.getDifficulty())||remaining.get(q.getDifficulty())<=0)throw new IllegalArgumentException("Trạng thái câu hỏi đã dùng không hợp lệ.");
+            remaining.put(q.getDifficulty(),remaining.get(q.getDifficulty())-1);
+        }
+        return remaining;
+    }
+    private static String excludeUsed(List<Question> used){return used.isEmpty()?"":" AND q.id NOT IN ("+String.join(",",Collections.nCopies(used.size(),"?"))+")";}
+    private static List<Object> questionParameters(String tier,List<Question> used){List<Object> params=new ArrayList<>();params.add(tier);for(Question q:used)params.add(q.getId());return params;}
+    private static void requireQuestions(Connection c,String tier,Map<String,Integer> required,List<Question> used)throws SQLException{
+        Map<String,Integer> available=new HashMap<>();
+        for(var row:AdminStore.rows(c,"SELECT q.difficulty,COUNT(*) AS total"+RANKED_SOURCE+excludeUsed(used)+" GROUP BY q.difficulty",questionParameters(tier,used).toArray()))available.put((String)row.get("difficulty"),((Number)row.get("total")).intValue());
+        for(var entry:required.entrySet())if(available.getOrDefault(entry.getKey(),0)<entry.getValue()){
+            String difficulty=Map.of("EASY","Dễ","MEDIUM","Trung bình","HARD","Khó").get(entry.getKey());
+            throw new IllegalArgumentException("Bộ câu hỏi bậc "+RankedQuestionBank.name(tier)+" cần ít nhất "+entry.getValue()+" câu "+difficulty+" chưa dùng, đã xuất bản dành riêng cho bậc này. Admin bổ sung ngân hàng câu hỏi.");
+        }
+    }
+    /** Capacity check only: joining a queue never draws or caches a complete paper. */
+    public static void validateRankedPool(String tier,int count)throws SQLException{
+        try(Connection c=AdminStore.connect()){requireQuestions(c,tier,remainingQuestions(tier,count,List.of()),List.of());}
+    }
+    /** Draw exactly one question when a round opens, from the live eligible bank. */
+    @SuppressWarnings("unchecked")
+    public static Question nextRankedQuestion(String tier,int count,List<Question> used)throws SQLException{
+        Map<String,Integer> remaining=remainingQuestions(tier,count,used);int total=remaining.values().stream().mapToInt(Integer::intValue).sum();
+        if(total<=0)throw new IllegalArgumentException("Trận đã đủ số câu hỏi.");
+        try(Connection c=AdminStore.connect()){
+            c.setAutoCommit(false);try{
+                requireQuestions(c,tier,remaining,used);
+                int position=QUESTION_RANDOM.nextInt(total);String difficulty=null;
+                for(var entry:remaining.entrySet()){position-=entry.getValue();if(position<0){difficulty=entry.getKey();break;}}
+                List<Object> params=questionParameters(tier,used);params.add(difficulty);
+                var rows=AdminStore.rows(c,"SELECT q.*"+RANKED_SOURCE+excludeUsed(used)+" AND q.difficulty=? ORDER BY RANDOM() LIMIT 1",params.toArray());
+                if(rows.isEmpty())throw new IllegalArgumentException("Không còn câu hỏi hợp lệ cho lượt này.");
+                var row=rows.get(0);Question question=new Question(((Number)row.get("id")).intValue(),(String)row.get("text"),(List<String>)(List<?>)JsonUtil.parse((String)row.get("options_json")),((Number)row.get("correct")).intValue(),"NETWORKING",(String)row.get("difficulty"),(String)row.get("explanation"));
+                c.commit();return question;
+            }catch(Exception e){c.rollback();throw e;}
+        }
+    }
     public static void recoverInterrupted()throws SQLException{
         try(Connection c=AdminStore.connect()){
             c.setAutoCommit(false);try{update(c,"UPDATE race_matches SET status='INTERRUPTED',ended_at=?,reason='Máy chủ khởi động lại; không tính RP hoặc dùng thẻ' WHERE status IN ('WAITING','ACTIVE')",System.currentTimeMillis());update(c,"DELETE FROM race_participation");c.commit();}catch(Exception e){c.rollback();throw e;}
         }
     }
-    public static Map<String,Object> settings()throws SQLException{
+    public static Map<String,Object> defaultSettings(){
         Map<String,Object> value=new LinkedHashMap<>(Map.of("enabled",true,"rankedEnabled",true,"dailyEnabled",true,"questionCount",10,"timeLimit",15,"queueSeconds",60,"targetPlayers",4,"dailyTimeLimit",7));
         value.putAll(Map.of("firstRP",25,"secondRP",10,"duelSecondRP",0,"thirdRP",-10,"fourthRP",-15,"rankBuffer",20,"demotionRP",70,"dailyCorrect",8,"shieldReward",1,"doubleReward",1));
+        return value;
+    }
+    public static Map<String,Object> settings()throws SQLException{
+        Map<String,Object> value=defaultSettings();
         try(Connection c=AdminStore.connect()){var rows=AdminStore.rows(c,"SELECT value FROM app_settings WHERE key='race_settings'");if(!rows.isEmpty())value.putAll(JsonUtil.parseObject((String)rows.get(0).get("value")));}return value;
     }
     public static final Set<String> DAILY_SETTING_KEYS=Set.of("dailyEnabled","dailyTimeLimit","dailyCorrect","shieldReward","doubleReward");
@@ -73,19 +141,23 @@ public final class RaceStore {
     }
     public static synchronized void saveSettings(String actor,Map<String,Object> input)throws SQLException{writeSettings(actor,input,"RACE_SETTINGS");}
     private static void writeSettings(String actor,Map<String,Object> input,String auditAction)throws SQLException{
+        Map<String,Object> value=normalizeSettings(input,settings());
+        try(Connection c=AdminStore.connect()){c.setAutoCommit(false);try{update(c,"INSERT INTO app_settings(key,value) VALUES('race_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",JsonUtil.toJson(value));AdminStore.audit(c,actor,auditAction,"server",value);c.commit();}catch(Exception e){c.rollback();throw e;}}
+    }
+    public static Map<String,Object> normalizeSettings(Map<String,Object> input,Map<String,Object> defaults){
         Map<String,Object> value=new LinkedHashMap<>();for(String key:List.of("enabled","rankedEnabled","dailyEnabled")){if(!(input.get(key) instanceof Boolean))throw new IllegalArgumentException("Thiếu trạng thái "+key);value.put(key,input.get(key));}
         int[][] bounds={{10,15},{3,120},{10,300},{2,4},{3,120}};String[] names={"questionCount","timeLimit","queueSeconds","targetPlayers","dailyTimeLimit"};
         for(int i=0;i<names.length;i++){Object raw=input.get(names[i]);if(!(raw instanceof Number n)||n.intValue()!=n.doubleValue()||n.intValue()<bounds[i][0]||n.intValue()>bounds[i][1])throw new IllegalArgumentException("Giá trị "+names[i]+" cần "+bounds[i][0]+"–"+bounds[i][1]);value.put(names[i],n.intValue());}
         int[][] rpBounds={{1,100},{0,100},{0,100},{-100,0},{-100,0},{0,99},{0,99},{1,10},{0,10},{0,10}};
         String[] rpNames={"firstRP","secondRP","duelSecondRP","thirdRP","fourthRP","rankBuffer","demotionRP","dailyCorrect","shieldReward","doubleReward"};
-        var defaults=settings();for(int i=0;i<rpNames.length;i++){String key=rpNames[i];Object raw=input.getOrDefault(key,defaults.get(key));if(!(raw instanceof Number n)||n.intValue()!=n.doubleValue()||n.intValue()<rpBounds[i][0]||n.intValue()>rpBounds[i][1])throw new IllegalArgumentException("Giá trị "+key+" cần "+rpBounds[i][0]+"–"+rpBounds[i][1]);value.put(key,n.intValue());}
+        for(int i=0;i<rpNames.length;i++){String key=rpNames[i];Object raw=input.getOrDefault(key,defaults.get(key));if(!(raw instanceof Number n)||n.intValue()!=n.doubleValue()||n.intValue()<rpBounds[i][0]||n.intValue()>rpBounds[i][1])throw new IllegalArgumentException("Giá trị "+key+" cần "+rpBounds[i][0]+"–"+rpBounds[i][1]);value.put(key,n.intValue());}
         if((int)value.get("secondRP")>(int)value.get("firstRP")||(int)value.get("duelSecondRP")>(int)value.get("firstRP")||(int)value.get("fourthRP")>(int)value.get("thirdRP"))throw new IllegalArgumentException("RP các vị trí phải giảm dần.");
-        try(Connection c=AdminStore.connect()){c.setAutoCommit(false);try{update(c,"INSERT INTO app_settings(key,value) VALUES('race_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",JsonUtil.toJson(value));AdminStore.audit(c,actor,auditAction,"server",value);c.commit();}catch(Exception e){c.rollback();throw e;}}
+        return value;
     }
     public static List<Question> questions(boolean hard,int count)throws SQLException{
         List<Question> list=new ArrayList<>();
         try(Connection c=AdminStore.connect()){
-            for(Map<String,Object> row:AdminStore.rows(c,"SELECT q.* FROM game_questions q JOIN education_topics t ON t.scope='QUESTION' AND t.code=q.topic WHERE q.topic='NETWORKING' AND q.status='PUBLISHED' AND q.usage IN ('RACE','BOTH') AND t.active=1 AND q.explanation<>'' AND (?=0 OR q.difficulty='HARD')",hard?1:0)){
+            for(Map<String,Object> row:AdminStore.rows(c,"SELECT q.* FROM game_questions q JOIN education_topics t ON t.scope='QUESTION' AND t.code=q.topic WHERE q.topic='NETWORKING' AND q.status='PUBLISHED' AND q.usage IN ('RACE','BOTH') AND q.rank_tier='' AND t.active=1 AND q.explanation<>'' AND (?=0 OR q.difficulty='HARD')",hard?1:0)){
                 @SuppressWarnings("unchecked") List<String> options=(List<String>)(List<?>)JsonUtil.parse((String)row.get("options_json"));
                 list.add(new Question(((Number)row.get("id")).intValue(),(String)row.get("text"),options,((Number)row.get("correct")).intValue(),"NETWORKING",(String)row.get("difficulty"),(String)row.get("explanation")));
             }
@@ -101,6 +173,10 @@ public final class RaceStore {
         update(c,"INSERT OR IGNORE INTO player_ranks(user_id,current_tier,highest_tier,updated_at) VALUES(?,'BRONZE','BRONZE',?)",id,System.currentTimeMillis());
         update(c,"INSERT OR IGNORE INTO player_cards(user_id) VALUES(?)",id);
     }
+    private static Map<String,Object> availableCards(Connection c,int id)throws SQLException{
+        // A shield selected in a forfeited match may still be consumed when that match settles.
+        return AdminStore.rows(c,"SELECT MAX(0,pc.shields-(SELECT COUNT(*) FROM race_players p JOIN race_matches m ON m.id=p.match_id WHERE p.user_id=pc.user_id AND p.forfeited=1 AND p.use_shield=1 AND m.mode='RANKED' AND m.status='ACTIVE')) AS shields,pc.doubles FROM player_cards pc WHERE pc.user_id=?",id).get(0);
+    }
     public static Map<String,Object> account(String username)throws SQLException{
         try(Connection c=AdminStore.connect()){
             int id=userId(c,username);ensureRank(c,id);
@@ -109,7 +185,7 @@ public final class RaceStore {
             RankRules.Position highest=new RankRules.Position(((Number)row.get("highest_step")).intValue(),((Number)row.get("highest_points")).intValue());
             int place=rankPosition(c,id);String title=((Number)row.get("ranked_games")).intValue()>0?RankRules.title(current.step(),place):"";
             Map<String,Object> result=new LinkedHashMap<>();result.put("current",current.json());result.put("highest",highest.json());result.put("title",title);result.put("highestTitle",row.get("highest_title"));result.put("serverPosition",place);result.put("games",row.get("ranked_games"));result.put("wins",row.get("ranked_wins"));
-            result.put("cards",AdminStore.rows(c,"SELECT shields,doubles FROM player_cards WHERE user_id=?",id).get(0));
+            result.put("cards",availableCards(c,id));
             var daily=AdminStore.rows(c,"SELECT match_id,rewarded FROM daily_attempts WHERE user_id=? AND day=?",id,today(System.currentTimeMillis()));result.put("daily",Map.of("date",today(System.currentTimeMillis()),"used",!daily.isEmpty(),"matchId",daily.isEmpty()?"":daily.get(0).get("match_id")));return result;
         }
     }
@@ -160,7 +236,7 @@ public final class RaceStore {
         try(Connection c=AdminStore.connect()){c.setAutoCommit(false);try{
             int id=userId(c,username);ensureRank(c,id);
             update(c,"INSERT INTO race_participation(user_id,match_id) VALUES(?,?)",id,match);
-            var cards=AdminStore.rows(c,"SELECT shields,doubles FROM player_cards WHERE user_id=?",id).get(0);
+            var cards=availableCards(c,id);
             if(shield&&((Number)cards.get("shields")).intValue()<1||doubleRp&&((Number)cards.get("doubles")).intValue()<1)throw new IllegalArgumentException("Bạn không có đủ thẻ đã chọn.");
             update(c,"INSERT INTO race_players(match_id,username,user_id,bot,use_shield,use_double) VALUES(?,?,?,0,?,?) ON CONFLICT(match_id,username) DO UPDATE SET forfeited=0,use_shield=excluded.use_shield,use_double=excluded.use_double",match,username,id,shield?1:0,doubleRp?1:0);c.commit();
         }catch(Exception e){c.rollback();throw e;}}
@@ -180,7 +256,12 @@ public final class RaceStore {
     /** Record an intentional departure immediately; RP is settled once with the match. */
     public static void forfeit(String match,String username)throws SQLException{
         try(Connection c=AdminStore.connect()){
-            update(c,"UPDATE race_players SET forfeited=1 WHERE match_id=? AND username=? AND EXISTS(SELECT 1 FROM race_matches WHERE id=? AND status='ACTIVE')",match,username,match);
+            c.setAutoCommit(false);try{
+                update(c,"UPDATE race_players SET forfeited=1 WHERE match_id=? AND username=? AND EXISTS(SELECT 1 FROM race_matches WHERE id=? AND status='ACTIVE')",match,username,match);
+                // Scope release to the old match so late actions cannot remove a newer membership.
+                update(c,"DELETE FROM race_participation WHERE match_id=? AND user_id=(SELECT user_id FROM race_players WHERE match_id=? AND username=? AND forfeited=1)",match,match,username);
+                c.commit();
+            }catch(Exception e){c.rollback();throw e;}
         }
     }
     public record Result(String username,boolean bot,int score,int correct,int place,boolean forfeited,int rp){}
@@ -243,7 +324,7 @@ public final class RaceStore {
         try(Connection c=AdminStore.connect()){c.setAutoCommit(false);try{
             // Staff may repair even a locked player, but never an administrator.
             var found=AdminStore.rows(c,"SELECT id FROM users WHERE username=? COLLATE NOCASE AND LOWER(role)<>'admin'",target);if(found.isEmpty())throw new IllegalArgumentException("Không tìm thấy người chơi.");int id=((Number)found.get(0).get("id")).intValue();ensureRank(c,id);
-            if(!AdminStore.rows(c,"SELECT 1 FROM race_participation WHERE user_id=?",id).isEmpty())throw new IllegalArgumentException("Người chơi đang ở phòng. Hủy trận/đưa ra khỏi phòng trước khi sửa dữ liệu.");
+            if(!AdminStore.rows(c,"SELECT 1 FROM race_players p JOIN race_matches m ON m.id=p.match_id WHERE p.user_id=? AND m.status IN ('WAITING','ACTIVE')",id).isEmpty())throw new IllegalArgumentException("Người chơi còn trận chưa chốt kết quả. Chờ kết thúc hoặc hủy trận trước khi sửa dữ liệu.");
             Map<String,Object> before=new LinkedHashMap<>();before.put("rank",AdminStore.rows(c,"SELECT * FROM player_ranks WHERE user_id=?",id));before.put("cards",AdminStore.rows(c,"SELECT * FROM player_cards WHERE user_id=?",id));before.put("daily",AdminStore.rows(c,"SELECT * FROM daily_attempts WHERE user_id=? AND day=?",id,today(System.currentTimeMillis())));
             if(action.equals("setRank")){
                 RankRules.Position position=new RankRules.Position(integer(input,"step"),integer(input,"rp"));var row=AdminStore.rows(c,"SELECT highest_step,highest_points FROM player_ranks WHERE user_id=?",id).get(0);RankRules.Position peak=new RankRules.Position(((Number)row.get("highest_step")).intValue(),((Number)row.get("highest_points")).intValue());if(position.total()>peak.total())peak=position;

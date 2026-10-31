@@ -93,7 +93,7 @@ LAP TRINH MANG,Một môn học chuyên ngành,IT,Kiến thức về kết nối
 
 ## Bảo trì, sao lưu và dữ liệu
 
-Trong **Cấu hình & bảo trì**, bật **Bảo trì**, chọn **Theo số giờ** (có thể nhập số lẻ) hoặc **Đến ngày giờ cụ thể** theo giờ Việt Nam, nhập thông báo rồi lưu. Server lưu thời điểm kết thúc vào database và tự mở lại khi đến hạn, kể cả sau khi khởi động lại. Admin có thể tắt bảo trì sớm.
+Trong **Cấu hình & bảo trì**, chọn **Theo số giờ** (có thể nhập số lẻ) hoặc **Đến ngày giờ cụ thể** theo giờ Việt Nam, nhập thông báo, rồi tích **Bật bảo trì ngay**. Thao tác bật/tắt được lưu và áp dụng ngay, có trạng thái đang xử lý/thành công/lỗi; không cần bấm Lưu cấu hình để bật/tắt. Khi đang bảo trì, sửa thời hạn/thông báo rồi bấm **Lưu cấu hình** để cập nhật. Server lưu thời điểm kết thúc vào database và tự mở lại khi đến hạn, kể cả sau khi khởi động lại. Admin có thể tắt bảo trì sớm.
 
 Khi bảo trì bắt đầu, mọi phiên người chơi bị đăng xuất, hàng chờ và các trận đang chạy bị hủy; trận rank bị hủy không cộng/trừ RP hoặc tiêu thụ thẻ. Người chơi ở sảnh và trong game nhận thông báo kèm thời gian kết thúc. Đăng nhập bằng mật khẩu, Google, truy cập API người chơi hoặc kết nối game đều bị chặn trong thời gian này. Trang admin và đăng nhập admin vẫn hoạt động. Hết bảo trì, người chơi đăng nhập lại bằng phiên mới.
 
@@ -127,3 +127,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scratch/test_portal_regressi
 ```
 
 Các bài kiểm tra tạo database và tài khoản thử riêng trong `scratch/`, không gửi email và không thay tài khoản thật. Có thể chạy script admin với `-Preview`, lấy URL `PREVIEW_URL` rồi chạy `node scratch/test_admin_browser.mjs <URL>` trên máy có Chrome để kiểm tra giao diện và kick thật qua WebSocket ở cả ba game. Script preview chờ tối đa 10 phút; tạo tệp `stop-preview` trong thư mục test để kết thúc sớm.
+
+### Áp dụng cấu hình từ file sao lưu
+
+Trong **Sao lưu dữ liệu**, tải file SQLite của hệ thống lên rồi bấm **Áp dụng cấu hình** ở dòng file đó. Hộp thoại so sánh các thiết lập đang dùng và trong file: máy chủ/các game, Đường đua/rank/thử thách ngày, thông báo toàn server. Chỉ các nhóm có trong file được cập nhật. Kiểm tra bảng so sánh rồi bấm **Áp dụng cấu hình** để lưu; các trang cấu hình sẽ đọc giá trị mới khi mở lại.
+
+Hệ thống kiểm tra toàn bộ cấu hình, tự tạo bản sao lưu dữ liệu trước khi áp dụng và cập nhật các nhóm trong một lần ghi; gặp lỗi sẽ hoàn tác toàn bộ thay đổi. Tài khoản, câu hỏi, lịch sử trận và dữ liệu rank cá nhân được giữ nguyên. Cấu hình Google/SMTP trong `.env` không nằm trong file SQLite. Thời hạn bảo trì và thông báo được giữ theo mốc thời gian gốc; những mục đã hết hạn được tắt. Nếu file bật bảo trì còn hiệu lực, phần xem trước sẽ báo rõ việc đăng xuất người chơi và hủy trận.
+
+### Quản lý bộ câu hỏi từng bậc rank
+
+Ngân hàng câu hỏi có bộ lọc **Bậc rank** và trường **Bộ câu hỏi bậc rank** khi thêm/sửa. Chọn Đồng/Bạc/Vàng/Bạch Kim/Kim Cương để dành câu cho đấu rank; hệ thống đặt phạm vi Chỉ Đường đua và chủ đề Lập trình mạng. Để Chung cho ngân hàng theo phạm vi sử dụng thông thường. File CSV mẫu có cột `usage` và `rank_tier`. Mỗi bậc được cấp 15 câu khởi tạo; admin có thể bổ sung, sửa hoặc ẩn câu. Chi tiết cơ cấu độ khó và ghép trận theo bậc xem [hướng dẫn Đường đua](duong-dua-xep-hang.md).
+
+Đấu rank bốc câu theo từng lượt từ ngân hàng hiện tại, không chọn sẵn cả bộ lúc tạo trận. Câu đã gửi được giữ nguyên để chấm điểm/nối lại; các lượt chưa mở có thể lấy câu admin vừa thêm hoặc chỉnh sửa. Nếu ẩn quá nhiều câu làm thiếu số lượng/độ khó còn lại, trận rank được hủy không tính RP hoặc tiêu thẻ.

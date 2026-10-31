@@ -91,7 +91,7 @@ public final class AdminController {
                 case "/api/admin/users":result=Map.of("items",AdminStore.users(q.getOrDefault("q",""),offset(q)));break;
                 case "/api/admin/rooms":result=runtime.rooms();break;
                 case "/api/admin/topics":result=Map.of("items",AdminStore.topics());break;
-                case "/api/admin/content":result=Map.of("items",AdminStore.content(q.getOrDefault("kind","QUESTION"),q.getOrDefault("q",""),q.getOrDefault("status","")));break;
+                case "/api/admin/content":result=Map.of("items",AdminStore.content(q.getOrDefault("kind","QUESTION"),q.getOrDefault("q",""),q.getOrDefault("status",""),q.getOrDefault("mode",""),q.getOrDefault("difficulty",""),q.getOrDefault("rankTier","")));break;
                 case "/api/admin/revisions":result=Map.of("items",AdminStore.revisions(q.getOrDefault("kind","QUESTION"),Integer.parseInt(q.getOrDefault("id","0"))));break;
                 case "/api/admin/matches":result=Map.of("items",AdminStore.matches(q.getOrDefault("q",""),q.getOrDefault("game",""),q.getOrDefault("status",""),offset(q)));break;
                 case "/api/admin/match":result=AdminStore.match(q.getOrDefault("id",""));break;
@@ -105,6 +105,7 @@ public final class AdminController {
                 case "/api/admin/daily/settings":result=RaceStore.dailySettings();break;
                 case "/api/admin/race/review":result=RaceStore.review(q.getOrDefault("username",""),q.getOrDefault("id",""),true);break;
                 case "/api/admin/backups":result=Map.of("items",AdminStore.backups());break;
+                case "/api/admin/backup-config":result=AdminStore.backupConfiguration(q.getOrDefault("name",""));break;
                 case "/api/admin/backup-file":{String name=q.getOrDefault("name","");byte[] file=AdminStore.backupFile(name);AdminStore.audit(actor,"BACKUP_DOWNLOAD",name,Map.of());return new Reply(200,Map.of(),null,file,name);}
                 default:return Reply.json(404,Map.of("error","Không tìm thấy chức năng."));
             }else switch(path){
@@ -132,6 +133,7 @@ public final class AdminController {
                 case "/api/admin/content/save":{String kind=AdminStore.required(v,"kind",10);result=Map.of("id",AdminStore.saveContent(actor,kind,v));break;}
                 case "/api/admin/content/import":result=AdminStore.importContent(actor,AdminStore.required(v,"kind",10),AdminStore.required(v,"csv",450000),Boolean.TRUE.equals(v.get("dryRun")));break;
                 case "/api/admin/settings":AdminStore.saveSettings(actor,v);runtime.maintenanceChanged();result=Map.of("success",true);break;
+                case "/api/admin/maintenance":AdminStore.saveMaintenance(actor,v);runtime.maintenanceChanged();result=Map.of("success",true,"settings",AdminStore.settings());break;
                 case "/api/admin/announcement":vn.game.model.ServerAnnouncement.save(actor,v);runtime.announce(vn.game.model.ServerAnnouncement.publicView());result=Map.of("success",true);break;
                 case "/api/admin/race/settings":RaceStore.saveSettings(actor,v);result=Map.of("success",true);break;
                 case "/api/admin/race/rank-settings":RaceStore.saveScopedSettings(actor,v,"RANK");result=Map.of("success",true);break;
@@ -146,6 +148,10 @@ public final class AdminController {
                 }
                 case "/api/admin/backup":result=Map.of("name",AdminStore.backup(actor));break;
                 case "/api/admin/backup-upload":result=Map.of("name",AdminStore.uploadBackup(actor,body));break;
+                case "/api/admin/backup-config/apply":{
+                    result=AdminStore.applyBackupConfiguration(actor,AdminStore.required(v,"name",150),AdminStore.required(v,"fingerprint",64));
+                    runtime.maintenanceChanged();runtime.announce(vn.game.model.ServerAnnouncement.publicView());break;
+                }
                 default:return Reply.json(404,Map.of("error","Không tìm thấy chức năng."));
             }
             return Reply.json(200,(Map<String,Object>)result);

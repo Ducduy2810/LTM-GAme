@@ -3,6 +3,16 @@
   const $=id=>document.getElementById(id),el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);if(cls)n.className=cls;return n;};
   let socket,user,overview,state={phase:'IDLE'},mode='RANKED',offset=0,answerBusy=false,review=null,reviewId='',terminalSeen='',reconnectTimer,leaving=false,lastQuestion='',pendingHome=null;
   const cancelledMatches=new Set();
+  let reviewRequest=0;
+  const rankedSession=data=>data.mode==='RANKED'&&['QUEUED','WAITING','QUESTION','RESULT'].includes(data.phase);
+  function postMatchPanels(data){
+    const active=rankedSession(data);
+    $('post-match-panels').classList.toggle('hidden',active);
+    $('rank-board-panel').classList.toggle('hidden',active||mode!=='RANKED');
+    if(active){
+      reviewRequest++;review=null;reviewId='';$('review-panel').classList.add('hidden');$('review-list').replaceChildren();$('wrong-only').checked=true;
+    }
+  }
   const modeNames={RANKED:'Đấu rank',CASUAL:'Đấu thường',BOT:'Luyện với máy',DAILY:'Thử thách ngày'};
   const statusNames={WAITING:'Đang chờ',ACTIVE:'Đang thi đấu',COMPLETED:'Hoàn thành',CANCELLED:'Đã hủy',INTERRUPTED:'Gián đoạn'};
   function message(text){$('race-message').textContent=text||'';$('race-message').classList.toggle('hidden',!text);}
@@ -16,7 +26,7 @@
     $('mode-brand-label').textContent=mode==='DAILY'?'THỬ THÁCH HẰNG NGÀY':'ĐƯỜNG ĐUA KIẾN THỨC';
     $('page-description').textContent={RANKED:'Thi đấu trực tiếp, tích lũy RP và chinh phục các bậc rank.',CASUAL:'Tìm đối thủ tự động hoặc tạo phòng riêng để cùng bạn bè đua kiến thức.',BOT:'Chọn số bot, số câu và thời gian để luyện tập theo nhịp của bạn.',DAILY:'Một lượt mỗi ngày. Chinh phục 10 câu Khó và nhận thẻ thưởng.'}[mode];
     $('private-title').textContent=mode==='BOT'?'Tạo phòng luyện với máy':'Tạo phòng đấu thường';$('private-description').textContent=mode==='BOT'?'Máy chủ điều khiển bot. Kết quả luyện tập không cộng hoặc trừ RP.':'Chia sẻ mã phòng để mời bạn bè. Kết quả đấu thường không cộng hoặc trừ RP.';
-    $('rank-summary').classList.toggle('hidden',mode!=='RANKED');$('rank-board-panel').classList.toggle('hidden',mode!=='RANKED');$('launch-panel').classList.toggle('hidden',!['RANKED','CASUAL','DAILY'].includes(mode));
+    $('rank-summary').classList.toggle('hidden',mode!=='RANKED');$('rank-board-panel').classList.toggle('hidden',mode!=='RANKED'||rankedSession(state));$('launch-panel').classList.toggle('hidden',!['RANKED','CASUAL','DAILY'].includes(mode));
     $('bot-count-field').classList.toggle('hidden',mode!=='BOT');$('bot-count').disabled=mode!=='BOT';$('bot-count').value=mode==='BOT'?'3':'0';$('bot-count').querySelector('[value="0"]').disabled=mode==='BOT';
     $('join-form').classList.toggle('hidden',mode!=='CASUAL');$('rooms-panel').classList.toggle('hidden',mode!=='CASUAL');$('history-title').textContent='Lịch sử '+modeNames[mode].toLowerCase();
     renderMenu();
@@ -24,7 +34,7 @@
   function renderMenu(){
     if(!overview)return;const s=overview.settings,a=overview.account;
     const titles={RANKED:'Đường đua xếp hạng',CASUAL:'Tìm đối thủ đấu thường',BOT:'Khởi động cùng máy',DAILY:'Thử thách 10 câu sinh tử'};
-    const desc={RANKED:'Ghép tự động với đối thủ có mức rank gần bạn. Câu hỏi và thời gian giống nhau cho mọi người.',CASUAL:'Tự động tìm người chơi khác đang đấu thường. Đủ người sẽ bắt đầu ngay; kết quả không cộng hoặc trừ RP.',BOT:'Tự tạo một phòng có bot, chọn số câu và thời gian để luyện tập.',DAILY:'Một lượt mỗi ngày, 10 câu hỏi Khó. Chơi để nhận thẻ, không ảnh hưởng đến rank.'};
+    const desc={RANKED:'Ghép với đối thủ cùng bậc rank lớn và mức RP gần bạn. Mỗi bậc có bộ câu hỏi riêng, độ khó tăng dần. Mỗi lượt bốc một câu ngẫu nhiên, dùng chung cho cả phòng.',CASUAL:'Tự động tìm người chơi khác đang đấu thường. Đủ người sẽ bắt đầu ngay; kết quả không cộng hoặc trừ RP.',BOT:'Tự tạo một phòng có bot, chọn số câu và thời gian để luyện tập.',DAILY:'Một lượt mỗi ngày, 10 câu hỏi Khó. Chơi để nhận thẻ, không ảnh hưởng đến rank.'};
     $('mode-title').textContent=titles[mode];$('mode-description').textContent=desc[mode];$('mode-eyebrow').textContent=mode==='RANKED'?'HÀNH TRÌNH LEO HẠNG':mode==='CASUAL'?'GHÉP TRẬN TỰ ĐỘNG':'HỌC HỎI THEO NHỊP CỦA BẠN';
     const facts=mode==='DAILY'?['10 câu Khó',`${s.dailyTimeLimit} giây/câu`,'1 lượt/ngày · giờ Việt Nam']:mode==='BOT'?['Không tính RP','Tự chọn thời gian','Bot được đánh dấu rõ']:[`${s.questionCount} câu`,`${s.timeLimit} giây/câu`,`${s.targetPlayers} người · điền bot sau ${s.queueSeconds}s`];
     $('mode-facts').replaceChildren(...facts.map(t=>el('span',t,'fact')));$('card-options').classList.toggle('hidden',mode!=='RANKED');$('private-panel').classList.toggle('hidden',!['CASUAL','BOT'].includes(mode));$('daily-info').classList.toggle('hidden',mode!=='DAILY');
@@ -51,13 +61,19 @@
     for(const r of items){const row=el('div',undefined,'history-entry'),info=el('div');const forfeited=r.mode==='RANKED'&&r.forfeited===1&&['ACTIVE','COMPLETED'].includes(r.status);info.append(el('strong',modeNames[r.mode]+' · '+r.room_name),el('small',new Date(r.started_at).toLocaleString('vi-VN')+' · '+(forfeited?'Thua · Bỏ cuộc':statusNames[r.status])),el('small',r.status==='COMPLETED'?`Hạng ${r.placement} · ${r.correct_count} câu đúng · ${r.mode==='RANKED'?((r.result.rpDelta>=0?'+':'')+r.result.rpDelta+' RP'):'Không tính rank'}`:forfeited?'Không thể vào lại trận. RP được chốt khi trận kết thúc.':r.reason||'Chưa hoàn thành'));
       row.append(info);if(!['ACTIVE','WAITING'].includes(r.status))row.append(button('Ôn lại →',()=>loadReview(r.id)));$('race-history').append(row);}
   }catch(e){message(e.message);}}
-  async function loadReview(id){try{const data=await api('/api/race/review?id='+encodeURIComponent(id));if(!new URLSearchParams(location.search).has('mode'))choose(data.match.mode);review=data;reviewId=id;$('review-panel').classList.remove('hidden');renderReview();$('review-panel').scrollIntoView({behavior:'smooth',block:'start'});}catch(e){message(e.message);}}
+  async function loadReview(id){
+    if(rankedSession(state))return;
+    const request=++reviewRequest;
+    try{const data=await api('/api/race/review?id='+encodeURIComponent(id));if(request!==reviewRequest||rankedSession(state))return;if(!new URLSearchParams(location.search).has('mode'))choose(data.match.mode);review=data;reviewId=id;$('review-panel').classList.remove('hidden');renderReview();$('review-panel').scrollIntoView({behavior:'smooth',block:'start'});}
+    catch(e){if(request===reviewRequest&&!rankedSession(state))message(e.message);}
+  }
   function renderReview(){const rows=review?.questions||[];const selected=rows.filter(r=>!$('wrong-only').checked||!r.correct);$('review-list').replaceChildren();if(!selected.length)$('review-list').append(el('p',rows.length?'Bạn không có câu sai trong bộ lọc này. Tiếp tục phát huy!':'Trận chưa có câu đã hoàn thành để ôn lại.','empty'));
     for(const r of selected){const q=r.question,box=el('article',undefined,'review-question');box.append(el('h3',`${r.round_no}. ${q.text}`),el('p','Bạn chọn: '+(r.answer===null?'Hết giờ / chưa trả lời':`${'ABCD'[r.answer]}. ${q.options[r.answer]}`)),el('p',`Đáp án đúng: ${'ABCD'[q.correct]}. ${q.options[q.correct]}`,'correct-answer'),el('p',q.explanation));$('review-list').append(box);}}
   function render(data){
     if(data.queueCancelled)window.SystemClient?.showCancellation(data);
     if(data.phase==='CANCELLED'&&!cancelledMatches.has(data.matchId)){cancelledMatches.add(data.matchId);window.SystemClient?.showCancellation(data);}
     if(pendingHome&&data.phase==='IDLE'&&data.matchId===pendingHome.matchId){const destination=pendingHome.href;pendingHome=null;leaving=true;location.assign(destination);return;}
+    postMatchPanels(data);
     $('active-session-panel').classList.toggle('hidden',data.phase!=='OTHER_MODE');
     if(data.phase==='OTHER_MODE'){
       state=data;$('menu-panel').classList.add('hidden');$('queue-panel').classList.add('hidden');$('match-panel').classList.add('hidden');$('active-session-message').textContent=data.message;$('resume-other-mode').href='/race.html?mode='+data.activeMode.toLowerCase();return;
@@ -65,8 +81,8 @@
     state=data;answerBusy=false;if(data.serverTime)offset=data.serverTime-Date.now();if(data.message)message(data.message);
     const idle=data.phase==='IDLE',queued=data.phase==='QUEUED';$('menu-panel').classList.toggle('hidden',!idle);$('queue-panel').classList.toggle('hidden',!queued);$('match-panel').classList.toggle('hidden',idle||queued);
     if(idle){refresh();history();return;}
-    if(queued){$('queue-title').textContent=data.mode==='RANKED'?'Ghép theo rank gần nhau':'Tìm bạn cùng đua';updateTimer();return;}
-    $('match-mode').textContent=(modeNames[data.mode]||data.mode)+(data.mode==='RANKED'?' · CÓ TÍNH RP':' · KHÔNG TÍNH RP');$('match-title').textContent=data.roomName;$('room-code').textContent='Mã phòng: '+data.roomCode;
+    if(queued){$('queue-title').textContent=data.mode==='RANKED'?'Ghép rank '+(data.rankTierName||'gần nhau'):'Tìm bạn cùng đua';updateTimer();return;}
+    $('match-mode').textContent=(modeNames[data.mode]||data.mode)+(data.mode==='RANKED'?' · CÓ TÍNH RP'+(data.rankTierName?' · Bộ câu hỏi '+data.rankTierName:''):' · KHÔNG TÍNH RP');$('match-title').textContent=data.roomName;$('room-code').textContent='Mã phòng: '+data.roomCode;
     $('race-lanes').replaceChildren();
     [...data.players].sort((a,b)=>a.placement-b.placement||b.score-a.score).forEach(p=>{const row=el('div',undefined,'race-lane'+(p.username===data.me?' me':'')),name=el('div',undefined,'lane-name'),track=el('div',undefined,'lane-track'),fill=el('div',undefined,'lane-fill'),score=el('div',p.score+'đ','lane-score');
       name.append(el('strong',p.username),el('small',p.forfeited?'Đã rời trận':p.bot?'BOT':p.answered?'✓ Đã chốt':p.online?'Đang kết nối':'Mất kết nối · có thể quay lại'));fill.style.width=Math.max(5,p.score/(data.questionCount*3)*100)+'%';fill.append(el('span',p.placement,'lane-marker'));track.append(fill);score.append(el('small',p.correct+' câu đúng'));row.append(name,track,score);

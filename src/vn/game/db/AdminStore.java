@@ -31,6 +31,13 @@ public final class AdminStore {
             st.execute("CREATE TABLE IF NOT EXISTS content_revisions(id INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,content_id INTEGER NOT NULL,revision INTEGER NOT NULL,payload_json TEXT NOT NULL,actor TEXT NOT NULL,created_at INTEGER NOT NULL)");
             boolean hasUsage=false;try(ResultSet rs=st.executeQuery("PRAGMA table_info(game_questions)")){while(rs.next())if("usage".equals(rs.getString("name")))hasUsage=true;}
             if(!hasUsage)st.execute("ALTER TABLE game_questions ADD COLUMN usage TEXT NOT NULL DEFAULT 'LEGACY'");
+            boolean hasRankTier=false;try(ResultSet rs=st.executeQuery("PRAGMA table_info(game_questions)")){while(rs.next())if("rank_tier".equals(rs.getString("name")))hasRankTier=true;}
+            if(!hasRankTier){
+                boolean populated;try(ResultSet rs=st.executeQuery("SELECT COUNT(*) FROM game_questions")){populated=rs.next()&&rs.getInt(1)>0;}
+                if(populated){Files.createDirectories(Path.of("data/backups"));st.execute("VACUUM INTO 'data/backups/before-rank-pools-"+System.currentTimeMillis()+".db'");}
+                st.execute("ALTER TABLE game_questions ADD COLUMN rank_tier TEXT NOT NULL DEFAULT ''");
+            }
+
         }
         PlayerAccountStore.init();seedContent(); reloadContent();
     }
@@ -126,9 +133,27 @@ public final class AdminStore {
         }reloadContent();
     }
     public static List<Map<String,Object>> content(String kind,String query,String status) throws SQLException {
+        return content(kind,query,status,"","");
+    }
+    public static List<Map<String,Object>> content(String kind,String query,String status,String mode,String difficulty) throws SQLException {return content(kind,query,status,mode,difficulty,"");}
+    public static List<Map<String,Object>> content(String kind,String query,String status,String mode,String difficulty,String rankTier) throws SQLException {
         String table=table(kind),field="QUESTION".equals(kind)?"text":"phrase";
+        if(!Set.of("","ARENA","SURVIVAL","PRACTICE","RANKED","CASUAL","BOT","DAILY").contains(mode))throw new IllegalArgumentException("Chế độ lọc câu hỏi không hợp lệ.");
+        if(!Set.of("","EASY","MEDIUM","HARD").contains(difficulty))throw new IllegalArgumentException("Độ khó lọc câu hỏi không hợp lệ.");
+        if(!rankTier.isEmpty()&&!rankTier.equals("SHARED")&&!RankedQuestionBank.TIERS.contains(rankTier))throw new IllegalArgumentException("Bậc rank lọc câu hỏi không hợp lệ.");
+        if(!"QUESTION".equals(kind)&&(!mode.isEmpty()||!difficulty.isEmpty()||!rankTier.isEmpty()))throw new IllegalArgumentException("Bộ lọc chế độ và độ khó chỉ áp dụng cho ngân hàng câu hỏi.");
+        String filter="";List<Object> parameters=new ArrayList<>(List.of("%"+query+"%","%"+query+"%",status,status));
+        if("QUESTION".equals(kind)){
+            filter=" AND (?='' OR difficulty=?)";parameters.add(difficulty);parameters.add(difficulty);
+            if(!rankTier.isEmpty()){filter+=" AND rank_tier=?";parameters.add(rankTier.equals("SHARED")?"":rankTier);}
+            if(Set.of("ARENA","SURVIVAL","PRACTICE").contains(mode))filter+=" AND usage IN ('LEGACY','BOTH') AND rank_tier=''";
+            else if(!mode.isEmpty()){
+                filter+=" AND "+(mode.equals("RANKED")?"usage='RACE' AND rank_tier IN ('BRONZE','SILVER','GOLD','PLATINUM','DIAMOND')":"usage IN ('RACE','BOTH') AND rank_tier=''")+" AND topic='NETWORKING' AND explanation<>''";
+                if(mode.equals("DAILY"))filter+=" AND difficulty='HARD'";
+            }
+        }
         try(Connection c=connect()){
-            List<Map<String,Object>> result=rows(c,"SELECT * FROM "+table+" WHERE ("+field+" LIKE ? OR topic LIKE ?) AND (?='' OR status=?) ORDER BY id DESC LIMIT 500","%"+query+"%","%"+query+"%",status,status);
+            List<Map<String,Object>> result=rows(c,"SELECT * FROM "+table+" WHERE ("+field+" LIKE ? OR topic LIKE ?) AND (?='' OR status=?)"+filter+" ORDER BY id DESC LIMIT 500",parameters.toArray());
             for(Map<String,Object> row:result)if(row.containsKey("options_json"))row.put("options",JsonUtil.parse((String)row.remove("options_json")));
             return result;
         }
@@ -149,6 +174,14 @@ public final class AdminStore {
             if(!usage.equals("LEGACY")&&(!topic.equals("NETWORKING")||explanation.isBlank()))throw new IllegalArgumentException("Câu hỏi Đường đua cần chủ đề NETWORKING và lời giải lý thuyết.");v.put("usage",usage);
             v.put("text",required(v,"text",2000));String difficulty=required(v,"difficulty",10);
             if(!Set.of("EASY","MEDIUM","HARD").contains(difficulty))throw new IllegalArgumentException("Độ khó không hợp lệ.");
+            String rankTier=text(v,v.containsKey("rankTier")?"rankTier":"rank_tier").toUpperCase(Locale.ROOT);
+            if(!v.containsKey("rankTier")&&!v.containsKey("rank_tier")&&v.get("id") instanceof Number id&&id.intValue()>0){var previous=rows(c,"SELECT rank_tier FROM game_questions WHERE id=?",id.intValue());if(!previous.isEmpty())rankTier=(String)previous.get(0).get("rank_tier");}
+            if(!rankTier.isEmpty()){
+                if(!RankedQuestionBank.TIERS.contains(rankTier))throw new IllegalArgumentException("Bậc rank của câu hỏi không hợp lệ.");
+                if(!usage.equals("RACE"))throw new IllegalArgumentException("Câu hỏi theo bậc rank cần phạm vi Chỉ Đường đua.");
+                if(!RankedQuestionBank.requirements(rankTier,15).containsKey(difficulty))throw new IllegalArgumentException("Độ khó này không phù hợp với bộ câu hỏi bậc "+RankedQuestionBank.name(rankTier)+".");
+            }
+            v.put("rankTier",rankTier);v.remove("rank_tier");
             if(!(v.get("options") instanceof List<?> list)||list.size()!=4)throw new IllegalArgumentException("Cần đúng 4 lựa chọn.");
             List<String> options=new ArrayList<>();for(Object o:list){if(!(o instanceof String s)||s.trim().isEmpty()||s.length()>1000)throw new IllegalArgumentException("Lựa chọn cần 1–1000 ký tự.");options.add(s.trim());}v.put("options",options);
             if(!(v.get("correct") instanceof Number n)||n.doubleValue()!=n.intValue()||n.intValue()<0||n.intValue()>3)throw new IllegalArgumentException("Đáp án đúng phải là A–D.");
@@ -162,10 +195,10 @@ public final class AdminStore {
         Map<String,Object> v=validateContent(c,kind,input);String table=table(kind);int id=input.get("id") instanceof Number n?n.intValue():0;
         boolean question="QUESTION".equals(kind);int revision=1;
         if(id>0){List<Map<String,Object>> old=rows(c,"SELECT revision FROM "+table+" WHERE id=?",id);if(old.isEmpty())throw new IllegalArgumentException("Nội dung không còn tồn tại.");int expected=input.get("revision") instanceof Number n?n.intValue():0;int actual=((Number)old.get(0).get("revision")).intValue();if(expected!=actual)throw new IllegalArgumentException("Nội dung đã được thay đổi. Hãy tải lại trước khi lưu.");revision=actual+1;}
-        String fields=question?"text=?,options_json=?,correct=?,topic=?,difficulty=?,usage=?,explanation=?,status=?,revision=?,updated_at=?":"phrase=?,hint=?,topic=?,explanation=?,status=?,revision=?,updated_at=?";
-        String sql=id>0?"UPDATE "+table+" SET "+fields+" WHERE id=?":"INSERT INTO "+table+(question?"(text,options_json,correct,topic,difficulty,usage,explanation,status,revision,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)":"(phrase,hint,topic,explanation,status,revision,updated_at) VALUES(?,?,?,?,?,?,?)");
+        String fields=question?"text=?,options_json=?,correct=?,topic=?,difficulty=?,usage=?,rank_tier=?,explanation=?,status=?,revision=?,updated_at=?":"phrase=?,hint=?,topic=?,explanation=?,status=?,revision=?,updated_at=?";
+        String sql=id>0?"UPDATE "+table+" SET "+fields+" WHERE id=?":"INSERT INTO "+table+(question?"(text,options_json,correct,topic,difficulty,usage,rank_tier,explanation,status,revision,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)":"(phrase,hint,topic,explanation,status,revision,updated_at) VALUES(?,?,?,?,?,?,?)");
         try(PreparedStatement ps=c.prepareStatement(sql,Statement.RETURN_GENERATED_KEYS)){
-            int i=1;if(question){ps.setString(i++,(String)v.get("text"));ps.setString(i++,JsonUtil.toJson(v.get("options")));ps.setInt(i++,((Number)v.get("correct")).intValue());ps.setString(i++,(String)v.get("topic"));ps.setString(i++,(String)v.get("difficulty"));ps.setString(i++,(String)v.get("usage"));}
+            int i=1;if(question){ps.setString(i++,(String)v.get("text"));ps.setString(i++,JsonUtil.toJson(v.get("options")));ps.setInt(i++,((Number)v.get("correct")).intValue());ps.setString(i++,(String)v.get("topic"));ps.setString(i++,(String)v.get("difficulty"));ps.setString(i++,(String)v.get("usage"));ps.setString(i++,(String)v.get("rankTier"));}
             else{ps.setString(i++,(String)v.get("phrase"));ps.setString(i++,(String)v.get("hint"));ps.setString(i++,(String)v.get("topic"));}
             ps.setString(i++,(String)v.get("explanation"));ps.setString(i++,(String)v.get("status"));ps.setInt(i++,revision);ps.setLong(i++,System.currentTimeMillis());if(id>0)ps.setInt(i,id);ps.executeUpdate();
             if(id==0)try(ResultSet keys=ps.getGeneratedKeys()){if(keys.next())id=keys.getInt(1);else throw new SQLException("Missing content id");}
@@ -224,6 +257,23 @@ public final class AdminStore {
     }
     public static String newMatchDenied(String game){try{Map<String,Object> s=settings();if(Boolean.TRUE.equals(s.get("maintenance")))return maintenanceMessage(s);if(!Boolean.TRUE.equals(((Map<?,?>)s.get("enabled")).get(game)))return "Trò chơi tạm ngừng nhận trận mới.";return null;}catch(SQLException e){return "Chưa tải được trạng thái máy chủ.";}}
     public static void saveSettings(String actor,Map<String,Object> v) throws SQLException {
+        Map<String,Object> saved=normalizeSettings(v);
+        try(Connection c=connect()){c.setAutoCommit(false);try{
+            try(PreparedStatement ps=c.prepareStatement("INSERT INTO app_settings(key,value) VALUES('runtime',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")){ps.setString(1,JsonUtil.toJson(saved));ps.executeUpdate();}
+            audit(c,actor,"SETTINGS_SAVE","server",saved);c.commit();
+        }catch(Exception e){c.rollback();throw e;}}
+    }
+    public static synchronized void saveMaintenance(String actor,Map<String,Object> input)throws SQLException{
+        if(!(input.get("maintenance") instanceof Boolean))throw new IllegalArgumentException("Trạng thái bảo trì không hợp lệ.");
+        Map<String,Object> value=new LinkedHashMap<>(settings());value.put("maintenance",input.get("maintenance"));
+        if(Boolean.TRUE.equals(input.get("maintenance"))){
+            value.put("message",required(input,"message",500));
+            value.remove("maintenanceUntil");
+            for(String key:List.of("maintenanceHours","maintenanceUntil"))if(input.containsKey(key))value.put(key,input.get(key));
+        }
+        saveSettings(actor,value);
+    }
+    private static Map<String,Object> normalizeSettings(Map<String,Object> v){
         if(!(v.get("maintenance") instanceof Boolean)||!(v.get("enabled") instanceof Map<?,?> enabled)||!(v.get("defaults") instanceof Map<?,?> defaults))throw new IllegalArgumentException("Cấu hình không hợp lệ.");
         required(v,"message",500);
         Map<String,Object> saved=new LinkedHashMap<>(v);long until=0;
@@ -241,10 +291,7 @@ public final class AdminStore {
             if(game.equals("WHEEL")){range(d,"timeLimit",5,120);range(d,"botCount",0,3);}
             if(game.equals("SURVIVAL")){range(d,"startingHp",1,1000);range(d,"totalRounds",5,25);}
         }
-        try(Connection c=connect()){c.setAutoCommit(false);try{
-            try(PreparedStatement ps=c.prepareStatement("INSERT INTO app_settings(key,value) VALUES('runtime',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")){ps.setString(1,JsonUtil.toJson(saved));ps.executeUpdate();}
-            audit(c,actor,"SETTINGS_SAVE","server",saved);c.commit();
-        }catch(Exception e){c.rollback();throw e;}}
+        return saved;
     }
     private static void range(Map<?,?> v,String key,int min,int max){if(!(v.get(key) instanceof Number n)||n.doubleValue()!=n.intValue()||n.intValue()<min||n.intValue()>max)throw new IllegalArgumentException(key+" phải trong khoảng "+min+"–"+max);}
     public static String backup(String actor) throws Exception {
@@ -278,11 +325,76 @@ public final class AdminStore {
     }
     public static List<Map<String,Object>> backups() throws IOException {
         Path folder=Path.of("data/backups");if(!Files.isDirectory(folder))return List.of();List<Map<String,Object>> result=new ArrayList<>();
-        try(var stream=Files.list(folder)){for(Path p:stream.filter(p->Files.isRegularFile(p)&&!Files.isSymbolicLink(p)&&p.getFileName().toString().matches("(?:upload|admin|before-history|before-admin|before-race)-[A-Za-z0-9-]+\\.db")).sorted((a,b)->{try{return Files.getLastModifiedTime(b).compareTo(Files.getLastModifiedTime(a));}catch(IOException e){return b.compareTo(a);}}).limit(50).toList())result.add(Map.of("name",p.getFileName().toString(),"size",Files.size(p),"created_at",Files.getLastModifiedTime(p).toMillis()));}return result;
+        try(var stream=Files.list(folder)){for(Path p:stream.filter(p->Files.isRegularFile(p)&&!Files.isSymbolicLink(p)&&p.getFileName().toString().matches("(?:upload|admin|before-history|before-admin|before-race|before-rank-pools)-[A-Za-z0-9-]+\\.db")).sorted((a,b)->{try{return Files.getLastModifiedTime(b).compareTo(Files.getLastModifiedTime(a));}catch(IOException e){return b.compareTo(a);}}).limit(50).toList())result.add(Map.of("name",p.getFileName().toString(),"size",Files.size(p),"created_at",Files.getLastModifiedTime(p).toMillis()));}return result;
     }
-    public static byte[] backupFile(String name) throws IOException {
-        if(!name.matches("(?:upload|admin|before-history|before-admin|before-race)-[A-Za-z0-9-]+\\.db"))throw new IllegalArgumentException("Tên bản sao lưu không hợp lệ.");
+    public static byte[] backupFile(String name) throws IOException {return Files.readAllBytes(backupPath(name));}
+    private static String fileFingerprint(Path file)throws Exception{
+        var hash=java.security.MessageDigest.getInstance("SHA-256");
+        try(InputStream in=Files.newInputStream(file)){byte[] buffer=new byte[65536];int n;while((n=in.read(buffer))!=-1)hash.update(buffer,0,n);}
+        return HexFormat.of().formatHex(hash.digest());
+    }
+    /** Only explicitly supported settings are read; application data is never imported. */
+    public static Map<String,Object> backupConfiguration(String name)throws Exception{
+        Path file=backupPath(name);String fingerprint=fileFingerprint(file);
+        Map<String,Map<String,Object>> values=new LinkedHashMap<>(),current=new LinkedHashMap<>();List<String> warnings=new ArrayList<>();
+        try(Connection c=DriverManager.getConnection("jdbc:sqlite:"+file.toUri()+"?mode=ro&immutable=1");Statement st=c.createStatement()){
+            st.execute("PRAGMA trusted_schema=OFF");
+            try(ResultSet rs=st.executeQuery("PRAGMA quick_check")){if(!rs.next()||!"ok".equals(rs.getString(1))||rs.next())throw new IllegalArgumentException("File dữ liệu bị lỗi.");}
+            try(ResultSet rs=st.executeQuery("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='app_settings'")){if(!rs.next()||rs.getInt(1)!=1)throw new IllegalArgumentException("File này chưa có cấu hình quản trị để áp dụng.");}
+            Map<String,String> source=new HashMap<>();
+            for(var row:rows(c,"SELECT key,value FROM app_settings WHERE key IN ('runtime','race_settings','announcement')")){
+                String key=(String)row.get("key");if(source.put(key,(String)row.get("value"))!=null)throw new IllegalArgumentException("File chứa cấu hình trùng lặp.");
+            }
+            for(String key:List.of("runtime","race_settings","announcement"))if(source.containsKey(key)){
+                Map<String,Object> input=JsonUtil.parseObject(source.get(key)),value;
+                if(key.equals("runtime")){
+                    Map<String,Object> selected=new LinkedHashMap<>();
+                    for(String field:List.of("maintenance","maintenanceUntil","message","enabled","defaults"))if(input.containsKey(field))selected.put(field,input.get(field));
+                    Object raw=selected.getOrDefault("maintenanceUntil",0L);
+                    if(!(raw instanceof Number n)||n.longValue()<0||n.doubleValue()!=n.longValue())throw new IllegalArgumentException("Thời hạn bảo trì trong file không hợp lệ.");
+                    if(Boolean.TRUE.equals(selected.get("maintenance"))&&((Number)raw).longValue()<=System.currentTimeMillis()){
+                        selected.put("maintenance",false);warnings.add("Bảo trì trong file đã hết hạn hoặc chưa có thời điểm kết thúc; bảo trì sẽ được tắt.");
+                    }
+                    value=normalizeSettings(selected);current.put(key,settings());
+                    if(Boolean.TRUE.equals(value.get("maintenance")))warnings.add("Áp dụng cấu hình này sẽ bật bảo trì, đăng xuất người chơi và hủy các trận đang chạy.");
+                }else if(key.equals("race_settings")){
+                    Map<String,Object> merged=RaceStore.defaultSettings();merged.putAll(input);value=RaceStore.normalizeSettings(merged,RaceStore.defaultSettings());current.put(key,RaceStore.settings());
+                }else{
+                    if(!(input.get("enabled") instanceof Boolean)||!(input.get("text") instanceof String text)||text.length()>500||Boolean.TRUE.equals(input.get("enabled"))&&text.isBlank())throw new IllegalArgumentException("Thông báo trong file không hợp lệ.");
+                    Object raw=input.getOrDefault("expiresAt",0L);
+                    if(!(raw instanceof Number n)||n.longValue()<0||n.doubleValue()!=n.longValue())throw new IllegalArgumentException("Thời hạn thông báo trong file không hợp lệ.");
+                    long expires=((Number)raw).longValue();boolean enabled=Boolean.TRUE.equals(input.get("enabled"));
+                    if(enabled&&expires>0&&expires<=System.currentTimeMillis()){enabled=false;warnings.add("Thông báo trong file đã hết hạn; thông báo sẽ được tắt.");}
+                    value=new LinkedHashMap<>(Map.of("enabled",enabled,"text",text,"expiresAt",expires));current.put(key,ServerAnnouncement.read());
+                }
+                values.put(key,value);
+            }
+        }catch(SQLException|ClassCastException|NullPointerException e){throw new IllegalArgumentException("Không đọc được cấu hình hợp lệ từ file dữ liệu.");}
+        if(values.isEmpty())throw new IllegalArgumentException("File không có cấu hình máy chủ, Đường đua hoặc thông báo để áp dụng.");
+        if(!fingerprint.equals(fileFingerprint(file)))throw new IllegalArgumentException("File đã thay đổi. Hãy mở lại phần xem trước.");
+        return Map.of("name",name,"fingerprint",fingerprint,"values",values,"current",current,"warnings",warnings);
+    }
+    @SuppressWarnings("unchecked")
+    public static synchronized Map<String,Object> applyBackupConfiguration(String actor,String name,String fingerprint)throws Exception{
+        var preview=backupConfiguration(name);
+        if(!fingerprint.equals(preview.get("fingerprint")))throw new IllegalArgumentException("File đã thay đổi. Hãy xem trước cấu hình lại trước khi áp dụng.");
+        var values=(Map<String,Map<String,Object>>)preview.get("values");
+        String safetyBackup=backup(actor);
+        try(Connection c=connect()){
+            c.setAutoCommit(false);try{
+                for(var entry:values.entrySet()){
+                    Map<String,Object> value=new LinkedHashMap<>(entry.getValue());
+                    if(entry.getKey().equals("announcement")){value.put("id",UUID.randomUUID().toString());value.put("publishedAt",System.currentTimeMillis());value.put("publishedBy",actor);}
+                    try(PreparedStatement ps=c.prepareStatement("INSERT INTO app_settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")){ps.setString(1,entry.getKey());ps.setString(2,JsonUtil.toJson(value));ps.executeUpdate();}
+                }
+                audit(c,actor,"BACKUP_CONFIG_APPLY",name,Map.of("groups",values.keySet(),"safetyBackup",safetyBackup));c.commit();
+            }catch(Exception e){c.rollback();throw e;}
+        }
+        return Map.of("success",true,"groups",values.keySet(),"safetyBackup",safetyBackup,"warnings",preview.get("warnings"));
+    }
+    private static Path backupPath(String name)throws IOException{
+        if(!name.matches("(?:upload|admin|before-history|before-admin|before-race|before-rank-pools)-[A-Za-z0-9-]+\\.db"))throw new IllegalArgumentException("Tên bản sao lưu không hợp lệ.");
         Path folder=Path.of("data/backups").toAbsolutePath().normalize(),file=folder.resolve(name).normalize();
-        if(!file.getParent().equals(folder)||!Files.isRegularFile(file)||Files.isSymbolicLink(file))throw new IllegalArgumentException("Không tìm thấy bản sao lưu.");return Files.readAllBytes(file);
+        if(!file.getParent().equals(folder)||!Files.isRegularFile(file)||Files.isSymbolicLink(file))throw new IllegalArgumentException("Không tìm thấy bản sao lưu.");return file;
     }
 }

@@ -91,6 +91,59 @@ public class AdminIntegrationTest {
         check(survivalOwner.count("survival_round_result")==1,"kicked unanswered participant does not block early result");
         post("/rooms/action",Map.of("game","SURVIVAL","roomCode","EARLY","action","cancel","reason","Kết thúc kiểm tra câu trả lời"));
     }
+    static void contentFilters()throws Exception{
+        String prefix="FILTER_MODE_FIXTURE_";Map<String,Integer> ids=new HashMap<>();
+        String[][] fixtures={{"legacyEasy","LEGACY","EASY","NETWORKING","PUBLISHED","Lời giải"},{"legacyHard","LEGACY","HARD","SCIENCE","PUBLISHED","Lời giải"},{"bothMedium","BOTH","MEDIUM","NETWORKING","PUBLISHED","Lời giải"},{"bothHardDraft","BOTH","HARD","NETWORKING","DRAFT","Lời giải"},{"raceEasy","RACE","EASY","NETWORKING","PUBLISHED","Lời giải"},{"raceHard","RACE","HARD","NETWORKING","PUBLISHED","Lời giải"},{"raceHardArchived","RACE","HARD","NETWORKING","ARCHIVED","Lời giải"},{"bothEasy","BOTH","EASY","NETWORKING","PUBLISHED","Lời giải"},{"legacyMediumDraft","LEGACY","MEDIUM","NETWORKING","DRAFT","Lời giải"},{"missingExplanation","RACE","HARD","NETWORKING","PUBLISHED",""},{"wrongTopic","RACE","HARD","SCIENCE","PUBLISHED","Lời giải"}};
+        try(var c=AdminStore.connect();var ps=c.prepareStatement("INSERT INTO game_questions(text,options_json,correct,topic,difficulty,usage,explanation,status,updated_at) VALUES(?,'[\"A\",\"B\",\"C\",\"D\"]',0,?,?,?,?,?,?)")){
+            for(String[] f:fixtures){ps.setString(1,prefix+f[0]);ps.setString(2,f[3]);ps.setString(3,f[2]);ps.setString(4,f[1]);ps.setString(5,f[5]);ps.setString(6,f[4]);ps.setLong(7,System.currentTimeMillis());ps.executeUpdate();}
+            try(var setTier=c.prepareStatement("UPDATE game_questions SET rank_tier=CASE difficulty WHEN 'EASY' THEN 'BRONZE' WHEN 'MEDIUM' THEN 'GOLD' ELSE 'DIAMOND' END WHERE text LIKE ? AND usage='RACE'")){setTier.setString(1,prefix+"%");setTier.executeUpdate();}
+            for(var row:AdminStore.rows(c,"SELECT id,text FROM game_questions WHERE text LIKE ?",prefix+"%"))ids.put(row.get("text").toString().substring(prefix.length()),((Number)row.get("id")).intValue());
+        }
+        try{
+            Set<Integer> legacy=new HashSet<>(),race=new HashSet<>(),daily=new HashSet<>();for(String key:List.of("legacyEasy","legacyHard","bothMedium","bothHardDraft","bothEasy","legacyMediumDraft"))legacy.add(ids.get(key));for(String key:List.of("bothMedium","bothHardDraft","bothEasy"))race.add(ids.get(key));daily.add(ids.get("bothHardDraft"));Set<Integer> ranked=Set.of(ids.get("raceEasy"),ids.get("raceHard"),ids.get("raceHardArchived"));
+            String base="/content?kind=QUESTION&q="+prefix;
+            check(items(get(base)).size()==fixtures.length,"unfiltered question bank includes all question scopes");
+            for(String mode:List.of("ARENA","SURVIVAL","PRACTICE","RANKED","CASUAL","BOT","DAILY")){
+                Set<Integer> found=new HashSet<>();for(var row:items(get(base+"&mode="+mode)))found.add(((Number)row.get("id")).intValue());Set<Integer> expected=Set.of("ARENA","SURVIVAL","PRACTICE").contains(mode)?legacy:mode.equals("DAILY")?daily:mode.equals("RANKED")?ranked:race;
+                check(found.equals(expected),"mode filter follows actual question scope for "+mode);
+            }
+            check(items(get(base+"&mode=RANKED&rankTier=BRONZE")).size()==1,"ranked bank filters by major tier");
+            check(items(get(base+"&mode=RANKED&rankTier=DIAMOND&difficulty=HARD")).size()==2,"rank tier combines with difficulty");
+            check(items(get(base+"&mode=RANKED&rankTier=SHARED")).isEmpty(),"unassigned shared questions excluded from ranked filter");
+            check(request("/api/admin"+base+"&rankTier=UNKNOWN",cookie,null,null,null).statusCode()==400,"invalid ranked pool filter rejected");
+            check(items(get(base+"&difficulty=EASY")).size()==3,"easy filter spans all scopes");
+            check(items(get(base+"&difficulty=MEDIUM")).size()==2,"medium filter spans all scopes");
+            check(items(get(base+"&mode=RANKED&difficulty=HARD&status=PUBLISHED")).stream().allMatch(row->((Number)row.get("id")).intValue()==ids.get("raceHard"))&&items(get(base+"&mode=RANKED&difficulty=HARD&status=PUBLISHED")).size()==1,"mode difficulty search and status combine");
+            check(items(get(base+"&mode=DAILY&difficulty=EASY")).isEmpty(),"daily mode plus easy difficulty has no matches");
+            check(items(get(base+"&mode=DAILY&difficulty=HARD&status=DRAFT")).size()==1,"admin can filter drafts eligible for daily scope");
+            check(request("/api/admin"+base+"&mode=INVALID",cookie,null,null,null).statusCode()==400,"unknown mode rejected");
+            check(request("/api/admin"+base+"&difficulty=MIX",cookie,null,null,null).statusCode()==400,"unknown difficulty rejected");
+            check(request("/api/admin/content?kind=WHEEL&mode=RANKED",cookie,null,null,null).statusCode()==400,"question filters not applied to wheel phrases");
+            check(request("/api/admin"+base+"&mode=RANKED",null,null,null,null).statusCode()==401,"mode-filtered content remains admin-only");
+            check(request("/api/admin/content?kind=WHEEL",cookie,null,null,null).statusCode()==200,"wheel bank remains available without question filters");
+            try(var c=AdminStore.connect();var ps=c.prepareStatement("INSERT INTO game_questions(text,options_json,correct,topic,difficulty,usage,explanation,status,updated_at) VALUES(?,'[\"A\",\"B\",\"C\",\"D\"]',0,'NETWORKING','EASY','RACE','Lời giải','PUBLISHED',?)")){
+                for(int i=0;i<505;i++){ps.setString(1,prefix+"bulk"+i);ps.setLong(2,System.currentTimeMillis());ps.addBatch();}ps.executeBatch();
+            }
+            check(items(get(base)).size()==500,"question listing still bounded at 500 results");
+            Set<Integer> found=new HashSet<>();for(var row:items(get(base+"&mode=ARENA")))found.add(((Number)row.get("id")).intValue());check(found.equals(legacy),"mode filter runs before 500-row limit so older matching questions remain discoverable");
+        }finally{try(var c=AdminStore.connect();var ps=c.prepareStatement("DELETE FROM game_questions WHERE text LIKE ?")){ps.setString(1,prefix+"%");ps.executeUpdate();}}
+    }
+    static void rankedQuestionEditor()throws Exception{
+        String text="RANK_EDITOR_FIXTURE_";List<Integer> added=new ArrayList<>();
+        try{
+            var value=question("NETWORKING",text+"single");value.put("usage","RACE");value.put("rankTier","BRONZE");
+            int id=((Number)post("/content/save",value).get("id")).intValue();added.add(id);
+            var rows=items(get("/content?kind=QUESTION&q="+text+"&mode=RANKED&rankTier=BRONZE"));check(rows.size()==1&&rows.get(0).get("rank_tier").equals("BRONZE"),"admin can create and filter tier-specific ranked question");
+            value.put("id",id);value.put("revision",1);value.put("difficulty","HARD");check(request("/api/admin/content/save",cookie,value,csrf,null).statusCode()==400,"Bronze rejects HARD difficulty");
+            value.put("difficulty","MEDIUM");value.put("rankTier","GOLD");post("/content/save",value);check(items(get("/content?kind=QUESTION&q="+text+"&rankTier=GOLD")).size()==1,"question rank tier editable");
+            value.put("revision",2);value.remove("rankTier");post("/content/save",value);check(items(get("/content?kind=QUESTION&q="+text+"&rankTier=GOLD")).size()==1,"older clients omitting tier preserve the existing assignment");
+            value.put("revision",3);value.put("rankTier","INVALID");check(request("/api/admin/content/save",cookie,value,csrf,null).statusCode()==400,"unknown editor tier rejected");
+            value.put("rankTier","GOLD");value.put("usage","LEGACY");check(request("/api/admin/content/save",cookie,value,csrf,null).statusCode()==400,"legacy scope cannot consume tier-specific questions");
+            String csv="text,option_a,option_b,option_c,option_d,correct,topic,difficulty,usage,rank_tier,explanation,status\n"+text+"csv,A,B,C,D,B,NETWORKING,HARD,RACE,DIAMOND,Lời giải,DRAFT\n";
+            post("/content/import",Map.of("kind","QUESTION","csv",csv,"dryRun",true));check(items(get("/content?kind=QUESTION&q="+text+"csv")).isEmpty(),"tier CSV preview does not write data");
+            post("/content/import",Map.of("kind","QUESTION","csv",csv,"dryRun",false));var imported=items(get("/content?kind=QUESTION&q="+text+"csv&rankTier=DIAMOND"));check(imported.size()==1&&imported.get(0).get("rank_tier").equals("DIAMOND"),"CSV import retains major rank tier");added.add(((Number)imported.get(0).get("id")).intValue());
+        }finally{try(var c=AdminStore.connect();var ps=c.prepareStatement("DELETE FROM game_questions WHERE id=?")){for(int id:added){ps.setInt(1,id);ps.executeUpdate();}}AdminStore.reloadContent();}
+    }
     static void ownerWaitingDeletion()throws Exception{
         for(String game:List.of("ARENA","WHEEL","SURVIVAL")){
             Client owner=new Client("owner"),guest=new Client("guest"),outsider=new Client("outsider");String code="DEL_"+game;
@@ -241,6 +294,77 @@ public class AdminIntegrationTest {
             check(request("/auth/login",null,Map.of("username","guest","password","TestPlayerPass123"),null,null).statusCode()==200,"admin can end maintenance early");
         }finally{post("/settings",original);RaceStore.saveSettings("operator",config);events.body().close();for(var ws:sockets)ws.abort();}
     }
+    static String configFixture(byte[] snapshot,Map<String,Object> config)throws Exception{
+        Path file=Path.of("config-fixture-"+UUID.randomUUID()+".db");Files.write(file,snapshot);
+        try(Connection c=DriverManager.getConnection("jdbc:sqlite:"+file);Statement st=c.createStatement()){
+            st.execute("DELETE FROM app_settings");
+            st.execute("UPDATE users SET role='user' WHERE username='operator'");
+            st.execute("UPDATE game_questions SET text='SOURCE DATA MUST NOT REPLACE LIVE QUESTIONS'");
+            try(var ps=c.prepareStatement("INSERT INTO app_settings(key,value) VALUES(?,?)")){for(var e:config.entrySet()){ps.setString(1,e.getKey());ps.setString(2,JsonUtil.toJson(e.getValue()));ps.executeUpdate();}}
+        }
+        return AdminStore.uploadBackup("operator",Files.readAllBytes(file));
+    }
+    static Map<String,Object> cloneMap(Map<String,Object> map){return JsonUtil.parseObject(JsonUtil.toJson(map));}
+    @SuppressWarnings("unchecked") static void backupConfigurationImports(byte[] snapshot)throws Exception{
+        var runtime=get("/settings");var race=get("/race/settings");var announcement=get("/announcement");
+        String hash=users.findByUsername("operator").getPasswordHash(),question;long matchCount,rankCount;
+        try(var c=AdminStore.connect()){question=(String)AdminStore.rows(c,"SELECT text FROM game_questions ORDER BY id LIMIT 1").get(0).get("text");matchCount=((Number)AdminStore.rows(c,"SELECT COUNT(*) AS n FROM matches").get(0).get("n")).longValue();rankCount=((Number)AdminStore.rows(c,"SELECT COUNT(*) AS n FROM player_ranks").get(0).get("n")).longValue();}
+        try{
+            var source=cloneMap(runtime);source.put("message","Cấu hình từ file tải lên");((Map<String,Object>)source.get("enabled")).put("WHEEL",false);
+            ((Map<String,Object>)((Map<String,Object>)source.get("defaults")).get("ARENA")).put("mainPlayerTimeLimit",23);
+            var ranked=cloneMap(race);ranked.put("timeLimit",19);ranked.put("dailyCorrect",6);ranked.put("shieldReward",2);ranked.put("dailyEnabled",false);
+            long expires=System.currentTimeMillis()+900000;
+            String name=configFixture(snapshot,Map.of("runtime",source,"race_settings",ranked,"announcement",Map.of("enabled",true,"text","Thông báo từ file <img src=x>","expiresAt",expires),"unrecognized",Map.of("secret","ignored")));
+            String path="/api/admin/backup-config?name="+name;
+            check(request(path,null,null,null,null).statusCode()==401,"backup config preview requires admin");
+            check(request(path,"session_id="+sessions.createSession("owner"),null,null,null).statusCode()==401,"players cannot preview backup configuration");
+            check(request("/api/admin/backup-config?name=../../game.db",cookie,null,null,null).statusCode()==400,"configuration preview rejects path traversal");
+            var preview=get("/backup-config?name="+name);var values=(Map<String,Object>)preview.get("values");
+            check(values.size()==3&&!values.containsKey("unrecognized"),"preview contains only supported configuration groups");
+            check(((Map<String,Object>)values.get("race_settings")).get("timeLimit").equals(19),"preview reads uploaded ranked settings");
+            check(get("/settings").get("message").equals(runtime.get("message")),"preview does not change live configuration");
+            Map<String,Object> apply=Map.of("name",name,"fingerprint",preview.get("fingerprint"));
+            check(request("/api/admin/backup-config/apply",cookie,apply,null,null).statusCode()==403,"applying configuration requires CSRF");
+            check(request("/api/admin/backup-config/apply",cookie,apply,csrf,"https://evil.example").statusCode()==403,"cross-origin configuration apply denied");
+            check(request("/api/admin/backup-config/apply",cookie,Map.of("name",name,"fingerprint","0".repeat(64)),csrf,null).statusCode()==400,"unpreviewed or changed source fingerprint rejected");
+            var result=post("/backup-config/apply",apply);String safety=(String)result.get("safetyBackup");
+            check(AdminStore.backupFile(safety).length>100,"apply creates a recoverable backup before writing settings");
+            check(((Map<String,Object>)((Map<String,Object>)get("/backup-config?name="+safety).get("values")).get("runtime")).get("message").equals(runtime.get("message")),"safety backup contains configuration from before apply");
+            var actual=get("/settings");check(actual.get("message").equals(source.get("message"))&&!Boolean.TRUE.equals(((Map<?,?>)actual.get("enabled")).get("WHEEL")),"server configuration immediately reflects imported values");
+            check(((Number)((Map<?,?>)((Map<?,?>)actual.get("defaults")).get("ARENA")).get("mainPlayerTimeLimit")).intValue()==23,"game defaults imported");
+            var currentRace=get("/race/settings");check(((Number)currentRace.get("timeLimit")).intValue()==19&&((Number)currentRace.get("dailyCorrect")).intValue()==6&&Boolean.FALSE.equals(currentRace.get("dailyEnabled")),"rank and daily settings imported together");
+            var currentNotice=get("/announcement");check(currentNotice.get("text").equals("Thông báo từ file <img src=x>")&&((Number)currentNotice.get("expiresAt")).longValue()==expires,"announcement imported without extending original expiration");
+            check(users.findByUsername("operator").isAdmin()&&users.findByUsername("operator").getPasswordHash().equals(hash),"configuration import preserves live accounts and credentials");
+            try(var c=AdminStore.connect()){check(AdminStore.rows(c,"SELECT text FROM game_questions ORDER BY id LIMIT 1").get(0).get("text").equals(question),"configuration import preserves live question content");check(AdminStore.rows(c,"SELECT key FROM app_settings WHERE key='unrecognized'").isEmpty(),"unknown settings are never imported");check(((Number)AdminStore.rows(c,"SELECT COUNT(*) AS n FROM matches").get(0).get("n")).longValue()==matchCount&&((Number)AdminStore.rows(c,"SELECT COUNT(*) AS n FROM player_ranks").get(0).get("n")).longValue()==rankCount,"configuration import preserves match history and rank records");}
+            var broken=cloneMap(ranked);broken.put("timeLimit",1);var changed=cloneMap(source);changed.put("message","MUST NOT PARTIALLY APPLY");
+            String bad=configFixture(snapshot,Map.of("runtime",changed,"race_settings",broken));
+            check(request("/api/admin/backup-config?name="+bad,cookie,null,null,null).statusCode()==400,"invalid settings rejected in preview");
+            check(request("/api/admin/backup-config/apply",cookie,Map.of("name",bad,"fingerprint","0".repeat(64)),csrf,null).statusCode()==400,"invalid source rejected by apply endpoint too");
+            check(get("/settings").get("message").equals(source.get("message")),"invalid later group cannot partially apply earlier group");
+            String transactional=configFixture(snapshot,Map.of("runtime",changed,"race_settings",ranked));var transactionalPreview=get("/backup-config?name="+transactional);
+            try(var c=AdminStore.connect();var st=c.createStatement()){st.execute("CREATE TRIGGER fail_config_import BEFORE INSERT ON app_settings WHEN NEW.key='race_settings' BEGIN SELECT RAISE(ABORT,'fixture transaction failure'); END");}
+            try{check(request("/api/admin/backup-config/apply",cookie,Map.of("name",transactional,"fingerprint",transactionalPreview.get("fingerprint")),csrf,null).statusCode()==503,"database error surfaces without claiming success");}
+            finally{try(var c=AdminStore.connect();var st=c.createStatement()){st.execute("DROP TRIGGER fail_config_import");}}
+            check(get("/settings").get("message").equals(source.get("message")),"database failure rolls back all configuration groups");
+            try(var c=DriverManager.getConnection("jdbc:sqlite:"+Path.of("data/backups",transactional));var ps=c.prepareStatement("UPDATE app_settings SET value=? WHERE key='runtime'")){ps.setString(1,JsonUtil.toJson(source));ps.executeUpdate();}
+            check(request("/api/admin/backup-config/apply",cookie,Map.of("name",transactional,"fingerprint",transactionalPreview.get("fingerprint")),csrf,null).statusCode()==400,"source changed after preview cannot be applied");
+            var expired=cloneMap(source);expired.put("maintenance",true);expired.put("maintenanceUntil",System.currentTimeMillis()-1000);
+            String old=configFixture(snapshot,Map.of("runtime",expired,"announcement",Map.of("enabled",true,"text","Expired message","expiresAt",System.currentTimeMillis()-1000)));
+            var oldPreview=get("/backup-config?name="+old);check(((List<?>)oldPreview.get("warnings")).size()==2,"expired maintenance and announcement explained in preview");
+            post("/backup-config/apply",Map.of("name",old,"fingerprint",oldPreview.get("fingerprint")));
+            check(Boolean.FALSE.equals(get("/settings").get("maintenance"))&&Boolean.FALSE.equals(get("/announcement").get("enabled")),"expired controls never reactivate when imported");
+            check(((Number)get("/race/settings").get("timeLimit")).intValue()==19,"configuration groups absent from source retain current values");
+            String empty=configFixture(snapshot,Map.of("content_seeded",true));check(request("/api/admin/backup-config?name="+empty,cookie,null,null,null).statusCode()==400,"file without supported configuration rejected");
+            var maintenance=cloneMap(source);maintenance.put("maintenance",true);maintenance.put("maintenanceUntil",System.currentTimeMillis()+3000);
+            String scheduled=configFixture(snapshot,Map.of("runtime",maintenance));var scheduledPreview=get("/backup-config?name="+scheduled);String player=sessions.createSession("guest");
+            check(!((List<?>)scheduledPreview.get("warnings")).isEmpty(),"preview explains logout when imported maintenance is active");
+            post("/backup-config/apply",Map.of("name",scheduled,"fingerprint",scheduledPreview.get("fingerprint")));
+            check(sessions.getUsername(player)==null,"applying maintenance invokes player logout immediately");
+            check(request("/auth/login",null,Map.of("username","guest","password","TestPlayerPass123"),null,null).statusCode()==503,"imported maintenance enforced by login endpoint");
+            until(()->{try{return Boolean.FALSE.equals(AdminStore.maintenanceStatus().get("enabled"));}catch(Exception e){return false;}},"imported maintenance honors original expiration");
+            check(items(get("/logs")).stream().anyMatch(row->row.get("action").equals("BACKUP_CONFIG_APPLY")),"configuration apply recorded in audit log");
+        }finally{post("/settings",runtime);post("/race/settings",race);post("/announcement",Map.of("enabled",announcement.get("enabled"),"text",announcement.get("text"),"minutes",0));}
+    }
     static HttpResponse<String> upload(byte[] data,String credential,String token,String origin,String type)throws Exception{
         var request=HttpRequest.newBuilder(URI.create(base+"/api/admin/backup-upload")).header("Content-Type",type).POST(HttpRequest.BodyPublishers.ofByteArray(data));
         if(credential!=null)request.header("Cookie",credential);if(token!=null)request.header("X-CSRF-Token",token);if(origin!=null)request.header("Origin",origin);
@@ -298,13 +422,13 @@ public class AdminIntegrationTest {
             login();
             check(request("/api/admin/settings",cookie,Map.of(),null,null).statusCode()==403,"admin mutations require CSRF token");
             check(request("/api/admin/overview",cookie,null,null,"https://evil.example").statusCode()==403,"cross-origin admin request denied");
-            overviewStats();get("/overview");get("/users");get("/rooms");get("/matches");idleSessions();hostPermissions();ownerWaitingDeletion();content();settings();accountModeration();maintenanceControl();
+            overviewStats();get("/overview");get("/users");get("/rooms");get("/matches");idleSessions();hostPermissions();ownerWaitingDeletion();content();contentFilters();rankedQuestionEditor();settings();accountModeration();maintenanceControl();
             String backup=(String)post("/backup",Map.of()).get("name");check(!items(get("/backups")).isEmpty(),"backup listed");
             var bytes=HTTP.send(HttpRequest.newBuilder(URI.create(base+"/api/admin/backup-file?name="+backup)).header("Cookie",cookie).GET().build(),HttpResponse.BodyHandlers.ofByteArray());
             check(bytes.statusCode()==200&&new String(bytes.body(),0,15,java.nio.charset.StandardCharsets.US_ASCII).equals("SQLite format 3"),"backup downloads a SQLite snapshot");
-            backupUploads(bytes.body());
+            backupUploads(bytes.body());backupConfigurationImports(bytes.body());
             check(request("/api/admin/backup-file?name=../../.env",cookie,null,null,null).statusCode()==400,"backup traversal blocked");
-            check(items(get("/logs")).stream().anyMatch(r->r.get("action").equals("HOST_KICK")),"host kick audit persisted");
+            check(items(get("/logs?q=HOST_KICK")).stream().anyMatch(r->r.get("action").equals("HOST_KICK")),"host kick audit persisted");
             check(Leaderboard.getTop(20).isEmpty(),"entertainment never contributes rank");
             post("/password",Map.of("currentPassword",password,"newPassword","AdminTestOnlyPass456!"));password="AdminTestOnlyPass456!";
             check(request("/api/admin/overview",cookie,null,null,null).statusCode()==401,"password change invalidates admin sessions");login();

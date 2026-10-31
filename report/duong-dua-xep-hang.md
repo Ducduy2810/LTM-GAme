@@ -29,7 +29,7 @@ Rank mặc định **10 câu, 15 giây/câu**; admin có thể chọn 10–15 c�
 | Hạng 3 | −10 |
 | Hạng 4 | −15 |
 
-Hòa điểm: đồng hạng, chia trung bình RP của các vị trí đang hòa; làm tròn số nguyên theo hướng có lợi cho người chơi (17,5 → 18; −12,5 → −12). Không cộng RP dương nếu người chơi rời trận hoặc không đúng câu nào, kể cả khi mọi người cùng 0 điểm. Rời trận xếp sau người ở lại; kết quả vẫn được lưu khi trận kết thúc, tài khoản không thể vào trận Đường đua khác trước lúc đó.
+Hòa điểm: đồng hạng, chia trung bình RP của các vị trí đang hòa; làm tròn số nguyên theo hướng có lợi cho người chơi (17,5 → 18; −12,5 → −12). Không cộng RP dương nếu người chơi rời trận hoặc không đúng câu nào, kể cả khi mọi người cùng 0 điểm. Rời trận hoặc bị kick sẽ được ghi nhận bỏ cuộc, xếp sau người ở lại và chặn quay lại trận cũ. Tài khoản có thể ghép trận mới ngay; kết quả/RP của trận cũ vẫn được chốt riêng khi trận đó kết thúc, không xóa chỗ hoặc gửi trạng thái đè lên trận mới. Mất kết nối đột ngột vẫn giữ chỗ để nối lại trận chưa kết thúc; không tạo thêm trận song song khi chưa rời trận hiện tại.
 
 Rank bắt đầu **Đồng 3, 0 RP**. Các bậc: Đồng → Bạc → Vàng → Bạch Kim → Kim Cương, mỗi bậc 3 → 2 → 1. Đủ 100 RP thì tự lên cấp, giữ điểm dư. Khi vượt sang **bậc chính mới** nhận thêm đệm 20 RP: Đồng 1 ở 95 RP thắng +25 → Bạc 3 ở 40 RP (20 dư + 20 đệm). Lên cấp trong cùng bậc không nhận thêm đệm. Kim Cương 1 tiếp tục tích lũy RP, không tự tạo thêm cấp ngoài danh sách.
 
@@ -39,7 +39,7 @@ Thua từ RP dương chỉ giảm đến 0. Chỉ thua tiếp khi đã ở 0 m�
 
 Mỗi ngày theo múi giờ **Asia/Ho_Chi_Minh**, một lượt, 10 câu **HARD**, mặc định **7 giây/câu**. Bắt đầu là dùng lượt; không cấp lại chỉ vì tải lại trang hoặc rời trận. Đúng ít nhất 8/10 và hoàn thành trận nhận 1 thẻ bảo vệ + 1 thẻ x2. Không tăng/giảm RP. Mốc ngày mới là 00:00 Việt Nam, không lấy ngày do client gửi.
 
-Trước khi ghép rank, người chơi chủ động bật thẻ đang có. Thẻ bảo vệ chỉ tiêu khi RP gốc âm và đưa thay đổi RP về 0. Thẻ x2 chỉ tiêu khi RP dương và nhân đôi mức nhận. Có thể bật cả hai nhưng một kết quả chỉ tiêu loại phù hợp. Trận hòa 0 RP, đấu thường, luyện máy và trận bị admin hủy không dùng thẻ. Thưởng và tiêu thẻ được ghi cùng giao dịch với kết quả, có khóa duy nhất để không nhận lại do gửi lặp hoặc tải lại trang.
+Trước khi ghép rank, người chơi chủ động bật thẻ đang có. Thẻ bảo vệ chỉ tiêu khi RP gốc âm và đưa thay đổi RP về 0. Thẻ x2 chỉ tiêu khi RP dương và nhân đôi mức nhận. Có thể bật cả hai nhưng một kết quả chỉ tiêu loại phù hợp. Trận hòa 0 RP, đấu thường, luyện máy và trận bị admin hủy không dùng thẻ. Thẻ bảo vệ đã chọn ở trận bỏ cuộc chưa chốt được giữ cho trận cũ; số thẻ khả dụng để ghép trận mới đã trừ phần này. Nếu trận cũ không cần dùng thẻ hoặc bị hủy, thẻ được mở lại khi chốt/hủy trận. Thưởng và tiêu thẻ được ghi cùng giao dịch với kết quả, có khóa duy nhất để không nhận lại do gửi lặp hoặc tải lại trang.
 
 ## Admin quản lý
 
@@ -66,7 +66,7 @@ Ngân hàng câu hỏi → **Phạm vi sử dụng**:
 - `RACE`: chỉ Đường đua.
 - `BOTH`: dùng chung.
 
-Đường đua chỉ chọn câu NETWORKING đang PUBLISHED, chủ đề còn bật và có lời giải. CSV nhận thêm cột tùy chọn `usage` với các giá trị trên; thiếu cột mặc định LEGACY. Bản cập nhật bổ sung **32 câu Lập trình mạng** (10 Dễ, 10 Trung bình, 12 Khó) có giải thích, chỉ cho Đường đua. Admin có thể sửa/ẩn hoặc bổ sung; trận đang chạy giữ câu hỏi đã chụp. Nếu không đủ câu phù hợp thì từ chối bắt đầu và báo rõ, không lấy câu sai chủ đề/độ khó hay trừ lượt trước.
+Đường đua chỉ chọn câu NETWORKING đang PUBLISHED, chủ đề còn bật và có lời giải. CSV nhận thêm cột tùy chọn `usage` với các giá trị trên; thiếu cột mặc định LEGACY. Bản cập nhật bổ sung **32 câu Lập trình mạng** (10 Dễ, 10 Trung bình, 12 Khó) có giải thích, chỉ cho Đường đua. Admin có thể sửa/ẩn hoặc bổ sung; các câu đã mở lượt trong trận được giữ bằng bản chụp để chấm điểm và ôn tập. Nếu không đủ câu phù hợp thì từ chối bắt đầu và báo rõ, không lấy câu sai chủ đề/độ khó hay trừ lượt trước.
 
 Nội dung mạng tham chiếu các tiêu chuẩn gốc: [TCP RFC 9293](https://www.rfc-editor.org/rfc/rfc9293), [UDP RFC 768](https://www.rfc-editor.org/rfc/rfc768), [HTTP RFC 9110](https://www.rfc-editor.org/rfc/rfc9110), [WebSocket RFC 6455](https://www.rfc-editor.org/rfc/rfc6455).
 
@@ -99,3 +99,23 @@ Phần ghép tự động đấu thường đã được bổ sung kiểm tra: h
 Bổ sung quản trị bảng rank và tách daily: `scratch/test_admin_ranking.ps1` đạt 156 kiểm tra (dữ liệu thử hơn 100 người, phân trang, tìm kiếm giữ hạng toàn server, quyền truy cập, cấu hình độc lập và cấp lại lượt). Chạy thêm `-Preview` rồi `node scratch/test_admin_ranking_browser.mjs <PREVIEW_URL>` để kiểm tra giao diện admin và lưu từ hai mục. Bộ quản trị hiện có 140 kiểm tra và bộ Đường đua 187 kiểm tra vẫn đạt sau thay đổi này.
 
 Kết quả 30/10/2026: **164** kiểm tra Đường đua/rank, **574** luật Arena, **46** Sinh tử, **36** WebSocket/heartbeat, **140** quản trị, **35** portal, **101** tài khoản/OAuth/SSE và **100** đăng ký/khôi phục qua SMTP cục bộ đều đạt (tổng 1.196). Chrome đã kiểm tra giao diện Đường đua/admin và trang chủ trên desktop/mobile, cùng một lượt daily đầy đủ. Database thật sau nâng cấp giữ nguyên số tài khoản, trận ba game cũ, người tham gia và thành tích cũ; `PRAGMA quick_check` trả `ok`. Server thật giữ mặc định 15/60/7 như trên.
+
+## Bộ câu hỏi riêng theo bậc rank lớn
+
+Đấu rank dùng 5 bộ độc lập: **Đồng, Bạc, Vàng, Bạch Kim, Kim Cương**; ba cấp nhỏ trong cùng bậc dùng cùng bộ. Chỉ ghép người trong cùng bậc lớn, rồi ưu tiên RP gần nhau. Thiếu người vẫn điền bot theo thời gian ghép hiện có. Trước lúc ghép, server đọc lại rank để xử lý trường hợp kết quả trận trước vừa làm người chơi lên/tụt bậc.
+
+Hệ thống khởi tạo một lần **15 câu riêng mỗi bậc (75 câu)**. Câu hỏi Chung hiện có tiếp tục phục vụ đấu thường, chơi máy và thử thách ngày; mỗi bộ rank có ID/nội dung câu hỏi riêng. Cách chia trong một trận 10–15 câu:
+
+| Bậc | Tỷ lệ chọn | Ví dụ 10 câu |
+|---|---|---|
+| Đồng | Tất cả Dễ | 10 Dễ |
+| Bạc | Một phần ba Dễ (làm tròn xuống), còn lại Trung bình | 3 Dễ + 7 Trung bình |
+| Vàng | Một phần ba Khó (làm tròn xuống), còn lại Trung bình | 7 Trung bình + 3 Khó |
+| Bạch Kim | Một phần ba Trung bình (làm tròn xuống), còn lại Khó | 3 Trung bình + 7 Khó |
+| Kim Cương | Tất cả Khó | 10 Khó |
+
+Trong admin, **Ngân hàng câu hỏi** có bộ lọc **Bậc rank** và cột **Bộ rank**. Khi thêm/sửa, chọn **Bộ câu hỏi bậc rank**; câu đó thuộc chủ đề NETWORKING, phạm vi RACE, có lời giải và độ khó phù hợp với bậc. CSV hỗ trợ cột `rank_tier` (`BRONZE`, `SILVER`, `GOLD`, `PLATINUM`, `DIAMOND`; để trống cho câu Chung).
+
+Chỉ câu đã xuất bản và chủ đề đang bật được đưa vào trận. Nếu thiếu câu theo số lượng/độ khó đã yêu cầu, server báo rõ để admin bổ sung, không lấy bù từ bậc khác. Đấu rank chỉ kiểm tra số câu khả dụng khi ghép/tạo trận, không chọn sẵn cả bộ. Khi mở mỗi lượt, server bốc độ khó theo phần cơ cấu còn lại rồi chọn ngẫu nhiên đúng một câu từ ngân hàng hiện tại, loại các ID đã dùng trong trận. Mọi người trong phòng nhận cùng câu và token. Bậc đề, tổng số câu và cơ cấu độ khó được lưu cùng cấu hình trận; câu vừa chọn được chụp/lưu trước khi gửi. Nối lại không bốc lại câu đang chơi. Admin thêm/sửa/ẩn câu có thể ảnh hưởng những lượt chưa mở; nếu ngân hàng thiếu câu giữa trận, server hủy trận rõ lý do, không tính RP hoặc tiêu thẻ, không lấy bù từ bậc khác.
+
+Nâng cấp database tự thêm `game_questions.rank_tier`, tạo bản sao `before-rank-pools-*` trước khi đổi database có nội dung, giữ nguyên câu hỏi đã sửa và chỉ khởi tạo các bộ rank một lần. Khởi động lại không xuất bản lại câu đã ẩn hoặc ghi đè nội dung admin đã chỉnh.

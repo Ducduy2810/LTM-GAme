@@ -45,13 +45,127 @@ public class RaceIntegrationTest {
         check(RankRules.title(14,1).equals("Huyền Thoại")&&RankRules.title(14,100).equals("Cao Thủ")&&RankRules.title(13,1).isEmpty()&&RankRules.title(14,101).isEmpty(),"elite title gate and boundaries");
         for(int step=0;step<15;step++){var p=new RankRules.Position(step,0);check(p.name().endsWith(String.valueOf(3-step%3)),"division label "+step);}
     }
+    static List<Question> drawRankedQuestions(String tier,int count)throws Exception{
+        List<Question> used=new ArrayList<>();while(used.size()<count)used.add(RaceStore.nextRankedQuestion(tier,count,used));return used;
+    }
+    static void rankedPools()throws Exception{
+        String oldText;int oldId,oldRevision;
+        try(var c=AdminStore.connect();var st=c.createStatement()){
+            var legacy=AdminStore.rows(c,"SELECT id,text,revision FROM game_questions WHERE rank_tier='' ORDER BY id LIMIT 1").get(0);oldId=num(legacy.get("id"));oldText=(String)legacy.get("text");oldRevision=num(legacy.get("revision"));
+            st.execute("DELETE FROM game_questions WHERE rank_tier<>''");st.execute("DELETE FROM app_settings WHERE key='rank_tier_questions_seeded_v1'");st.execute("ALTER TABLE game_questions DROP COLUMN rank_tier");
+            try(var ps=c.prepareStatement("UPDATE game_questions SET text=?,revision=? WHERE id=?")){ps.setString(1,"Edited legacy question to preserve");ps.setInt(2,oldRevision+1);ps.setInt(3,oldId);ps.executeUpdate();}
+        }
+        AdminStore.init();RaceStore.init();
+        try(var c=AdminStore.connect()){
+            var preserved=AdminStore.rows(c,"SELECT text,revision,rank_tier FROM game_questions WHERE id=?",oldId).get(0);check(preserved.get("text").equals("Edited legacy question to preserve")&&num(preserved.get("revision"))==oldRevision+1&&preserved.get("rank_tier").equals(""),"rank bank migration preserves existing edited questions");
+            try(var ps=c.prepareStatement("UPDATE game_questions SET text=?,revision=? WHERE id=?")){ps.setString(1,oldText);ps.setInt(2,oldRevision);ps.setInt(3,oldId);ps.executeUpdate();}
+        }
+        check(AdminStore.backups().stream().anyMatch(row->row.get("name").toString().startsWith("before-rank-pools-")),"existing database backed up before rank-pool migration");
+        Set<Integer> rankedIds=new HashSet<>();Set<String> texts=new HashSet<>();Set<Integer> answerPositions=new HashSet<>();
+        for(String tier:RankedQuestionBank.TIERS){
+            var bank=drawRankedQuestions(tier,15);check(bank.size()==15,"rank pool initialized: "+tier);
+            try(var c=AdminStore.connect()){
+                for(Question q:bank){check(rankedIds.add(q.getId())&&texts.add(q.getText()),"rank pools have distinct question ids and texts");check(q.getOptions().size()==4&&new HashSet<>(q.getOptions()).size()==4&&!q.getExplanation().isBlank(),"seed question has four distinct choices and explanation");answerPositions.add(q.getCorrect());check(AdminStore.rows(c,"SELECT rank_tier FROM game_questions WHERE id=?",q.getId()).get(0).get("rank_tier").equals(tier),"question belongs to requested major tier");}
+            }
+        }
+        check(rankedIds.size()==75&&answerPositions.size()>=3,"75 distinct seeded questions with varied answer positions");
+        for(int count=10;count<=15;count++){
+            double previous=0;
+            for(String tier:RankedQuestionBank.TIERS){
+                var questions=drawRankedQuestions(tier,count);Map<String,Integer> frequencies=new HashMap<>();for(Question q:questions)frequencies.merge(q.getDifficulty(),1,Integer::sum);
+                check(frequencies.equals(RankedQuestionBank.requirements(tier,count)),"exact difficulty plan for "+tier+" at "+count+" questions");
+                double mean=questions.stream().mapToInt(q->Map.of("EASY",1,"MEDIUM",2,"HARD",3).get(q.getDifficulty())).average().orElseThrow();check(mean>previous,"difficulty strictly rises between major tiers");previous=mean;
+            }
+        }
+        check(RaceStore.questions(false,32).stream().noneMatch(q->rankedIds.contains(q.getId())),"casual and bot questions exclude ranked pools");
+        check(RaceStore.questions(true,10).stream().allMatch(q->q.getDifficulty().equals("HARD")&&!rankedIds.contains(q.getId())),"daily remains HARD from shared pool only");
+        long seeded=count("game_questions");RaceStore.init();check(count("game_questions")==seeded,"rank pool seeding is idempotent");
+        var original=RaceStore.settings();var duel=new HashMap<>(original);duel.put("targetPlayers",2);RaceStore.saveSettings("operator",duel);
+        AtomicLong now=new AtomicLong(System.currentTimeMillis());KnowledgeRaceGame game=new KnowledgeRaceGame(now::get);Client bronze=new Client("host"),silver=new Client("guest");
+        try{
+            setRank(game,"host",2,95);setRank(game,"guest",3,0);act(game,bronze,"race_queue",Map.of("mode","RANKED"));act(game,silver,"race_queue",Map.of("mode","RANKED"));
+            check(bronze.state().get("phase").equals("QUEUED")&&silver.state().get("phase").equals("QUEUED"),"near-boundary Bronze and Silver do not share a ranked match");
+            now.addAndGet(61000);game.tick();
+            check(bronze.state().get("rankTier").equals("BRONZE")&&silver.state().get("rankTier").equals("SILVER"),"bot-filled rooms each retain their own rank pool");
+            String bronzeId=(String)bronze.state().get("matchId"),silverId=(String)silver.state().get("matchId");check(!bronzeId.equals(silverId),"separate major tiers use separate rooms");
+            try(var c=AdminStore.connect()){
+                var config=obj((String)AdminStore.rows(c,"SELECT config_json FROM race_matches WHERE id=?",bronzeId).get(0).get("config_json"));check(config.get("rankTier").equals("BRONZE")&&map(config.get("difficultyPlan")).equals(Map.of("EASY",10)),"rank pool and difficulty plan persisted with match");
+            }
+            game.adminAction("operator",Map.of("action","cancel","matchId",bronzeId,"reason","Tier fixture cleanup"));game.adminAction("operator",Map.of("action","cancel","matchId",silverId,"reason","Tier fixture cleanup"));
+            setRank(game,"host",2,95);act(game,bronze,"race_queue",Map.of("mode","RANKED"));
+            try(var c=AdminStore.connect();var st=c.createStatement()){st.execute("UPDATE player_ranks SET current_step=3,current_tier='SILVER',current_points=0,highest_step=3,highest_tier='SILVER' WHERE user_id=(SELECT id FROM users WHERE username='host')");}
+            act(game,silver,"race_queue",Map.of("mode","RANKED"));check(bronze.state().get("phase").equals("QUESTION")&&bronze.state().get("rankTier").equals("SILVER"),"queued rank refresh uses current tier after an older match settles");
+            game.adminAction("operator",Map.of("action","cancel","matchId",bronze.state().get("matchId"),"reason","Tier refresh fixture cleanup"));
+            setRank(game,"host",0,0);
+            try(var c=AdminStore.connect();var st=c.createStatement()){st.execute("UPDATE game_questions SET status='ARCHIVED' WHERE rank_tier='BRONZE'");}
+            try{
+                RaceStore.init();check(count("game_questions")==seeded,"restart does not recreate archived ranked questions");
+                boolean rejected=false;try{drawRankedQuestions("BRONZE",10);}catch(IllegalArgumentException e){rejected=e.getMessage().contains("Đồng");}check(rejected,"insufficient tier bank fails clearly instead of borrowing questions");
+                long errors=bronze.errors();act(game,bronze,"race_queue",Map.of("mode","RANKED"));check(bronze.errors()==errors+1,"missing tier questions rejected before queue entry");check(drawRankedQuestions("SILVER",10).size()==10,"missing Bronze bank does not affect Silver");
+            }finally{try(var c=AdminStore.connect();var st=c.createStatement()){st.execute("UPDATE game_questions SET status='PUBLISHED' WHERE rank_tier='BRONZE'");}}
+        }finally{game.close();RaceStore.saveSettings("operator",original);}
+    }
+    static Map<String,Object> roundSnapshot(String match,int round)throws Exception{
+        try(var c=AdminStore.connect()){return obj((String)AdminStore.rows(c,"SELECT snapshot_json FROM race_rounds WHERE match_id=? AND round_no=?",match,round).get(0).get("snapshot_json"));}
+    }
+    static int drawnCount(KnowledgeRaceGame game,String match)throws Exception{
+        var field=KnowledgeRaceGame.class.getDeclaredField("rooms");field.setAccessible(true);Object room=((Map<?,?>)field.get(game)).get(match);var questions=room.getClass().getDeclaredField("questions");questions.setAccessible(true);return ((List<?>)questions.get(room)).size();
+    }
+    static void perRoundQuestionDraws()throws Exception{
+        var original=RaceStore.settings();var duel=new HashMap<>(original);duel.put("targetPlayers",2);RaceStore.saveSettings("operator",duel);
+        AtomicLong now=new AtomicLong(System.currentTimeMillis());KnowledgeRaceGame game=new KnowledgeRaceGame(now::get);
+        List<Map<String,Object>> bank;try(var c=AdminStore.connect()){bank=AdminStore.rows(c,"SELECT id,text,options_json,correct,status,revision,updated_at FROM game_questions WHERE rank_tier='BRONZE'");}
+        try{
+            setRank(game,"host",0,50);setRank(game,"guest",0,50);Client first=new Client("host"),other=new Client("guest");long roundsBefore=count("race_rounds");
+            act(game,first,"race_queue",Map.of("mode","RANKED"));check(count("race_rounds")==roundsBefore,"entering ranked queue only checks capacity; no question drawn");
+            act(game,other,"race_queue",Map.of("mode","RANKED"));String id=(String)first.state().get("matchId");var initial=roundSnapshot(id,1);int firstId=num(initial.get("id"));String text=(String)initial.get("text"),token=(String)map(first.state().get("question")).get("token");
+            check(drawnCount(game,id)==1&&num(first.state().get("questionCount"))==10,"opening rank match holds exactly one drawn question and total count ten");
+            check(map(first.state().get("question")).equals(map(other.state().get("question"))),"both players receive the same one-question draw");
+            check(!map(first.state().get("question")).containsKey("correct")&&!first.state().containsKey("questions"),"live packet exposes neither answer nor future questions");
+            try(var c=AdminStore.connect();var st=c.createStatement()){
+                st.execute("UPDATE game_questions SET status='ARCHIVED' WHERE rank_tier='BRONZE'");
+                try(var ps=c.prepareStatement("UPDATE game_questions SET text='Changed after round opened',correct=? WHERE id=?")){ps.setInt(1,(num(initial.get("correct"))+1)%4);ps.setInt(2,firstId);ps.executeUpdate();}
+                try(var ps=c.prepareStatement("INSERT INTO game_questions(text,options_json,correct,topic,difficulty,usage,rank_tier,explanation,status,updated_at) VALUES(?,'[\"A\",\"B\",\"C\",\"D\"]',0,'NETWORKING','EASY','RACE','BRONZE','On demand fixture','PUBLISHED',?)")){
+                    for(int i=0;i<9;i++){ps.setString(1,"PER_ROUND_FIXTURE_"+i);ps.setLong(2,System.currentTimeMillis());ps.addBatch();}ps.executeBatch();
+                }
+            }
+            game.disconnect(first);Client resumed=new Client("host");act(game,resumed,"race_resume",Map.of("mode","RANKED"));
+            check(map(resumed.state().get("question")).get("text").equals(text)&&map(resumed.state().get("question")).get("token").equals(token),"reconnect keeps current snapshot after bank was edited");
+            check(drawnCount(game,id)==1,"reconnect does not draw another question");
+            answer(game,resumed,num(initial.get("correct")));answer(game,other,num(initial.get("correct")));check(resumed.state().get("phase").equals("RESULT")&&Boolean.TRUE.equals(map(resumed.state().get("solution")).get("correct")),"round uses original answer rather than admin edit");
+            now.addAndGet(2300);game.tick();check(num(resumed.state().get("round"))==2&&map(resumed.state().get("question")).get("text").toString().startsWith("PER_ROUND_FIXTURE_"),"round two uses newly published live-bank question unavailable at match creation");
+            check(drawnCount(game,id)==2,"only opened rounds have selected questions in memory");
+            String secondToken=(String)map(resumed.state().get("question")).get("token");act(game,resumed,"race_resume",Map.of("mode","RANKED"));game.tick();check(map(resumed.state().get("question")).get("token").equals(secondToken)&&drawnCount(game,id)==2,"repeated resume and tick do not reroll current round");
+            Set<Integer> ids=new HashSet<>();ids.add(firstId);
+            for(int round=2;round<=10;round++){
+                var question=roundSnapshot(id,round);check(ids.add(num(question.get("id"))),"on-demand question ids never repeat in a match");
+                answer(game,resumed,num(question.get("correct")));answer(game,other,num(question.get("correct")));now.addAndGet(2300);game.tick();
+            }
+            check(resumed.state().get("phase").equals("COMPLETED")&&drawnCount(game,id)==10&&ids.size()==10,"on-demand match completes configured ten rounds rather than stopping at first draw");
+            var review=RaceStore.review("host",id,false);check(list(review.get("questions")).size()==10&&map(list(review.get("questions")).get(0).get("question")).get("text").equals(text),"review preserves actually drawn snapshots after live bank edits");
+            try(var c=AdminStore.connect();var st=c.createStatement()){st.execute("UPDATE game_questions SET status='PUBLISHED' WHERE rank_tier='BRONZE'");}
+            Client next=new Client("host"),nextOther=new Client("guest");act(game,next,"race_queue",Map.of("mode","RANKED"));act(game,nextOther,"race_queue",Map.of("mode","RANKED"));String empty=(String)next.state().get("matchId");long ledgers=count("rank_ledger");
+            try(var c=AdminStore.connect();var st=c.createStatement()){st.execute("UPDATE game_questions SET status='ARCHIVED' WHERE rank_tier='BRONZE'");}
+            int correct=correct(empty,1);answer(game,next,correct);answer(game,nextOther,correct);now.addAndGet(2300);game.tick();
+            check(next.state().get("phase").equals("CANCELLED")&&next.state().get("reason").toString().contains("Đồng"),"bank shortage mid-match cancels clearly instead of hanging or borrowing from another rank");
+            check(count("rank_ledger")==ledgers&&drawnCount(game,empty)==1,"failed next draw never settles RP or appends an unserved question");
+        }finally{
+            game.close();RaceStore.saveSettings("operator",original);
+            try(var c=AdminStore.connect()){
+                try(var ps=c.prepareStatement("DELETE FROM game_questions WHERE text LIKE 'PER_ROUND_FIXTURE_%'")){ps.executeUpdate();}
+                try(var ps=c.prepareStatement("UPDATE game_questions SET text=?,options_json=?,correct=?,status=?,revision=?,updated_at=? WHERE id=?")){
+                    for(var row:bank){ps.setString(1,(String)row.get("text"));ps.setString(2,(String)row.get("options_json"));ps.setInt(3,num(row.get("correct")));ps.setString(4,(String)row.get("status"));ps.setInt(5,num(row.get("revision")));ps.setLong(6,((Number)row.get("updated_at")).longValue());ps.setInt(7,num(row.get("id")));ps.addBatch();}ps.executeBatch();
+                }
+            }
+        }
+    }
     static void direct()throws Exception{
         AtomicLong now=new AtomicLong(System.currentTimeMillis());KnowledgeRaceGame g=new KnowledgeRaceGame(now::get);
         Client[] p={new Client("racer0"),new Client("racer1"),new Client("racer2"),new Client("racer3")};
         try{
             var settings=RaceStore.settings();check(num(settings.get("timeLimit"))==15&&num(settings.get("queueSeconds"))==60&&num(settings.get("dailyTimeLimit"))==7,"requested defaults 60s queue, 15s rank, 7s daily");
             check(RaceStore.questions(true,10).size()==10,"ten distinct HARD networking questions available");
-            setRank(g,"racer0",2,95);setRank(g,"racer1",2,80);setRank(g,"racer2",3,5);setRank(g,"racer3",3,0);
+            setRank(g,"racer0",2,95);setRank(g,"racer1",2,80);setRank(g,"racer2",2,5);setRank(g,"racer3",2,0);
             long ledgers=count("rank_ledger");for(Client c:p)act(g,c,"race_queue",Map.of("mode","RANKED","questionCount",1,"timeLimit",1,"score",99999));
             var initial=p[0].state();check(initial.get("phase").equals("QUESTION"),"four human players start immediately");check(num(initial.get("seconds"))==15&&num(initial.get("questionCount"))==10,"client cannot override ranked timing or question count");check(list(initial.get("players")).size()==4,"four-member shared ranked match");
             String id=(String)initial.get("matchId");check(list(initial.get("players")).stream().noneMatch(r->Boolean.TRUE.equals(r.get("bot"))),"full PvP contains no bot");check(!map(initial.get("question")).containsKey("correct")&&!initial.containsKey("solution"),"live state does not expose answer or explanation");
@@ -67,8 +181,8 @@ public class RaceIntegrationTest {
             }
             check(p[0].state().get("phase").equals("COMPLETED"),"match completes");check(count("rank_ledger")==ledgers+4,"exactly one RP ledger entry per human");
             check(num(rank("racer0").get("step"))==3&&num(rank("racer0").get("rp"))==40,"winning crosses tier with buffer");check(num(rank("racer1").get("rp"))==90,"second earns ten RP");
-            check(num(rank("racer2").get("step"))==3&&num(rank("racer2").get("rp"))==0,"third loses ten without immediate demotion");check(num(rank("racer3").get("step"))==2&&num(rank("racer3").get("rp"))==70,"fourth loss at zero demotes");
-            var peak=map(RaceStore.account("racer3").get("highest"));check(num(peak.get("step"))==3,"highest rank preserved after demotion");
+            check(num(rank("racer2").get("step"))==2&&num(rank("racer2").get("rp"))==0,"third loses ten without immediate demotion");check(num(rank("racer3").get("step"))==1&&num(rank("racer3").get("rp"))==70,"fourth loss at zero demotes");
+            var peak=map(RaceStore.account("racer3").get("highest"));check(num(peak.get("step"))==2,"highest rank preserved after demotion");
             RaceStore.finish(id,List.of());check(count("rank_ledger")==ledgers+4&&num(rank("racer0").get("rp"))==40,"duplicate settlement cannot award RP twice");
             var review=RaceStore.review("racer2",id,false);check(list(review.get("questions")).stream().filter(r->Boolean.FALSE.equals(r.get("correct"))).count()==5,"review includes exactly the player's five wrong questions");
             blocked=false;try{RaceStore.review("observer",id,false);}catch(IllegalArgumentException expected){blocked=true;}check(blocked,"other account cannot read private review");
@@ -125,6 +239,7 @@ public class RaceIntegrationTest {
     }
     static void cards(KnowledgeRaceGame g,AtomicLong now)throws Exception{
         Client[] p={new Client("racer0"),new Client("racer1"),new Client("racer2"),new Client("racer3")};
+        for(Client c:p)setRank(g,c.getUsername(),3,50);
         for(Client c:p)g.adminAction("operator",Map.of("action","setCards","targetUsername",c.getUsername(),"shields",2,"doubles",2,"reason","Isolated inventory fixture"));
         int before=num(rank("racer0").get("total"));int beforeLoser=num(rank("racer3").get("total"));
         for(Client c:p)act(g,c,"race_queue",Map.of("mode","RANKED","useShield",true,"useDouble",true));String id=(String)p[0].state().get("matchId");
@@ -139,6 +254,47 @@ public class RaceIntegrationTest {
         for(int r=1;r<=10;r++){if(r>1){now.addAndGet(15000);g.tick();}now.addAndGet(2300);g.tick();}
         check(p[0].state().get("phase").equals("COMPLETED"),"all AFK match completes");check(num(rank("racer0").get("total"))==total,"no free RP for zero-correct AFK tie");
         for(Client c:p)act(g,c,"race_queue",Map.of("mode","RANKED"));String interrupted=(String)p[0].state().get("matchId");long ledger=count("rank_ledger");RaceStore.recoverInterrupted();check(count("rank_ledger")==ledger,"restart recovery never fabricates RP results");check(RaceStore.history("racer0",false).stream().anyMatch(r->r.get("id").equals(interrupted)&&r.get("status").equals("INTERRUPTED")),"interrupted match persisted");
+    }
+    static String participation(String name)throws Exception{
+        try(var c=AdminStore.connect()){var rows=AdminStore.rows(c,"SELECT p.match_id FROM race_participation p JOIN users u ON u.id=p.user_id WHERE u.username=?",name);return rows.isEmpty()?null:(String)rows.get(0).get("match_id");}
+    }
+    static void requeueAfterForfeit()throws Exception{
+        var original=RaceStore.settings();var duel=new LinkedHashMap<>(original);duel.put("targetPlayers",2);RaceStore.saveSettings("operator",duel);
+        AtomicLong now=new AtomicLong(System.currentTimeMillis());KnowledgeRaceGame game=new KnowledgeRaceGame(now::get);
+        Client a=new Client("racer0"),b=new Client("racer1"),c=new Client("racer2");
+        try{
+            for(String name:List.of("racer0","racer1","racer2","racer3"))setRank(game,name,0,50);
+            game.adminAction("operator",Map.of("action","setCards","targetUsername","racer0","shields",1,"doubles",1,"reason","Requeue card fixture"));
+            act(game,a,"race_queue",Map.of("mode","RANKED","useShield",true));act(game,b,"race_queue",Map.of("mode","RANKED"));String old=(String)a.state().get("matchId"),oldToken=(String)map(a.state().get("question")).get("token");
+            game.disconnect(b);Client connected=new Client("racer1");long errors=connected.errors();act(game,connected,"race_queue",Map.of("mode","RANKED"));check(connected.errors()==errors+1,"unexpected disconnect keeps old match ownership and cannot start a second match");act(game,connected,"race_resume",Map.of("mode","RANKED"));b=connected;
+            check(b.state().get("matchId").equals(old),"disconnected player resumes old match normally");answer(game,b,correct(old,1));
+            act(game,a,"race_leave",Map.of());check(participation("racer0")==null,"intentional leave releases database participation immediately");
+            check(num(map(RaceStore.account("racer0").get("cards")).get("shields"))==0,"shield pending settlement in old forfeited match cannot be reused");
+            errors=a.errors();act(game,a,"race_queue",Map.of("mode","RANKED","useShield",true));check(a.errors()==errors+1,"pending shield is rejected before matchmaking starts");
+            errors=a.errors();act(game,a,"race_queue",Map.of("mode","RANKED"));check(a.errors()==errors&&a.state().get("phase").equals("QUEUED"),"intentional quitter can immediately queue without waiting for old match");
+            Client replacement=new Client("racer0");act(game,replacement,"race_resume",Map.of("mode","RANKED"));check(replacement.state().get("phase").equals("QUEUED"),"new socket resumes new queue rather than old forfeited room");a=replacement;
+            game.tick();act(game,c,"race_queue",Map.of("mode","RANKED"));String next=(String)a.state().get("matchId");check(next!=null&&!next.equals(old)&&next.equals(participation("racer0")),"new match starts and owns database slot while previous match is active");
+            errors=a.errors();act(game,a,"race_answer",Map.of("matchId",old,"questionToken",oldToken,"answer",0));check(a.errors()==errors+1,"new socket cannot answer abandoned match");
+            game.adminAction("operator",Map.of("action","kick","matchId",old,"targetUsername","racer0","reason","Late old-room action"));check(next.equals(participation("racer0")),"late old-room kick cannot release new membership");
+            while(!b.state().get("phase").equals("COMPLETED")){
+                if(b.state().get("phase").equals("QUESTION")&&num(b.state().get("myAnswer"))<0)answer(game,b,correct(old,num(b.state().get("round"))));
+                now.addAndGet(2300);game.tick();
+            }
+            check(next.equals(participation("racer0"))&&a.state().get("matchId").equals(next),"old match settlement cannot remove or replace current match");
+            String settledOld=old;check(RaceStore.history("racer0",false).stream().anyMatch(row->row.get("id").equals(settledOld)&&num(row.get("forfeited"))==1),"old loss remains recorded after joining a new match");
+            check(num(map(RaceStore.account("racer0").get("cards")).get("shields"))==1,"unused pending shield becomes available after old settlement");
+            errors=a.errors();answer(game,a,correct(next,num(a.state().get("round"))));check(a.errors()==errors,"player can continue answering new match after old match ends");
+            game.adminAction("operator",Map.of("action","cancel","matchId",next,"reason","Requeue completion fixture"));
+            for(String removal:List.of("kick","moderate")){
+                a=new Client("racer0");b=new Client("racer1");c=new Client("racer2");act(game,a,"race_queue",Map.of("mode","RANKED"));act(game,b,"race_queue",Map.of("mode","RANKED"));old=(String)a.state().get("matchId");
+                if(removal.equals("kick"))game.adminAction("operator",Map.of("action","kick","matchId",old,"targetUsername","racer0","reason","Requeue after kick"));else game.moderate("racer0","Requeue after session disconnect");
+                check(participation("racer0")==null,removal+" releases old database slot");act(game,a,"race_queue",Map.of("mode","RANKED"));check(a.state().get("phase").equals("QUEUED"),removal+" permits immediate new ranked queue");act(game,c,"race_queue",Map.of("mode","RANKED"));next=(String)a.state().get("matchId");check(!next.equals(old),removal+" starts another match successfully");
+                game.adminAction("operator",Map.of("action","cancel","matchId",old,"reason","Old room cleanup"));check(next.equals(participation("racer0"))&&a.state().get("matchId").equals(next),"old cancellation cannot affect new match after "+removal);
+                game.adminAction("operator",Map.of("action","cancel","matchId",next,"reason","New room cleanup"));
+            }
+            a=new Client("racer0");act(game,a,"race_create",Map.of("withBots",true,"botCount",1,"questionCount",10,"timeLimit",3));act(game,a,"race_start",Map.of());old=(String)a.state().get("matchId");game.adminAction("operator",Map.of("action","kick","matchId",old,"targetUsername","racer0","reason","Admin kicks room host"));
+            act(game,a,"race_queue",Map.of("mode","RANKED"));check(a.state().get("phase").equals("QUEUED")&&participation("racer0")==null,"admin kicking room host also allows immediate requeue");act(game,a,"race_cancel_queue",Map.of());
+        }finally{game.close();RaceStore.saveSettings("operator",original);}
     }
     static void kickNotifications()throws Exception{
         KnowledgeRaceGame game=new KnowledgeRaceGame();
@@ -203,9 +359,9 @@ public class RaceIntegrationTest {
         check(num(rank("host").get("total"))>=start+50,"active match uses captured 50 RP reward after global config reverted");
         check(num(map(list(a.state().get("players")).stream().filter(p->p.get("username").equals("observer")).findFirst().orElseThrow().get("result")).get("rpDelta"))==0,"second place in a duel gets zero RP");
         RaceStore.saveSettings("operator",duel);int before=num(rank("host").get("total"));act(g,a,"race_queue",Map.of("mode","RANKED"));act(g,b,"race_queue",Map.of("mode","RANKED"));String left=(String)a.state().get("matchId");
-        act(g,a,"race_leave",Map.of());long n=a.errors();act(g,a,"race_queue",Map.of("mode","RANKED"));check(a.errors()==n+1,"forfeiter cannot queue again before settlement");act(g,b,"race_leave",Map.of());
+        act(g,a,"race_leave",Map.of());long n=a.errors();act(g,a,"race_queue",Map.of("mode","RANKED"));check(a.errors()==n&&a.state().get("phase").equals("QUEUED"),"forfeiter can queue again before old match settles");act(g,a,"race_cancel_queue",Map.of());act(g,b,"race_leave",Map.of());
         for(int r=0;r<10;r++){g.tick();now.addAndGet(2300);g.tick();}
-        check(num(rank("host").get("total"))==before,"all-forfeit tie cannot award positive RP");Client resumed=new Client("host");act(g,resumed,"race_resume",Map.of());check(resumed.state().get("phase").equals("COMPLETED"),"forfeited player can resume completed result");act(g,resumed,"race_leave",Map.of());check(resumed.state().get("phase").equals("IDLE"),"forfeited completed result can return to menu");
+        check(num(rank("host").get("total"))==before,"all-forfeit tie cannot award positive RP");Client resumed=new Client("host");act(g,resumed,"race_resume",Map.of());check(resumed.state().get("phase").equals("IDLE"),"old completed match cannot replace menu after requeue");check(RaceStore.history("host",false).stream().anyMatch(row->row.get("id").equals(left)&&row.get("status").equals("COMPLETED")),"old forfeited result remains available in history");
         RaceStore.saveSettings("operator",original);
         var disabled=new HashMap<>(original);disabled.put("rankedEnabled",false);RaceStore.saveSettings("operator",disabled);n=resumed.errors();act(g,resumed,"race_queue",Map.of("mode","RANKED"));check(resumed.errors()==n+1,"admin can close ranked queue");RaceStore.saveSettings("operator",original);
         var invalid=new HashMap<>(original);invalid.put("timeLimit",0);boolean rejected=false;try{RaceStore.saveSettings("operator",invalid);}catch(IllegalArgumentException expected){rejected=true;}check(rejected&&num(RaceStore.settings().get("timeLimit"))==15,"invalid setting rejected without changing active configuration");
@@ -240,6 +396,20 @@ public class RaceIntegrationTest {
             var scores=list(peers.get(0).state().get("players"));check(scores.stream().filter(p->num(p.get("score"))==3).count()==1&&scores.stream().filter(p->num(p.get("score"))==2).count()==3,"exactly one fastest correct plus three later correct");
             check(request("/api/admin/race/action",adminCookie,Map.of("action","cancel","matchId",id,"reason","Live protocol test"),adminCsrf).statusCode()==200,"admin cancels real ranked match");until(()->peers.stream().allMatch(p->p.state().get("phase").equals("CANCELLED")),"admin cancellation broadcasts to every real client");
             check(request("/api/race/review?id="+id,login("observer"),null,null).statusCode()==400,"HTTP review isolated per account");
+            var duel=new LinkedHashMap<>(config);duel.put("targetPlayers",2);RaceStore.saveSettings("operator",duel);
+            Peer quitter=peers.get(0),remaining=peers.get(1),nextOpponent=peers.get(2);
+            quitter.send("race_queue",Map.of("mode","RANKED"));remaining.send("race_queue",Map.of("mode","RANKED"));
+            until(()->quitter.state().getOrDefault("phase","").equals("QUESTION")&&!quitter.state().get("matchId").equals(id),"live original duel starts");String old=(String)quitter.state().get("matchId");
+            quitter.send("race_leave",Map.of());until(()->quitter.state().getOrDefault("phase","").equals("IDLE"),"live intentional leave acknowledged");
+            quitter.send("race_queue",Map.of("mode","RANKED"));until(()->quitter.state().getOrDefault("phase","").equals("QUEUED"),"live player can requeue immediately before old match ends");
+            nextOpponent.send("race_queue",Map.of("mode","RANKED"));until(()->quitter.state().getOrDefault("phase","").equals("QUESTION")&&!quitter.state().get("matchId").equals(old),"real new match starts while old opponent is still playing");String next=(String)quitter.state().get("matchId");
+            check(remaining.state().get("matchId").equals(old),"remaining opponent keeps original duel");
+            check(request("/api/admin/race/action",adminCookie,Map.of("action","cancel","matchId",old,"reason","Old live match cleanup"),adminCsrf).statusCode()==200,"old live match can end independently");
+            until(()->remaining.state().getOrDefault("phase","").equals("CANCELLED"),"old opponent receives cancellation");
+            check(quitter.state().get("matchId").equals(next)&&next.equals(participation("racer0")),"old match cancellation preserves new live match and database membership");
+            quitter.send("race_answer",Map.of("matchId",next,"questionToken",map(quitter.state().get("question")).get("token"),"answer",correct(next,1)));
+            until(()->num(quitter.state().getOrDefault("myAnswer",-1))>=0,"new live match accepts answers after old room closes");
+            check(request("/api/admin/race/action",adminCookie,Map.of("action","cancel","matchId",next,"reason","New live match cleanup"),adminCsrf).statusCode()==200,"new live fixture cleaned up");
             var changed=new HashMap<>(config);changed.put("timeLimit",18);check(request("/api/admin/race/settings",adminCookie,changed,adminCsrf).statusCode()==200,"admin can change ranked question timer");
             check(num(RaceStore.settings().get("timeLimit"))==18,"ranked config persisted");RaceStore.saveSettings("operator",config);
         }finally{for(Peer p:peers)if(p.socket!=null)p.socket.abort();}
@@ -247,7 +417,7 @@ public class RaceIntegrationTest {
     public static void main(String[] args)throws Exception{
         if(!Files.exists(Path.of(".race-test")))throw new IllegalStateException("Use test_race.ps1 isolated directory");DatabaseManager db=DatabaseManager.getInstance();db.init();users=new UserRepository(db);
         for(String name:List.of("racer0","racer1","racer2","racer3","host","guest","observer","daily"))users.register(name,name+"@example.com","PlayerPass123");AdminAccount.create(users,"operator","AdminOnlyPass123!");
-        rules();direct();kickNotifications();SessionManager sessions=new SessionManager();ArenaGame arena=new ArenaGame(users);WheelGame wheel=new WheelGame(users);SurvivalGame survival=new SurvivalGame(users);HttpAndWebSocketServer server=new HttpAndWebSocketServer(0,new File(args[0]),users,sessions,arena,wheel,survival);
+        rules();rankedPools();perRoundQuestionDraws();direct();requeueAfterForfeit();kickNotifications();SessionManager sessions=new SessionManager();ArenaGame arena=new ArenaGame(users);WheelGame wheel=new WheelGame(users);SurvivalGame survival=new SurvivalGame(users);HttpAndWebSocketServer server=new HttpAndWebSocketServer(0,new File(args[0]),users,sessions,arena,wheel,survival);
         Thread t=new Thread(()->{try{server.start();}catch(IOException e){throw new RuntimeException(e);}});t.setDaemon(true);t.start();while(server.getPort()==0)Thread.sleep(10);base="http://localhost:"+server.getPort();
         try{live(server);System.out.println("PASS: "+checks+" ranked/casual/daily, RP, cards, reconnect, anti-replay, admin and real WebSocket checks.");if(args.length>1&&args[1].equals("preview")){System.out.println("PREVIEW_URL="+base);long end=System.currentTimeMillis()+1_200_000;while(!Files.exists(Path.of("stop-preview"))&&System.currentTimeMillis()<end)Thread.sleep(200);}}
         finally{server.stop();arena.close();wheel.close();survival.close();db.close();t.join(2000);}

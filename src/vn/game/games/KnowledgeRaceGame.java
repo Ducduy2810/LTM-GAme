@@ -17,15 +17,15 @@ public final class KnowledgeRaceGame implements AutoCloseable {
         Player(String name,boolean bot,WebSocketClient client,boolean shield,boolean doubleRp){this.name=name;this.bot=bot;this.client=client;this.shield=shield;this.doubleRp=doubleRp;}
     }
     private static final class Entry {
-        final String name,mode;final long joined;final int total;final boolean shield,doubleRp;WebSocketClient client;long disconnected;
+        final String name,mode;final long joined;int total;final boolean shield,doubleRp;WebSocketClient client;long disconnected;
         Entry(WebSocketClient client,String mode,long now,int total,boolean shield,boolean doubleRp){this.name=client.getUsername();this.client=client;this.mode=mode;joined=now;this.total=total;this.shield=shield;this.doubleRp=doubleRp;}
     }
     private record Answer(int index,long elapsed,int order){}
     private static final class Room {
-        final String id,code,name,mode;String host,phase="WAITING",token="",reason="";final List<Question> questions;final int seconds,botCount;
+        final String id,code,name,mode,rankTier;String host,phase="WAITING",token="",reason="";final List<Question> questions;final int questionCount,seconds,botCount;
         final Map<String,Player> players=new LinkedHashMap<>();final Set<String> kicked=new HashSet<>();final Map<String,Answer> answers=new LinkedHashMap<>();
         int round=-1;long opened,deadline,next,finished;Map<String,Map<String,Object>> results=Map.of();final Map<String,Object> rules;
-        Room(String id,String code,String name,String mode,String host,List<Question> qs,int seconds,int bots,Map<String,Object> rules){this.id=id;this.code=code;this.name=name;this.mode=mode;this.host=host;questions=qs;this.seconds=seconds;botCount=bots;this.rules=Map.copyOf(rules);}
+        Room(String id,String code,String name,String mode,String host,List<Question> qs,int count,int seconds,int bots,Map<String,Object> rules,String rankTier){this.questionCount=count;this.rankTier=rankTier;this.id=id;this.code=code;this.name=name;this.mode=mode;this.host=host;questions=qs;this.seconds=seconds;botCount=bots;this.rules=Map.copyOf(rules);}
     }
     private final Map<String,Room> rooms=new LinkedHashMap<>();private final Map<String,Room> membership=new HashMap<>();
     private final Map<String,Entry> queue=new LinkedHashMap<>();private final LongSupplier clock;private final Random random=new java.security.SecureRandom();
@@ -40,9 +40,13 @@ public final class KnowledgeRaceGame implements AutoCloseable {
     private static int number(Map<String,Object> input,String key,int fallback){return input.containsKey(key)?RaceStore.integer(input,key):fallback;}
     private static void send(WebSocketClient client,String type,Map<String,Object> value){if(client==null||client.isClosed())return;Map<String,Object> p=new LinkedHashMap<>(value);p.put("type",type);client.send(JsonUtil.toJson(p));}
     private static void error(WebSocketClient client,String message){send(client,"race_error",Map.of("message",message));}
-    private void idle(String username){
-        Room previous=membership.get(username);if(queue.containsKey(username)||previous!=null&&!terminal(previous))throw new IllegalArgumentException("Bạn đang ghép trận hoặc ở phòng khác. Rời phòng hiện tại trước.");
-        if(previous!=null)membership.remove(username);
+    private void idle(String username)throws SQLException{
+        Room previous=membership.get(username);
+        if(queue.containsKey(username)||previous!=null&&!terminal(previous)&&!previous.players.get(username).forfeited)throw new IllegalArgumentException("Bạn đang ghép trận hoặc ở phòng khác. Rời phòng hiện tại trước.");
+        if(previous!=null){
+            if(!terminal(previous))RaceStore.forfeit(previous.id,username);
+            membership.remove(username,previous);
+        }
     }
     private Map<String,Object> allowed(String mode)throws SQLException{
         var settings=RaceStore.settings();var runtime=AdminStore.settings();
@@ -60,7 +64,8 @@ public final class KnowledgeRaceGame implements AutoCloseable {
                     String mode=text(input,"mode");if(!Set.of("RANKED","CASUAL").contains(mode))throw new IllegalArgumentException("Chọn đấu rank hoặc đấu thường.");allowed(mode);idle(username);
                     boolean shield=mode.equals("RANKED")&&bool(input,"useShield"),doubleRp=mode.equals("RANKED")&&bool(input,"useDouble");
                     var account=RaceStore.account(username);var cards=(Map<?,?>)account.get("cards");if(shield&&((Number)cards.get("shields")).intValue()<1||doubleRp&&((Number)cards.get("doubles")).intValue()<1)throw new IllegalArgumentException("Bạn chưa có đủ thẻ đã chọn.");
-                    RaceStore.questions(false,((Number)RaceStore.settings().get("questionCount")).intValue());queue.put(username,new Entry(client,mode,clock.getAsLong(),rankTotal(username),shield,doubleRp));queued(queue.get(username));matchmake(clock.getAsLong());break;
+                    int total=rankTotal(username),count=((Number)RaceStore.settings().get("questionCount")).intValue();
+                    if(mode.equals("RANKED"))RaceStore.validateRankedPool(RankedQuestionBank.tierForTotal(total),count);else RaceStore.questions(false,count);queue.put(username,new Entry(client,mode,clock.getAsLong(),total,shield,doubleRp));queued(queue.get(username));matchmake(clock.getAsLong());break;
                 }
                 case "race_cancel_queue":{Entry e=queue.get(username);if(e!=null&&e.client==client)queue.remove(username);send(client,"race_state",Map.of("phase","IDLE"));break;}
                 case "race_create":create(client,input);break;
@@ -94,9 +99,15 @@ public final class KnowledgeRaceGame implements AutoCloseable {
     private Room owned(WebSocketClient client){Room room=current(client);if(!Objects.equals(room.host,client.getUsername())||!Set.of("CASUAL","BOT").contains(room.mode))throw new IllegalArgumentException("Chỉ chủ phòng đấu thường được thực hiện thao tác này.");return room;}
     private Room current(WebSocketClient client){Room room=membership.get(client.getUsername());if(room==null||room.players.get(client.getUsername()).client!=client||room.players.get(client.getUsername()).forfeited&&!terminal(room))throw new IllegalArgumentException("Bạn không thuộc phòng hiện tại.");return room;}
     private Room newRoom(String mode,String name,String host,int count,int seconds,int bots)throws SQLException{
-        List<Question> qs=RaceStore.questions(mode.equals("DAILY"),count);String code=UUID.randomUUID().toString().substring(0,8).toUpperCase(Locale.ROOT);
-        var rules=RaceStore.settings();String id=RaceStore.create(code,name,mode,Map.of("questionCount",count,"timeLimit",seconds,"botCount",bots,"topic","NETWORKING","rpRulesVersion",1,"rules",rules),clock.getAsLong());
-        Room room=new Room(id,code,name,mode,host,qs,seconds,bots,rules);rooms.put(id,room);return room;
+        return newRoom(mode,name,host,count,seconds,bots,"");
+    }
+    private Room newRoom(String mode,String name,String host,int count,int seconds,int bots,String tier)throws SQLException{
+        if(mode.equals("RANKED"))RaceStore.validateRankedPool(tier,count);
+        List<Question> qs=mode.equals("RANKED")?new ArrayList<>():RaceStore.questions(mode.equals("DAILY"),count);String code=UUID.randomUUID().toString().substring(0,8).toUpperCase(Locale.ROOT);
+        var rules=RaceStore.settings();Map<String,Object> config=new LinkedHashMap<>(Map.of("questionCount",count,"timeLimit",seconds,"botCount",bots,"topic","NETWORKING","rpRulesVersion",1,"rules",rules));
+        if(mode.equals("RANKED")){config.put("questionSelection","PER_ROUND");config.put("rankTier",tier);config.put("difficultyPlan",RankedQuestionBank.requirements(tier,count));name+=" · "+RankedQuestionBank.name(tier);}
+        String id=RaceStore.create(code,name,mode,config,clock.getAsLong());
+        Room room=new Room(id,code,name,mode,host,qs,count,seconds,bots,rules,tier);rooms.put(id,room);return room;
     }
     private void add(Room room,WebSocketClient client,boolean shield,boolean doubleRp)throws SQLException{
         RaceStore.join(room.id,client.getUsername(),shield,doubleRp);Player p=new Player(client.getUsername(),false,client,shield,doubleRp);room.players.put(p.name,p);membership.put(p.name,room);
@@ -123,19 +134,22 @@ public final class KnowledgeRaceGame implements AutoCloseable {
         queued(e,RaceStore.settings());
     }
     private void queued(Entry e,Map<String,Object> s){
-        send(e.client,"race_state",Map.of("phase","QUEUED","mode",e.mode,"joinedAt",e.joined,"fillAt",e.joined+((Number)s.get("queueSeconds")).longValue()*1000,"waitingPlayers",queue.values().stream().filter(x->x.mode.equals(e.mode)&&x.client!=null).count(),"serverTime",clock.getAsLong()));
+        send(e.client,"race_state",Map.of("phase","QUEUED","mode",e.mode,"joinedAt",e.joined,"fillAt",e.joined+((Number)s.get("queueSeconds")).longValue()*1000,"waitingPlayers",queue.values().stream().filter(x->x.mode.equals(e.mode)&&x.client!=null&&(!e.mode.equals("RANKED")||RankedQuestionBank.tierForTotal(x.total).equals(RankedQuestionBank.tierForTotal(e.total)))).count(),"serverTime",clock.getAsLong(),"rankTier",e.mode.equals("RANKED")?RankedQuestionBank.tierForTotal(e.total):"","rankTierName",e.mode.equals("RANKED")?RankedQuestionBank.name(RankedQuestionBank.tierForTotal(e.total)):""));
     }
     private void matchmake(long now)throws SQLException{
-        if(queue.isEmpty())return;var settings=RaceStore.settings();int target=((Number)settings.get("targetPlayers")).intValue();long delay=((Number)settings.get("queueSeconds")).longValue()*1000;
+        if(queue.isEmpty())return;
+        var totals=RaceStore.rankTotals(queue.values().stream().filter(e->e.mode.equals("RANKED")).map(e->e.name).toList());
+        for(Entry e:queue.values())if(e.mode.equals("RANKED"))e.total=totals.getOrDefault(e.name,e.total);
+        var settings=RaceStore.settings();int target=((Number)settings.get("targetPlayers")).intValue();long delay=((Number)settings.get("queueSeconds")).longValue()*1000;
         for(Entry oldest:new ArrayList<>(queue.values())){
             if(!queue.containsKey(oldest.name)||oldest.client==null)continue;
             try{allowed(oldest.mode);}catch(IllegalArgumentException e){queue.remove(oldest.name);send(oldest.client,"race_state",Map.of("phase","IDLE","message",e.getMessage()));continue;}
             int tolerance=200+(int)Math.min(2000,(now-oldest.joined)/1000*15);
-            List<Entry> group=queue.values().stream().filter(e->e.client!=null&&e.mode.equals(oldest.mode)&&(!e.mode.equals("RANKED")||Math.abs(e.total-oldest.total)<=tolerance)).sorted(Comparator.comparingInt(e->Math.abs(e.total-oldest.total))).limit(target).toList();
+            List<Entry> group=queue.values().stream().filter(e->e.client!=null&&e.mode.equals(oldest.mode)&&(!e.mode.equals("RANKED")||RankedQuestionBank.tierForTotal(e.total).equals(RankedQuestionBank.tierForTotal(oldest.total))&&Math.abs(e.total-oldest.total)<=tolerance)).sorted(Comparator.comparingInt(e->Math.abs(e.total-oldest.total))).limit(target).toList();
             if(group.size()<target&&now-oldest.joined<delay)continue;
             Room room=null;
             try{
-                room=newRoom(oldest.mode,oldest.mode.equals("RANKED")?"Đường đua xếp hạng":"Đường đua đấu thường",null,((Number)settings.get("questionCount")).intValue(),((Number)settings.get("timeLimit")).intValue(),target-group.size());
+                room=newRoom(oldest.mode,oldest.mode.equals("RANKED")?"Đường đua xếp hạng":"Đường đua đấu thường",null,((Number)settings.get("questionCount")).intValue(),((Number)settings.get("timeLimit")).intValue(),target-group.size(),oldest.mode.equals("RANKED")?RankedQuestionBank.tierForTotal(oldest.total):"");
                 for(Entry e:group){if(AdminStore.isBlocked(e.name))throw new IllegalArgumentException("Có tài khoản vừa bị hạn chế.");add(room,e.client,e.shield,e.doubleRp);}
                 activate(room,now);for(Entry e:group)queue.remove(e.name);
             }catch(Exception ex){if(room!=null)cancel(room,"Không thể khởi tạo trận");for(Entry e:group){queue.remove(e.name);send(e.client,"race_state",Map.of("phase","IDLE","message",ex instanceof IllegalArgumentException?ex.getMessage():"Chưa tạo được trận, hãy ghép lại."));}}
@@ -149,9 +163,11 @@ public final class KnowledgeRaceGame implements AutoCloseable {
     }
     private void nextRound(Room room,long now)throws SQLException{
         int next=room.round+1;String token=UUID.randomUUID().toString();long deadline=now+room.seconds*1000L;
-        RaceStore.openRound(room.id,next+1,token,room.questions.get(next),now,deadline);
+        Question q=room.mode.equals("RANKED")?RaceStore.nextRankedQuestion(room.rankTier,room.questionCount,room.questions):room.questions.get(next);
+        RaceStore.openRound(room.id,next+1,token,q,now,deadline);
+        if(room.mode.equals("RANKED"))room.questions.add(q);
         room.round=next;room.phase="QUESTION";room.token=token;room.opened=now;room.deadline=deadline;room.answers.clear();
-        Question q=room.questions.get(next);double accuracy=switch(q.getDifficulty()){case "EASY"->.82;case "HARD"->.46;default->.65;};
+        double accuracy=switch(q.getDifficulty()){case "EASY"->.82;case "HARD"->.46;default->.65;};
         for(Player p:room.players.values())if(p.bot){p.botAt=now+Math.max(300,(long)(room.seconds*1000*(.22+random.nextDouble()*.65)));p.botAnswer=random.nextDouble()<accuracy?q.getCorrect():(q.getCorrect()+1+random.nextInt(3))%4;}
         broadcast(room);
     }
@@ -193,14 +209,16 @@ public final class KnowledgeRaceGame implements AutoCloseable {
                 if(room.phase.equals("QUESTION")){
                     for(Player p:room.players.values())if(p.bot&&!room.answers.containsKey(p.name)&&p.botAt<=now&&now<room.deadline)recordAnswer(room,p,p.botAnswer,now);
                     if(now>=room.deadline||allAnswered(room))resolve(room,now);
-                }else if(room.phase.equals("RESULT")&&now>=room.next){if(room.round+1>=room.questions.size())finish(room,now);else nextRound(room,now);}
+                }else if(room.phase.equals("RESULT")&&now>=room.next){if(room.round+1>=room.questionCount)finish(room,now);else nextRound(room,now);}
                 else if(terminal(room)&&now-room.finished>600000){rooms.remove(room.id);membership.entrySet().removeIf(e->e.getValue()==room);}
                 else if(room.phase.equals("WAITING"))for(Player p:new ArrayList<>(room.players.values()))if(p.client==null&&now-p.disconnected>30000)removeWaiting(room,p);
             }catch(SQLException e){System.err.println("Race state persistence failed; cancelling match "+room.id);cancel(room,"Lỗi lưu dữ liệu; trận không tính RP hoặc dùng thẻ");}
+            catch(IllegalArgumentException e){cancel(room,e.getMessage()+" Trận đã hủy; không tính RP hoặc dùng thẻ.");}
         }
     }
     private Map<String,Object> state(Room room,Player self){
-        Map<String,Object> state=new LinkedHashMap<>();state.put("phase",room.phase);state.put("mode",room.mode);state.put("matchId",room.id);state.put("roomCode",room.code);state.put("roomName",room.name);state.put("host",Objects.toString(room.host,""));state.put("me",self.name);state.put("round",room.round+1);state.put("questionCount",room.questions.size());state.put("seconds",room.seconds);state.put("botCount",room.botCount);state.put("serverTime",clock.getAsLong());state.put("deadline",room.deadline);state.put("reason",room.reason);
+        Map<String,Object> state=new LinkedHashMap<>();state.put("phase",room.phase);state.put("mode",room.mode);state.put("matchId",room.id);state.put("roomCode",room.code);state.put("roomName",room.name);state.put("host",Objects.toString(room.host,""));state.put("me",self.name);state.put("round",room.round+1);state.put("questionCount",room.questionCount);state.put("seconds",room.seconds);state.put("botCount",room.botCount);state.put("serverTime",clock.getAsLong());state.put("deadline",room.deadline);state.put("reason",room.reason);
+        state.put("rankTier",room.rankTier);state.put("rankTierName",room.rankTier.isEmpty()?"":RankedQuestionBank.name(room.rankTier));
         var resultList=placements(room);List<Map<String,Object>> players=new ArrayList<>();for(Player p:room.players.values()){
             var row=new LinkedHashMap<String,Object>();row.put("username",p.name);row.put("bot",p.bot);row.put("score",p.score);row.put("correct",p.correct);row.put("answered",room.answers.containsKey(p.name));row.put("online",p.bot||p.client!=null);row.put("forfeited",p.forfeited);row.put("placement",resultList.stream().filter(r->r.username().equals(p.name)).findFirst().orElseThrow().place());row.put("result",room.results.getOrDefault(p.name,Map.of()));players.add(row);
         }state.put("players",players);
@@ -220,10 +238,13 @@ public final class KnowledgeRaceGame implements AutoCloseable {
         Entry e=queue.get(client.getUsername());if(e!=null){if(e.client==client)queue.remove(e.name);send(client,"race_state",Map.of("phase","IDLE"));return;}
         Room room=current(client);Player p=room.players.get(client.getUsername());
         if(room.phase.equals("WAITING"))removeWaiting(room,p);else if(terminal(room))membership.remove(p.name,room);else{
-            RaceStore.forfeit(room.id,p.name);
-            p.forfeited=true;p.client=null;broadcast(room);departed(client,room);return;
+            forfeit(room,p);departed(client,room);return;
         }
         send(client,"race_state",Map.of("phase","IDLE","matchId",room.id,"message","Đã rời phòng."));
+    }
+    private void forfeit(Room room,Player player)throws SQLException{
+        RaceStore.forfeit(room.id,player.name);
+        player.forfeited=true;player.client=null;broadcast(room);
     }
     private void departed(WebSocketClient client,Room room){
         String message=room.mode.equals("RANKED")?"Bạn đã bỏ cuộc và bị tính thua trận xếp hạng này. Không thể vào lại trận. RP được chốt khi trận kết thúc.":"Bạn đã rời trận và không thể vào lại. Kết quả được ghi khi trận kết thúc.";
@@ -231,8 +252,9 @@ public final class KnowledgeRaceGame implements AutoCloseable {
     }
     private void cancel(Room room,String reason)throws SQLException{RaceStore.cancel(room.id,reason);room.phase="CANCELLED";room.reason=reason;room.finished=clock.getAsLong();broadcast(room);}
     private void kick(Room room,String target,String reason)throws SQLException{
-        Player p=room.players.get(target);if(p==null||p.bot||target.equals(room.host))throw new IllegalArgumentException("Chọn người chơi khác trong phòng.");room.kicked.add(target);notifyKicked(p.client,reason);
-        if(room.phase.equals("WAITING"))removeWaiting(room,p);else{p.forfeited=true;p.client=null;broadcast(room);}
+        Player p=room.players.get(target);if(p==null||p.bot||target.equals(room.host))throw new IllegalArgumentException("Chọn người chơi khác trong phòng.");WebSocketClient removed=p.client;
+        if(room.phase.equals("WAITING"))removeWaiting(room,p);else forfeit(room,p);
+        room.kicked.add(target);notifyKicked(removed,reason);
     }
     private void notifyKicked(WebSocketClient client,String reason){
         send(client,"race_kicked",Map.of("reason",reason,"message","Bạn đã bị kick khỏi phòng. Lý do: "+reason));
@@ -243,9 +265,9 @@ public final class KnowledgeRaceGame implements AutoCloseable {
     }
     public synchronized void moderate(String username,String reason){
         Entry e=queue.remove(username);if(e!=null)send(e.client,"race_state",Map.of("phase","IDLE","queueCancelled",true,"reason",reason,"message","Lượt tìm trận đã bị hủy. Lý do: "+reason));Room room=membership.get(username);if(room==null||terminal(room))return;Player p=room.players.get(username);
-        try{if(room.phase.equals("WAITING"))removeWaiting(room,p);else{p.forfeited=true;p.client=null;broadcast(room);}}catch(SQLException ex){System.err.println("Race moderation storage failed");}
+        try{if(room.phase.equals("WAITING"))removeWaiting(room,p);else forfeit(room,p);}catch(SQLException ex){System.err.println("Race moderation storage failed");}
     }
-    public synchronized List<Map<String,Object>> lobby(){return rooms.values().stream().filter(r->r.phase.equals("WAITING")&&Set.of("CASUAL","BOT").contains(r.mode)).map(r->Map.<String,Object>of("roomCode",r.code,"roomName",r.name,"players",r.players.size(),"bots",r.botCount,"host",Objects.toString(r.host,""),"questionCount",r.questions.size(),"seconds",r.seconds)).toList();}
+    public synchronized List<Map<String,Object>> lobby(){return rooms.values().stream().filter(r->r.phase.equals("WAITING")&&Set.of("CASUAL","BOT").contains(r.mode)).map(r->Map.<String,Object>of("roomCode",r.code,"roomName",r.name,"players",r.players.size(),"bots",r.botCount,"host",Objects.toString(r.host,""),"questionCount",r.questionCount,"seconds",r.seconds)).toList();}
     public synchronized Map<String,Object> adminView()throws SQLException{
         List<Map<String,Object>> list=new ArrayList<>();for(Room room:rooms.values())if(!terminal(room)){Player first=room.players.values().stream().findFirst().orElse(null);if(first!=null)list.add(state(room,first));}
         List<Map<String,Object>> waiting=new ArrayList<>();for(Entry e:queue.values())waiting.add(Map.of("username",e.name,"mode",e.mode,"joinedAt",e.joined,"rankTotal",e.total,"online",e.client!=null));
@@ -261,7 +283,7 @@ public final class KnowledgeRaceGame implements AutoCloseable {
             Room room=rooms.get(text(input,"matchId"));if(room==null||terminal(room))throw new IllegalArgumentException("Trận không còn hoạt động.");
             if(action.equals("cancel"))cancel(room,"Admin: "+reason);
             else if(action.equals("kick")){if(target.equals(room.host)){
-                Player p=room.players.get(target);notifyKicked(p.client,reason);if(room.phase.equals("WAITING"))removeWaiting(room,p);else{p.forfeited=true;p.client=null;broadcast(room);}
+                Player p=room.players.get(target);WebSocketClient removed=p.client;if(room.phase.equals("WAITING"))removeWaiting(room,p);else forfeit(room,p);notifyKicked(removed,reason);
             }else kick(room,target,reason);}
             else if(action.equals("notice"))for(Player p:room.players.values())send(p.client,"server_notice",Map.of("message",reason));
             else throw new IllegalArgumentException("Thao tác không hợp lệ.");
