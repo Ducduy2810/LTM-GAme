@@ -139,3 +139,9 @@ Hệ thống kiểm tra toàn bộ cấu hình, tự tạo bản sao lưu dữ l
 Ngân hàng câu hỏi có bộ lọc **Bậc rank** và trường **Bộ câu hỏi bậc rank** khi thêm/sửa. Chọn Đồng/Bạc/Vàng/Bạch Kim/Kim Cương để dành câu cho đấu rank; hệ thống đặt phạm vi Chỉ Đường đua và chủ đề Lập trình mạng. Để Chung cho ngân hàng theo phạm vi sử dụng thông thường. File CSV mẫu có cột `usage` và `rank_tier`. Mỗi bậc được cấp 15 câu khởi tạo; admin có thể bổ sung, sửa hoặc ẩn câu. Chi tiết cơ cấu độ khó và ghép trận theo bậc xem [hướng dẫn Đường đua](duong-dua-xep-hang.md).
 
 Đấu rank bốc câu theo từng lượt từ ngân hàng hiện tại, không chọn sẵn cả bộ lúc tạo trận. Câu đã gửi được giữ nguyên để chấm điểm/nối lại; các lượt chưa mở có thể lấy câu admin vừa thêm hoặc chỉnh sửa. Nếu ẩn quá nhiều câu làm thiếu số lượng/độ khó còn lại, trận rank được hủy không tính RP hoặc tiêu thẻ.
+
+### Giữ cấu hình đang nhập khi cập nhật trực tiếp
+
+Các biểu mẫu Cấu hình máy chủ/các game, Đường đua & Rank, trạng thái dịch vụ Đường đua, thử thách ngày và thông báo có bản nhập riêng. Khi sửa sẽ hiện **Có thay đổi chưa lưu** và nút **Bỏ thay đổi**. Dữ liệu phòng/hàng chờ/người chơi tiếp tục cập nhật mỗi 10 giây; các ô đang sửa được giữ nguyên, kể cả khi chuyển sang ô hoặc mục admin khác.
+
+Bấm nút lưu của từng biểu mẫu để áp dụng. Lưu lỗi giữ nguyên nội dung; nếu tiếp tục gõ trong lúc đang lưu, phần chỉnh sửa mới cũng được giữ và vẫn được đánh dấu chưa lưu. **Bỏ thay đổi** tải cấu hình mới nhất từ server cho đúng biểu mẫu đó; các bản nhập ở biểu mẫu khác được giữ. Phản hồi tải dữ liệu cũ hoặc phản hồi đến sau khi có chỉnh sửa mới không ghi đè bản nhập. Nút Bật/tắt bảo trì vẫn áp dụng ngay theo quy tắc riêng, đồng thời giữ các thay đổi mặc định game chưa lưu. Số câu đấu rank cho phép 10–15; giá trị ngoài giới hạn được báo khi lưu, không tự đổi về giá trị cũ.

@@ -9,3 +9,5 @@
 #backup-config-name,#backup-config-preview td{overflow-wrap:anywhere;white-space:normal}#backup-config-preview section{margin:20px 0}#backup-config-preview th:first-child{width:42%}
 
 #content-search{flex:1 1 650px;flex-wrap:wrap;gap:8px}#content-search input{flex:1 1 180px;max-width:none}#content-search select{flex:1 1 150px;min-width:0;max-width:100%}#content-search button{white-space:nowrap}
+
+.form-draft-note{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 0;padding:12px 15px;background:#fff4db;border:1px solid #e6d4a8;border-radius:8px;font-size:12px}.form-draft-note button{flex-shrink:0}@media(max-width:570px){.form-draft-note{align-items:flex-start;flex-direction:column}}

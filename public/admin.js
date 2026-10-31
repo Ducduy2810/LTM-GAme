@@ -12,6 +12,45 @@
   titles.race=['Đường đua & Rank','Điều hành ghép trận, phòng thi đấu, điểm RP và thẻ.'];
   titles.leaderboard=['Bảng xếp hạng toàn server','Tra cứu thứ hạng, rank và RP của toàn bộ người chơi đã có trận xếp hạng.'];
   const offsets={users:0,matches:0,logs:0,leaderboard:0};
+  const formSpecs={
+    'settings-form':{path:'/settings',render:data=>renderSettings(data)},
+    'race-settings-form':{path:'/race/settings',render:data=>renderRaceSettings(data)},
+    'race-service-form':{path:'/race/settings',render:data=>renderRaceService(data)},
+    'daily-settings-form':{path:'/race/settings',render:data=>renderDailyForm(data)},
+    'announcement-form':{path:'/announcement',render:data=>renderAnnouncement(data)}
+  };
+  const formDrafts=new Map(Object.keys(formSpecs).map(id=>[id,{revision:0,fields:new Set(),saving:false,discarding:false,error:''}]));
+  function draftVersions(){return new Map([...formDrafts].map(([id,draft])=>[id,draft.revision]));}
+  function updateDraftNote(id){
+    const draft=formDrafts.get(id);if(!draft)return;
+    $(id+'-draft').classList.toggle('hidden',!draft.fields.size&&!draft.saving&&!draft.discarding&&!draft.error);
+    $(id+'-draft-text').textContent=draft.error||(draft.discarding?'Đang tải cấu hình đã lưu…':draft.saving?'Đang lưu cấu hình…':'Có thay đổi chưa lưu. Nội dung đang nhập được giữ khi dữ liệu trực tiếp cập nhật.');
+    $(id+'-discard').disabled=draft.saving||draft.discarding;
+  }
+  function clearDraft(id,fields){
+    const draft=formDrafts.get(id);if(!draft)return;
+    if(fields)fields.forEach(field=>draft.fields.delete(field));else draft.fields.clear();
+    draft.revision++;draft.error='';updateDraftNote(id);
+  }
+  function canRenderForm(id,versions){
+    const draft=formDrafts.get(id);
+    return !draft.fields.size&&!draft.saving&&!draft.discarding&&!(id==='settings-form'&&maintenanceBusy)&&(!versions||versions.get(id)===draft.revision);
+  }
+  async function discardDraft(id){
+    const draft=formDrafts.get(id);if(draft.saving||draft.discarding)return;
+    const revision=draft.revision;draft.discarding=true;draft.error='';updateDraftNote(id);
+    try{
+      const data=await api(formSpecs[id].path);
+      if(draft.revision!==revision){draft.error='Bạn vừa chỉnh sửa thêm; nội dung mới vẫn được giữ. Bấm Bỏ thay đổi lần nữa nếu muốn tải cấu hình đã lưu.';return;}
+      draft.discarding=false;clearDraft(id);formSpecs[id].render(data);
+    }catch(error){draft.error='Chưa tải được cấu hình đã lưu: '+error.message;notify(draft.error,true);}
+    finally{draft.discarding=false;updateDraftNote(id);}
+  }
+  for(const id of Object.keys(formSpecs)){
+    const changed=event=>{const draft=formDrafts.get(id);draft.revision++;draft.error='';if(event.target?.id!=='maintenance')draft.fields.add(event.target?.id||id);updateDraftNote(id);};
+    $(id).addEventListener('input',changed);$(id).addEventListener('change',changed);
+    $(id+'-discard').addEventListener('click',()=>discardDraft(id));
+  }
   function notify(text,error=false){$('notice').textContent=text;$('notice').className='notice'+(error?' error-notice':'');}
   function loginScreen(){csrf='';username='';seq++;$('admin-app').classList.add('hidden');$('login-screen').classList.remove('hidden');document.querySelectorAll('dialog[open]').forEach(d=>d.close());}
   async function api(path,body){
@@ -47,7 +86,7 @@
   document.querySelectorAll('[data-close]').forEach(n=>n.addEventListener('click',()=>$(n.dataset.close).close()));
   $('refresh').addEventListener('click',()=>load());
   async function load(){
-    if(!username)return;const ticket=++seq,current=view;
+    if(!username)return;const ticket=++seq,current=view,versions=draftVersions();
     try{
       let data;
       switch(current){
@@ -60,11 +99,11 @@
         case 'topics':data=await api('/topics');if(ticket!==seq)return;topics=data.items;renderTopics(data.items);break;
         case 'matches':data=await api('/matches?'+new URLSearchParams({q:$('matches-query').value,game:$('matches-game').value,status:$('matches-status').value,offset:offsets.matches}));if(ticket!==seq)return;renderMatches(data.items);break;
         case 'logs':data=await api('/logs?'+new URLSearchParams({q:$('logs-query').value,offset:offsets.logs}));if(ticket!==seq)return;renderLogs(data.items);break;
-        case 'settings':{const result=await Promise.all([api('/settings'),api('/race/settings')]);if(ticket!==seq)return;renderSettings(result[0]);renderDailySettings(result[1]);break;}
+        case 'settings':{const result=await Promise.all([api('/settings'),api('/race/settings')]);if(ticket!==seq)return;renderSettings(result[0],versions);renderDailySettings(result[1],versions);break;}
         case 'leaderboard':data=await api('/leaderboard?'+new URLSearchParams({q:$('rank-board-query').value,status:$('rank-board-status').value,offset:offsets.leaderboard}));if(ticket!==seq)return;renderRankBoard(data);break;
-        case 'announcements':data=await api('/announcement');if(ticket!==seq)return;renderAnnouncement(data);break;
+        case 'announcements':data=await api('/announcement');if(ticket!==seq)return;renderAnnouncement(data,versions);break;
         case 'integrations':data=await api('/integrations');if(ticket!==seq)return;renderIntegrations(data);break;
-        case 'race':data=await api('/race');if(ticket!==seq)return;renderRace(data);break;
+        case 'race':data=await api('/race');if(ticket!==seq)return;renderRace(data,versions);break;
         case 'backups':data=await api('/backups');if(ticket!==seq)return;renderBackups(data.items);break;
       }
       $('sidebar-status').textContent='Đã kết nối';$('last-update').textContent='Cập nhật '+new Date().toLocaleTimeString('vi-VN');
@@ -132,11 +171,11 @@
   const settingFields={ARENA:[['questionCount','Số câu hỏi',1,100],['timeLimit','Giây lượt phụ',1,120],['mainPlayerTimeLimit','Giây lượt chính',1,120],['botCount','Số bot',0,100]],WHEEL:[['timeLimit','Giây mỗi lượt',5,120],['botCount','Bot tối đa',0,3]],SURVIVAL:[['startingHp','HP khởi đầu',1,1000],['totalRounds','Số vòng',5,25]]};
   let maintenanceSaved=false,maintenanceBusy=false;
   function maintenanceControls(){
-    const enabled=$('maintenance').checked,hours=$('maintenance-time-mode').value==='hours';
+    const enabled=$('maintenance').checked,hours=$('maintenance-time-mode').value==='hours',busy=maintenanceBusy||formDrafts.get('settings-form').saving;
     $('maintenance-hours-field').classList.toggle('hidden',!hours);$('maintenance-until-field').classList.toggle('hidden',hours);
-    $('maintenance-hours').disabled=maintenanceBusy||!hours;$('maintenance-hours').required=enabled&&hours;
-    $('maintenance-until').disabled=maintenanceBusy||hours;$('maintenance-until').required=enabled&&!hours;
-    $('maintenance').disabled=maintenanceBusy;$('maintenance-time-mode').disabled=maintenanceBusy;$('maintenance-message').disabled=maintenanceBusy;$('save-settings').disabled=maintenanceBusy;
+    $('maintenance-hours').disabled=busy||!hours;$('maintenance-hours').required=enabled&&hours;
+    $('maintenance-until').disabled=busy||hours;$('maintenance-until').required=enabled&&!hours;
+    $('maintenance').disabled=busy;$('maintenance-time-mode').disabled=busy;$('maintenance-message').disabled=busy;$('save-settings').disabled=busy;
   }
   function maintenanceInput(enabled){
     const value={maintenance:enabled};if(!enabled)return value;
@@ -148,11 +187,14 @@
     }
     return value;
   }
+  function renderMaintenanceStatus(data){
+    maintenanceSaved=Boolean(data.maintenance);$('maintenance').checked=maintenanceSaved;
+    $('maintenance-end-status').textContent=maintenanceSaved&&data.maintenanceUntil?'Đang bảo trì đến '+new Date(Number(data.maintenanceUntil)).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'})+' (giờ Việt Nam).':'Server đang mở cho người chơi. Chọn thời hạn và thông báo trước khi bật bảo trì.';
+  }
   function renderMaintenance(data){
-    maintenanceSaved=Boolean(data.maintenance);$('maintenance').checked=maintenanceSaved;$('maintenance-message').value=data.message;
+    renderMaintenanceStatus(data);$('maintenance-message').value=data.message;
     $('maintenance-time-mode').value=maintenanceSaved&&data.maintenanceUntil?'until':'hours';
     $('maintenance-until').value=data.maintenanceUntil?new Date(Number(data.maintenanceUntil)+7*3600000).toISOString().slice(0,16):'';
-    $('maintenance-end-status').textContent=maintenanceSaved&&data.maintenanceUntil?'Đang bảo trì đến '+new Date(Number(data.maintenanceUntil)).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'})+' (giờ Việt Nam).':'Server đang mở cho người chơi. Chọn thời hạn và thông báo trước khi bật bảo trì.';
     maintenanceControls();
   }
   $('maintenance').addEventListener('change',async()=>{
@@ -161,16 +203,21 @@
     try{
       const value=maintenanceInput(enabled);maintenanceBusy=true;maintenanceControls();
       status.textContent=enabled?'Đang bật bảo trì và đăng xuất người chơi…':'Đang kết thúc bảo trì…';
-      const data=await api('/maintenance',value);renderMaintenance(data.settings);
+      const data=await api('/maintenance',value);clearDraft('settings-form',['maintenance-time-mode','maintenance-hours','maintenance-until','maintenance-message']);renderMaintenance(data.settings);
       status.textContent=data.settings.maintenance?'Đã bật bảo trì: người chơi đã được đăng xuất và đăng nhập tạm đóng.':'Đã tắt bảo trì. Người chơi có thể đăng nhập lại.';notify(status.textContent);
     }catch(error){
       $('maintenance').checked=maintenanceSaved;
-      if(maintenanceBusy)try{renderMaintenance(await api('/settings'));}catch{}
+      if(maintenanceBusy)try{renderMaintenanceStatus(await api('/settings'));}catch{}
       status.textContent='Thao tác bảo trì chưa thành công: '+error.message;notify(status.textContent,true);
     }finally{maintenanceBusy=false;maintenanceControls();}
   });
   $('maintenance-time-mode').addEventListener('change',maintenanceControls);
-  function renderSettings(data){
+  function renderSettings(data,versions){
+    if(!canRenderForm('settings-form',versions)){
+      const draft=formDrafts.get('settings-form');
+      if(!maintenanceBusy&&!draft.saving&&!draft.discarding&&![...draft.fields].some(id=>id.startsWith('maintenance'))&&(!versions||versions.get('settings-form')===draft.revision))renderMaintenance(data);
+      return;
+    }
     renderMaintenance(data);$('maintenance-action-status').textContent='';$('game-settings').replaceChildren();
     Object.entries(gameNames).forEach(([game,name])=>{const panel=el('article',undefined,'panel');panel.append(el('h2',name));const toggle=el('label',undefined,'toggle-label'),check=el('input');check.type='checkbox';check.id='enabled-'+game;check.checked=data.enabled[game];toggle.append(check,el('span','Nhận trận mới'));panel.append(toggle);settingFields[game].forEach(([key,label,min,max])=>{const id='setting-'+game+'-'+key,l=el('label',label),input=el('input');l.htmlFor=id;input.id=id;input.type='number';input.min=min;input.max=max;input.step=1;input.required=true;input.value=data.defaults[game][key];panel.append(l,input);});$('game-settings').append(panel);});
   }
@@ -206,8 +253,8 @@
     catch(error){$('backup-config-error').textContent=error.message;}
     finally{b.disabled=false;}
   });
-  function renderAnnouncement(data){
-    $('announcement-text').value=data.text||'';
+  function renderAnnouncement(data,versions){
+    if(canRenderForm('announcement-form',versions)){$('announcement-text').value=data.text||'';$('announcement-minutes').value=data.expiresAt>0?Math.max(0,Math.ceil((data.expiresAt-Date.now())/60000)):0;}
     const active=data.enabled&&(!data.expiresAt||data.expiresAt>Date.now());
     $('announcement-status').textContent=active?'Đang phát · '+(data.expiresAt?'Kết thúc '+date(data.expiresAt):'Đến khi tắt'):'Hiện không có thông báo đang phát.';
   }
@@ -216,7 +263,18 @@
     $('google-diagnostics').replaceChildren(el('p','Client ID: '+(g.clientIdConfigured?'Đã cấu hình':'Chưa cấu hình')),el('p','Client secret: '+(g.clientSecretConfigured?'Đã cấu hình':'Chưa cấu hình')),el('h3','Authorized redirect URI'),el('pre',g.redirectUri||g.configurationError));
     $('smtp-diagnostics').replaceChildren(el('p','Email gửi: '+(s.senderConfigured?'Đã cấu hình':'Chưa hợp lệ')),el('p','Mật khẩu ứng dụng: '+(s.passwordConfigured?'Đã cấu hình':'Chưa cấu hình')),el('p',`${s.host}:${s.port} · ${s.security}`));
   }
-  async function formSubmit(event,fn,dialogId){event.preventDefault();const form=event.currentTarget,submit=form.querySelector('button:not([type=button])');const error=dialogId?$(dialogId).querySelector('.dialog-error'):null;if(submit)submit.disabled=true;if(error)error.textContent='';try{await fn();if(dialogId)$(dialogId).close();notify('Đã lưu thay đổi và ghi nhật ký.');await load();}catch(e){if(error)error.textContent=e.message;else notify(e.message,true);}finally{if(submit)submit.disabled=false;}}
+  async function formSubmit(event,fn,dialogId){
+    event.preventDefault();const form=event.currentTarget,submit=form.querySelector('button:not([type=button])'),error=dialogId?$(dialogId).querySelector('.dialog-error'):null,draft=formDrafts.get(form.id),revision=draft?.revision;
+    if(draft?.saving||draft?.discarding)return;
+    if(draft){draft.saving=true;draft.error='';updateDraftNote(form.id);if(form.id==='settings-form')maintenanceControls();}
+    if(submit)submit.disabled=true;if(error)error.textContent='';
+    try{
+      await fn();if(dialogId)$(dialogId).close();
+      if(draft){draft.saving=false;if(draft.revision===revision)clearDraft(form.id);else updateDraftNote(form.id);}
+      notify(draft?.fields.size?'Đã lưu cấu hình đã gửi. Bạn còn chỉnh sửa mới chưa lưu.':'Đã lưu thay đổi và ghi nhật ký.');await load();
+    }catch(e){if(error)error.textContent=e.message;else notify(e.message,true);}
+    finally{if(draft){draft.saving=false;updateDraftNote(form.id);}if(submit)submit.disabled=false;if(form.id==='settings-form')maintenanceControls();}
+  }
   $('login-form').addEventListener('submit',async event=>{event.preventDefault();$('login-button').disabled=true;$('login-error').textContent='';try{const session=await api('/login',{username:$('login-username').value.trim(),password:$('login-password').value});$('login-password').value='';signedIn(session);}catch(e){$('login-error').textContent=e.message;}finally{$('login-button').disabled=false;}});
   function signedIn(session){username=session.username;csrf=session.csrfToken;$('admin-name').textContent=username;$('login-screen').classList.add('hidden');$('admin-app').classList.remove('hidden');show(location.hash.slice(1)||'overview',false);}
   $('logout').addEventListener('click',async()=>{try{await api('/logout',{});loginScreen();}catch(e){notify(e.message,true);}});
@@ -265,8 +323,12 @@
   const dailySettings=['dailyTimeLimit','dailyCorrect','shieldReward','doubleReward'];
   const rankNames=['Đồng 3','Đồng 2','Đồng 1','Bạc 3','Bạc 2','Bạc 1','Vàng 3','Vàng 2','Vàng 1','Bạch Kim 3','Bạch Kim 2','Bạch Kim 1','Kim Cương 3','Kim Cương 2','Kim Cương 1'];
   function raceAction(action,matchId,targetUsername){actionDialog('Đường đua · '+({cancel:'Hủy trận',kick:'Kick người chơi',dequeue:'Xóa khỏi hàng chờ',notice:'Thông báo phòng'}[action]),targetUsername||matchId,reason=>api('/race/action',{action,matchId,targetUsername,reason}));}
-  function renderRace(data){
-    $('race-rankedEnabled').checked=data.settings.rankedEnabled;for(const key of raceSettings)$('race-'+key).value=data.settings[key];
+  function renderRaceSettings(settings,versions){
+    if(!canRenderForm('race-settings-form',versions))return;
+    $('race-rankedEnabled').checked=settings.rankedEnabled;for(const key of raceSettings)$('race-'+key).value=settings[key];
+  }
+  function renderRace(data,versions){
+    renderRaceSettings(data.settings,versions);
     table($('race-queue-table'),[['Người chơi',r=>r.username],['Chế độ',r=>r.mode],['Vào lúc',r=>date(r.joinedAt)],['Tổng RP',r=>r.rankTotal],['Thao tác',r=>button('Xóa khỏi hàng chờ',()=>raceAction('dequeue','',r.username),'danger')]],data.queue);
     table($('race-rooms-table'),[['Phòng',r=>textMeta(r.roomName,r.roomCode)],['Chế độ',r=>r.mode],['Trạng thái',r=>r.phase],['Câu',r=>r.round+'/'+r.questionCount],['Người chơi',r=>{const root=el('div');r.players.forEach(p=>root.append(group(el('span',p.username+(p.bot?' · BOT':'')),...(!p.bot&&!p.forfeited?[button('Kick',()=>raceAction('kick',r.matchId,p.username),'danger')]:[]))));return root;}],['Điều hành',r=>group(button('Thông báo',()=>raceAction('notice',r.matchId,'')),button('Hủy trận',()=>raceAction('cancel',r.matchId,''),'danger'))]],data.rooms);
     table($('race-players-table'),[['Người chơi',r=>r.username],['Rank hiện tại',r=>(rankNames[r.current_step||0])+' · '+(r.current_points||0)+' RP'],['Cao nhất',r=>(rankNames[r.highest_step||0])+' · '+(r.highest_points||0)+' RP'],['Trận / thắng',r=>(r.ranked_games||0)+' / '+(r.ranked_wins||0)],['Thẻ bảo vệ / x2',r=>r.shields+' / '+r.doubles],['Điều chỉnh',r=>button('Chỉnh sửa',()=>openRacePlayer(r),'secondary')]],data.players);
@@ -278,7 +340,9 @@
   $('race-open-player').addEventListener('click',()=>openRacePlayer());$('race-player-action').addEventListener('change',racePlayerFields);
   $('race-settings-form').addEventListener('submit',e=>formSubmit(e,()=>{const value={rankedEnabled:$('race-rankedEnabled').checked};for(const key of raceSettings)value[key]=Number($('race-'+key).value);return api('/race/rank-settings',value);}));
   $('race-player-form').addEventListener('submit',e=>formSubmit(e,()=>api('/race/action',{action:$('race-player-action').value,targetUsername:$('race-target').value.trim(),step:Number($('race-step').value),rp:Number($('race-rp').value),shields:Number($('race-shields').value),doubles:Number($('race-doubles').value),reason:$('race-player-reason').value.trim()}),'race-player-dialog'));
-  function renderDailySettings(data){$('race-service-enabled').checked=data.enabled;$('daily-enabled').checked=data.dailyEnabled;for(const key of dailySettings)$('daily-'+key).value=data[key];}
+  function renderRaceService(data,versions){if(canRenderForm('race-service-form',versions))$('race-service-enabled').checked=data.enabled;}
+  function renderDailyForm(data,versions){if(!canRenderForm('daily-settings-form',versions))return;$('daily-enabled').checked=data.dailyEnabled;for(const key of dailySettings)$('daily-'+key).value=data[key];}
+  function renderDailySettings(data,versions){renderRaceService(data,versions);renderDailyForm(data,versions);}
   $('race-service-form').addEventListener('submit',e=>formSubmit(e,()=>api('/race/service-settings',{enabled:$('race-service-enabled').checked})));
   $('daily-settings-form').addEventListener('submit',e=>formSubmit(e,()=>{const value={dailyEnabled:$('daily-enabled').checked};for(const key of dailySettings)value[key]=Number($('daily-'+key).value);return api('/daily/settings',value);}));
   $('daily-reset-form').addEventListener('submit',e=>formSubmit(e,async()=>{await api('/daily/reset',{targetUsername:$('daily-reset-username').value.trim(),reason:$('daily-reset-reason').value.trim()});$('daily-reset-form').reset();}));
@@ -289,7 +353,7 @@
   }
   $('rank-board-search').addEventListener('submit',e=>{e.preventDefault();offsets.leaderboard=0;load();});
   $('rank-board-prev').addEventListener('click',()=>{offsets.leaderboard=Math.max(0,offsets.leaderboard-50);load();});$('rank-board-next').addEventListener('click',()=>{offsets.leaderboard+=50;load();});
-  setInterval(()=>{if(username&&!document.hidden&&['overview','rooms','race','leaderboard'].includes(view)&&!document.querySelector('dialog[open]')&&(view!=='leaderboard'||document.activeElement!==$('rank-board-query')))load();},10000);
+  setInterval(()=>{if(username&&!document.hidden&&['overview','rooms','race','leaderboard','settings','announcements'].includes(view)&&!document.querySelector('dialog[open]')&&(view!=='leaderboard'||document.activeElement!==$('rank-board-query')))load();},10000);
   let lastTouch=0;document.addEventListener('pointerdown',()=>{if(username&&Date.now()-lastTouch>60000){lastTouch=Date.now();api('/session').catch(()=>{});}});
   api('/session').then(signedIn).catch(()=>loginScreen());
 })();
