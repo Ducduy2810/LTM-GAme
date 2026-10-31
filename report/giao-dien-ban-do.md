@@ -20,9 +20,15 @@ Mở http://localhost:3000/ và đăng nhập. Trang chủ dùng ảnh quần đ
 - **Điện thoại:** vuốt ngang để xem các đảo; sáu biểu tượng phía trên thanh cá nhân mở nhanh đúng chế độ. Cửa sổ có thể cuộn nội dung trên màn hình nhỏ.
 - **Thông báo:** dòng chữ chạy của admin nằm trên cùng; thông báo lý do khóa/ngắt phiên tiếp tục hiển thị khi đang mở cửa sổ chế độ.
 
+Trang chủ có chuyển động nổi nhẹ của toàn quần đảo, mây trôi phía trước và hiệu ứng chiều sâu nhẹ theo vị trí chuột. Rê chuột vào một trong sáu đảo hoặc bảng tên sẽ phóng to phần hình của đảo, đồng thời làm sáng bảng tên; rời chuột sẽ thu về. Vùng bấm và bảng tên đi cùng chuyển động bản đồ. Dùng Tab để chọn đảo cũng hiện hiệu ứng tương ứng.
+
+Nút **Dừng chuyển động** (biểu tượng 〰 trên điện thoại) tắt chuyển động nền; bấm lại để bật. Lựa chọn được lưu trên trình duyệt. Khi mở cửa sổ chế độ/thông báo, đăng xuất hoặc chuyển sang tab khác, chuyển động nền tự tạm dừng. Thiết lập giảm chuyển động của hệ điều hành được ưu tiên. Trên điện thoại vẫn vuốt ngang và chạm để mở chế độ, không cần rê chuột.
+
+Hiệu ứng dùng CSS/SVG trên ảnh nền hiện có, giữ nguyên các file ảnh gốc; không cần tải thêm video hoặc GIF cho trang chủ. Video nền đăng nhập của client/admin tiếp tục là phần riêng.
+
 Nút, bảng tên và cửa sổ dùng màu xanh trời, xanh đậm, kem và viền vàng. Không thay đổi dữ liệu, luật rank, phân quyền admin hoặc luồng chơi. Đường đua thường vẫn có tìm trận và phòng riêng; luyện bot và thử thách ngày có lối vào riêng. Ba game cũ tiếp tục không tính RP.
 
-Các file giao diện chính: `public/index.html`, `public/portal.js`, `public/world_portal.css`. CSS mới chỉ áp dụng cho trang cổng người chơi.
+Các file giao diện chính: `public/index.html`, `public/portal.js`, `public/world_portal.css`; hiệu ứng trang chủ nằm ở `public/world_motion.js` và `public/world_motion.css`.
 
 ## Kiểm tra
 

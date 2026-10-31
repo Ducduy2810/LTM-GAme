@@ -1,0 +1,21 @@
+/* Animate the existing artwork; the map, labels and hit regions share the same motion. */
+.world-drift,.world-parallax{position:relative;width:100%;height:100%}
+.world-drift{animation:world-float 11s ease-in-out infinite;transform-origin:50% 50%;will-change:transform}
+.world-parallax{transform:translate3d(var(--world-x,0px),var(--world-y,0px),0);transition:transform .7s cubic-bezier(.2,.7,.3,1)}
+@keyframes world-float{0%,100%{transform:translate3d(0,5px,0) scale(1.018)}50%{transform:translate3d(0,-5px,0) scale(1.018)}}
+.world-hotspots{isolation:isolate}.world-island-effects,.world-island-effects *{pointer-events:none!important}
+.island-zoom{opacity:0;transform:scale(1);transition:transform .4s cubic-bezier(.2,.8,.25,1),opacity .16s;transform-box:view-box}
+.island-zoom.is-hovered{opacity:1;transform:scale(1.065)}
+.map-zone{transform:scale(1);transition:transform .4s cubic-bezier(.2,.8,.25,1);transform-box:view-box}
+.map-zone.is-hovered{transform:scale(1.065)}
+.world-hotspots .map-zone:hover polygon,.world-hotspots .map-zone:focus-visible polygon,.world-hotspots .map-zone.is-hovered polygon{fill:transparent;stroke:transparent;filter:none}
+.game-portal .island-sign.is-hovered{transform:translate(-50%,calc(-50% - 7px)) scale(1.08);filter:brightness(1.16);outline:2px solid #fff7b0;outline-offset:3px;box-shadow:0 4px 0 #382713,0 9px 22px #12385088,0 0 22px #ffe99155;z-index:3}
+.world-atmosphere{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:4;contain:paint}
+.world-cloud{position:absolute;display:block;width:75vw;height:24vh;min-height:110px;border-radius:50%;background:radial-gradient(ellipse at 20% 65%,#fff9 0,transparent 55%),radial-gradient(ellipse at 50% 55%,#ffffffb3 0,transparent 55%),radial-gradient(ellipse at 80% 65%,#ffffffe0 0,transparent 50%);filter:blur(17px);opacity:.25;animation:world-cloud-sail 75s linear infinite;will-change:transform;pointer-events:none}
+.cloud-0{left:-55%;bottom:-9%;animation-delay:-22s}.cloud-1{left:-55%;top:-15%;opacity:.16;animation-duration:105s;animation-delay:-63s;transform:scale(.8)}.cloud-2{left:-55%;bottom:1%;opacity:.13;animation-duration:90s;animation-delay:-48s;width:95vw;height:15vh}
+@keyframes world-cloud-sail{from{transform:translate3d(-20vw,0,0)}to{transform:translate3d(190vw,-25px,0)}}
+.world-motion-idle .world-drift,.world-motion-idle .world-cloud{animation-play-state:paused}
+.world-motion-paused .world-drift{animation:none;transform:none;will-change:auto}.world-motion-paused .world-cloud{animation:none;opacity:0;will-change:auto}.world-motion-paused .world-parallax{transform:none}
+.game-dock #btn-world-motion{gap:6px}.game-dock #btn-world-motion>.motion-label{font-size:10px}.game-dock #btn-world-motion[aria-pressed=true]{color:#ffe291}.game-dock #btn-world-motion:disabled{opacity:.65;cursor:default}
+@media(max-width:600px){.world-drift{animation-duration:13s}.world-parallax{transform:none}.world-cloud{width:125vw;opacity:.2}.cloud-1{opacity:.12}.cloud-2{opacity:.09}.game-dock #btn-world-motion{flex:0 0 30px;padding:0 3px}.game-dock #btn-world-motion .motion-label{display:none}.game-dock #btn-world-motion>span:first-child{font-size:19px}}
+@media(prefers-reduced-motion:reduce){.world-drift{animation:none;transform:none;will-change:auto}.world-parallax{transform:none;transition:none}.world-cloud{animation:none;opacity:0;will-change:auto}.island-zoom.is-hovered,.map-zone.is-hovered{transform:scale(1)}.game-portal .island-sign.is-hovered{transform:translate(-50%,-50%)}.island-zoom,.map-zone{transition:none}}

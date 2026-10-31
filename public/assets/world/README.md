@@ -13,3 +13,5 @@ Các ảnh do chủ dự án cung cấp, được sao chép nguyên bản vào t
 | `bot.png` | Chơi với máy | `Machinery Island, Pebble Path Removed-2.png` |
 
 Nền sử dụng nguyên ảnh cuối, các vùng bấm SVG và bảng tên được đặt theo cùng hệ tọa độ 1376 × 768. Sáu ảnh đảo được dùng ở cửa sổ chức năng và thanh lối tắt trên điện thoại. File `daily.png` giữ nền trắng gốc; giao diện xử lý cách hòa màu bằng CSS, không chỉnh file ảnh.
+
+Hiệu ứng phóng to đảo dùng lớp SVG hiển thị lại đúng vùng hình trên `sky-world.png`, với mặt nạ làm mềm viền. Chuyển động nổi/mây trôi được dựng bằng CSS. Không chỉnh sửa bitmap gốc hoặc tạo bản sao ảnh lớn mới; các lớp ảnh dùng chung tài nguyên đã được trình duyệt tải.
