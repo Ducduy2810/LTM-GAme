@@ -1,0 +1,1763 @@
+
+
+=== TRANG 1 ===
+B Ộ   KHOA H Ọ C VÀ CÔNG NGH Ệ 
+ H Ọ C VI Ệ N CÔNG NGH Ệ   BƯU CHÍNH VI Ễ N THÔNG 
+ -----            ----- 
+ BÀI T Ậ P TI Ể U LU Ậ N   2 
+ PHƯƠNG PHÁP NGHIÊN C Ứ U VÀ 
+ VI Ế T BÁO CÁO KHOA H Ọ C 
+ Gi ả ng viên:   PGS.   TS.   Lê H ữ u L ậ p 
+ Nghiên c ứ u sinh:   Ngô Văn Quy ề n 
+ Chuyên ngành:   H ệ   th ố  ng thông tin 
+ Mã s ố  :   9.48.01.04 
+ Hà N ộ i, 2026 
+
+=== TRANG 2 ===
+Nhận   xét của   giảng   viên   chấm   bài : 
+ ....................................................................................................................... 
+ ....................................................................................................................... 
+ ....................................................................................................................... 
+ ....................................................................................................................... 
+ ....................................................................................................................... 
+ ....................................................................................................................... 
+ ....................................................................................................................... 
+ ....................................................................................................................... 
+ ....................................................................................................................... 
+ ....................................................................................................................... 
+ ....................................................................................................................... 
+ ....................................................................................................................... 
+ ....................................................................................................................... 
+ ....................................................................................................................... 
+ ....................................................................................................................... 
+ ....................................................................................................................... 
+ ....................................................................................................................... 
+ ....................................................................................................................... 
+ ....................................................................................................................... 
+ ....................................................................................................................... 
+ Điểm   số:   ...................................... 
+ Điểm   chữ:   ................................................................................................... 
+ Giảng   viên   (ký   và   ghi   rõ   họ   tên) :   ................................................................. 
+
+=== TRANG 3 ===
+i 
+ L Ờ I C ẢM ƠN 
+ [Viết lời cảm ơn ngắn gọn dựa trên sự hỗ trợ thực tế của giảng viên, đơn vị và người tham 
+gia. Không dùng tên người hướng dẫn hoặc thành viên của các bài mẫu.] 
+
+=== TRANG 4 ===
+ii 
+ M Ụ C L Ụ C 
+ CHƯƠNG I GIỚI THIỆU   ....................................................................................... 1 
+ 1.1 Bối cảnh và động lực   ........................................................................................ 1 
+ 1.2 Vấn đề nghiên cứu   ............................................................................................ 1 
+ 1.3 Mục tiêu và câu hỏi đánh giá   ............................................................................ 1 
+ 1.4 Phạm vi Scope   .................................................................................................. 2 
+ 1.5 Đóng góp và tổ chức báo cáo ............................................................................ 2 
+ CHƯƠNG II CƠ SỞ VÀ NGHIÊN CỨU LIÊN QUAN   ....................................... 3 
+ 2.1 Kiến thức nền   .................................................................................................... 3 
+ 2.2 Giải pháp liên quan   ........................................................................................... 3 
+ 2.3 Nhận xét và hướng tiếp cận   .............................................................................. 4 
+ CHƯƠNG III ĐỊNH NGHĨA BÀI TOÁN   ............................................................. 5 
+ 3.1 Mô hình hệ thống và giả định   ........................................................................... 5 
+ 3.2 Đầu vào và đầu ra   ............................................................................................. 5 
+ 3.3 Ràng buộc và bất biến   ....................................................................................... 6 
+ 3.4 Yêu cầu hệ thống   .............................................................................................. 7 
+ CHƯƠNG IV GIẢI PHÁP ĐỀ XUẤT   ................................................................... 9 
+ 4.1 Ý tưởng và quyết định thiết kế   ......................................................................... 9 
+ 4.2 Kiến trúc hệ thống ........................................................................................... 11 
+ 4.3 Thuật toán nhận đáp án   ................................................................................... 14 
+ 4.4 Thiết kế giao tiếp mạng   .................................................................................. 16 
+ CHƯƠNG V HIỆN THỰC HỆ THỐNG   ............................................................. 21 
+ 5.1 Module và lớp quan trọng   ............................................................................... 21 
+ 5.2 Cấu trúc dữ liệu   ............................................................................................... 22 
+ 5.3 Cơ chế đồng thời   ............................................................................................. 24 
+
+=== TRANG 5 ===
+iii 
+ 5.4 Lưu trữ và tính nhất quán (Persistence and Consistency)   .............................. 25 
+ 5.5 Thành phần mạng và dịch vụ ngoài   ................................................................ 27 
+ CHƯƠNG VI THIẾT LẬP VÀ KẾT QUẢ THỰC NGHIỆM   .......................... 29 
+ 6.1 Thiết lập thực nghiệm   ..................................................................................... 29 
+ 6.2 Biến đo và phương pháp   ................................................................................. 30 
+ 6.3 Ca kiểm thử và kịch bản   ................................................................................. 30 
+ 6.4 Kết quả hiệu năng ứng dụng   ........................................................................... 32 
+ 6.5 Kết quả kiểm thử tích hợp và giao diện   .......................................................... 33 
+ 6.6 Đối chứng polling và WebSocket push   .......................................................... 37 
+ 6.7 Tổng hợp bằng chứng theo câu hỏi đánh giá   .................................................. 39 
+ CHƯƠNG VII THẢO LUẬN VÀ ĐÓNG GÓP   .................................................. 39 
+ 7.1 Diễn giải kết quả theo câu hỏi đánh giá   .......................................................... 39 
+ 7.2 Tính mới và đóng góp   ..................................................................................... 40 
+ 7.3 Ưu điểm và đánh đổi   ....................................................................................... 41 
+ 7.4 Hạn chế   ........................................................................................................... 42 
+ 7.5 Hướng phát triển   ............................................................................................. 42 
+ CHƯƠNG VIII KẾT LUẬN   ................................................................................. 43 
+ TÀI LIỆU THAM KHẢO REFERENCES   .......................................................... 44 
+ PHỤ LỤC APPENDICES   ...................................................................................... 46 
+
+=== TRANG 6 ===
+iv 
+ DANH M Ụ C KÝ HI Ệ U VÀ CH Ữ   VI Ế T T Ắ T 
+ Ký hiệu   Diễn giải 
+ API   Application Programming Interface, giao diện lập trình ứng dụng 
+ CSRF   Cross Site Request Forgery, giả mạo yêu cầu liên trang 
+ HTTP   Hypertext Transfer Protocol 
+ JSON   JavaScript Object Notation 
+ P95   Phân vị 95 của thời gian phản hồi 
+ RP   Rank Points, điểm xếp hạng 
+ SSE   Server Sent Events, luồng sự kiện từ server 
+ TCP   Transmission Control Protocol 
+ TLS   Transport Layer Security 
+ WAL   Write Ahead Logging 
+ WS   WebSocket 
+
+=== TRANG 7 ===
+v 
+ DANH M Ụ C B Ả NG 
+ B ả   ng 1: So sánh các phương pháp và giải pháp liên quan   ................................... 4 
+ B ả   ng 2: Đặc tả đầu vào và đầu ra   ........................................................................... 6 
+ B ả   ng 3: Yêu cầu chức năng   ..................................................................................... 7 
+ B ả   ng 4: Yêu cầu phi chức năng   ............................................................................... 8 
+ B ả   ng 5: Các quyết định thiết kế chính   ................................................................... 9 
+ B ả   ng 6: Ánh xạ bất biến với thành phần và cơ chế bảo vệ   ................................. 12 
+ B ả   ng 7: Luồng xử lý và lưu dữ liệu chính   ............................................................ 13 
+ B ả   ng 8: Các thông điệp và sự kiện tiêu biểu   ........................................................ 17 
+ B ả   ng 9: Các thành phần chính của hệ thống   ....................................................... 21 
+ B ả   ng 10: Các cơ chế phối hợp truy cập đồng thời   .............................................. 24 
+ Bảng 6.1 Môi trường thực nghiệm ngày 01 tháng 11 năm 2026   ........................ 29 
+ Bảng 6.2 Ca kiểm thử bất biến và kết quả thực tế   .............................................. 30 
+ Bảng 6.3 Các nhóm kịch bản đánh giá   ................................................................. 32 
+ Bảng 6.4 Kết quả HTTP /auth/me qua ba lần chạy   ............................................ 32 
+ Bảng 6.5 Kết quả WebSocket get_rooms qua ba lần chạy   ................................. 32 
+ Bảng 6.6 Kết quả chạy lại các bộ kiểm thử trên mã hiện tại   .............................. 33 
+ Bảng 6.7 Các ca kiểm tra trình duyệt và kết quả   ................................................ 34 
+ Bảng 6.8 Độ trễ nhận sự kiện của đối chứng cùng trạng thái   ............................ 37 
+ Bảng 6.9 Đối chứng tại 32 máy khách qua ba lần chạy   ...................................... 38 
+ Bảng 6.10 Ánh xạ câu hỏi đánh giá với bằng chứng   ........................................... 39 
+ Bảng 7.1 Đóng góp và bằng chứng kiểm chứng   ................................................... 40 
+ Bảng A.1 Mẫu đặc tả trường của thông điệp race_answer   ................................ 46 
+ Bảng D.1 Các khóa cốt lõi phục vụ kiểm soát ghi lặp   ......................................... 47 
+ Bảng F.1 Biểu mẫu ghi nhận nội dung chỉnh sửa   ................................................ 48 
+
+=== TRANG 8 ===
+vi 
+
+=== TRANG 9 ===
+vii 
+ DANH M Ụ C HÌNH   V Ẽ 
+ H ì   nh 1: Kiến trúc tổng thể hệ thống Vũ Môn Tranh Hùng   ............................... 11 
+ H ì   nh 2: Các pha chính của Đường đua Kiến thức   .............................................. 15 
+ H ì   nh 3: Luồng ghi nhận một đáp án hợp lệ và chốt vòng khi đủ đáp án   .......... 19 
+ H ì   nh 4: Các cấu trúc chính và quan hệ tham chiếu trong Đường đua Kiến thức 24 
+ Hình 6.1 P95 và thông lượng trung bình của ba lần đo ứng dụng   ..................... 33 
+ Hình 6.2 Phản hồi ôn tập và bộ đếm sau một đáp án (UI03)   ............................. 35 
+ Hình 6.3 Kết quả sau mười câu daily (UI04)   ....................................................... 36 
+ Hình 6.4 Thông báo thay phiên ở trình duyệt cũ (UI07– UI08)   .......................... 37 
+ Hình 6.5 Độ trễ nhận sự kiện trong đối chứng polling 100 ms và push   ............ 38 
+
+=== TRANG 10 ===
+viii 
+ TÓM T Ắ T 
+ Vũ Môn Tranh Hùng là trò chơi học tập nhiều người trên trình duyệt, sử dụng   Java TCP 
+ Socket, HTTP, WebSocket, SSE và SQLite. Máy chủ quyết định trạng thái, thời hạn và 
+điểm số; kiểm tra phiên, mã trận, token câu hỏi và giao dịch để xử lý đáp án đồng thời, gửi 
+lặp hoặc thay phiên. 
+ Thực nghiệm ngày 01/11/2026 gồm 9.540 mẫu ứng dụng qua ba lần đo trên loopback, 
+không ghi nhận phản hồi lỗi; bảy bộ kiểm thử đạt 1.459 điều kiện, cùng 14 ca bất biến và 
+tám ca trình duyệt đạt yêu cầu. Tại 32 máy khách, P95 trung bình của HTTP /auth/me và 
+ W ebSocket get_rooms lần lượt là 69,95 ms và 36,43 ms. Hai thao tác khác nghiệp vụ nên 
+không dùng để so sánh trực tiếp giao thức. 
+ Đóng góp chính là phối hợp xử lý trạng thái tại máy chủ, chống ghi nhận và quyết toán RP 
+lặp, quản lý phiên gắn với kết nối và lưu bằng chứng kiểm chứng. Đối chứng polling– push 
+ chỉ đánh giá truyền trạng thái trong cấu hình đã đo; chưa xác định tải tối đa hoặc hiệu quả 
+học tập. 
+ Từ khóa Keywords 
+ Trò chơi học tập nhiều người chơi; lập trình mạng Java; WebSocket; đồng bộ trạng thái; 
+xử lý đồng thời; SQLite. 
+
+=== TRANG 11 ===
+1 
+ CHƯƠNG   I 
+ GIỚI THIỆU 
+ 1.1   Bối cảnh và động lực 
+ Hỏi đáp kết hợp thi đấu giúp người học ôn tập và tương tác trên thiết bị riêng. Khi triển 
+khai trực tuyến, độ trễ mạng làm các thiết bị nhận câu hỏi và gửi đáp án khác thời điểm. 
+Hệ thống vì vậy cần đồng bộ trạng thái, quản lý thời hạn và tính điểm nhất quán tại máy 
+chủ. 
+ Nhóm xây dựng   Vũ Môn Tranh Hùng   để vận dụng lập trình mạng vào trò chơi học tập 
+nhiều người. WebSocket truyền dữ liệu thời gian thực; máy chủ quản lý phòng, thời hạn, 
+điểm số và phiên, đồng thời xử lý các thao tác đồng thời. 
+ 1.2 Vấn đề nghiên cứu 
+ Máy chủ chỉ được nhận đáp án đúng câu hỏi, trong thời hạn và tính điểm một lần, kể cả 
+khi gửi lặp. Khi mất kết nối hoặc đăng nhập trên thiết bị khác, phiên cũ phải mất quyền 
+thao tác để tránh làm sai trạng thái và kết quả. 
+ Vấn đề đặt ra: tổ chức giao tiếp, xử lý đồng thời và quản lý phiên như thế nào để giữ trạng 
+thái trận đấu và kết quả nhất quán? 
+ 1.3 Mục tiêu và câu hỏi đánh giá 
+ Mục tiêu là xây dựng trò chơi học tập nhiều người trên trình duyệt, đồng bộ trạng thái theo 
+thời gian thực, kiểm soát thời hạn và ghi điểm nhất quán bằng xử lý phía máy chủ. 
+ Ba câu hỏi đánh giá gồm: 
+ RQ1:   Tổ chức kiến trúc và giao tiếp thế nào để cập nhật trạng thái trận theo thời gian thực? 
+ RQ2:   Xử lý đáp án đồng thời, gửi trùng, sai câu hoặc quá hạn thế nào để ghi điểm nhất 
+ quán? 
+ RQ3:   Quản lý phiên và kết nối thế nào khi mất mạng hoặc đăng nhập cùng tài khoản trên 
+thiết bị khác? 
+
+=== TRANG 12 ===
+2 
+ 1.4 Phạm vi Scope 
+ Hệ thống gồm tài khoản, phòng ôn luyện, Đường đua Kiến thức, ba trò chơi giải trí và trang 
+quản trị. Báo cáo tập trung vào giao tiếp mạng, phiên, xử lý đáp án và lưu kết quả; chọn 
+Đường đua làm điển hình vì có thời hạn và xét thứ tự ghi nhận đáp án đúng. 
+ Phạm vi triển khai là một máy chủ; chưa đánh giá hiệu quả học tập, phân phối nhiều máy 
+chủ hoặc số người chơi tối đa. 
+ 1.5 Đóng góp và tổ chức báo cáo 
+ Ba đóng góp chính nhằm giữ trạng thái và kết quả nhất quán: 
+ 1.   Máy chủ quyết định trạng thái trận đấu, thời hạn trả lời và điểm số. 
+ 2.   Ràng buộc lưu trữ ngăn ghi trùng đáp án và điểm xếp hạng (RP). 
+ 3.   Quản lý phiên gắn với vòng đời kết nối để từ chối thao tác từ phiên hết hiệu lực. 
+ Chương 2 trình bày cơ sở và giải pháp liên quan; Chương 3 định nghĩa bài toán; Chương 
+ 4 –5 mô tả thiết kế và hiện thực; Chương 6 đánh giá thực nghiệm; Chương 7 thảo luận; 
+Chương 8 kết luận. 
+
+=== TRANG 13 ===
+3 
+ CHƯƠNG   II 
+ CƠ SỞ VÀ NGHIÊN CỨU LIÊN QUAN 
+ 2.1 Kiến thức nền 
+ HTTP phù hợp đăng nhập và truy vấn theo yêu cầu–phản hồi (Fielding   et al., 2022). 
+ WebSocket giao tiếp hai chiều, có Ping/Pong kiểm tra kết nối   (Fette   & Melnikov, 2011). 
+ SSE đẩy sự kiện một chiều từ máy chủ tới trình duyệt (WHATWG,   2026). 
+ Máy chủ giữ trạng thái chính thức và kiểm tra thao tác trong mô hình server -authoritative 
+(Heroic   Labs, n.d.).   Phiên xác định quyền truy cập và phải bị vô hiệu hóa khi hết hiệu lực 
+ (OWASP   Foundation, n.d.).   Token câu hỏi chỉ nhận diện lượt, không thay thế xác thực 
+ phiên. 
+ Cached thread pool tái sử dụng luồng rảnh và tạo luồng khi cần (Oracle,   n.d.);   cập nhật 
+ trạng thái chung vẫn phải được đồng bộ. 
+ Idempotent nghĩa là yêu cầu lặp có cùng hiệu ứng dự kiến như thực hiện một lần   (Fielding 
+ et   al.,   2022).   Khóa   duy   nhất   ngăn   bản   ghi   trùng;   transaction   phối   hợp 
+ COMMIT/ROLLBACK;   WAL hỗ trợ đọc–ghi đồng thời nhưng chỉ một giao dịch ghi tại 
+mỗi thời điểm (SQLite,   2026a, 2026b, 2026c). 
+ 2.2 Giải pháp liên quan 
+ Kahoot tổ chức quiz trực tuyến trên thiết bị riêng, thường tính điểm theo độ chính xác và 
+thời gian trả lời (Kahoot!,   2026a,   2026b). 
+ Colyseus và Nakama hỗ trợ trò chơi nhiều người; Socket.IO cung cấp giao tiếp sự kiện. 
+Báo cáo đối chiếu các cơ chế phòng, trạng thái và truyền thông điệp của những giải pháp 
+ này. 
+ Phương pháp hoặc giải 
+ pháp 
+ Khả năng chính   Hạn chế và đánh đổi 
+ HTTP polling định kỳ   Truy vấn trạng thái theo 
+chu kỳ 
+ Chu kỳ dài   làm chậm cập nhật; 
+chu kỳ ngắn tăng số yêu cầu 
+
+=== TRANG 14 ===
+4 
+ SSE   Máy chủ đẩy sự kiện   Chỉ truyền một chiều từ máy chủ 
+đến máy khách 
+ WebSocket   Giao tiếp hai chiều   Không tự kiểm tra luật chơi hoặc 
+chống tính điểm trùng 
+ Kahoot   Tổ chức quiz trực tuyến, 
+chấm điểm 
+ Phiên   trực   tuyến   cần   kết   nối 
+Internet ổn định 
+ Colyseus (n.d.)   Đồng bộ trạng thái phòng 
+ theo schema 
+ Cần schema tương thích; cập nhật 
+theo chu kỳ phát 
+ Nakama (Heroic Labs, 
+n.d.) 
+ Kiểm tra đầu vào và thực 
+thi luật tại máy chủ 
+ Cần tự viết luật chơi; xử lý phải 
+phù hợp tần suất vòng lặp 
+ Socket.IO   ( Socket.IO, 
+ 2026a ,   2026b ) 
+ Truyền   sự   kiện   theo 
+ phòng 
+ Cần cơ chế bổ sung để bảo đảm 
+giao nhận khi gián đoạn 
+ B ả   ng 1 :   So sánh các phương pháp và giải pháp liên quan 
+ Hạn   chế trong bảng dựa trên tài liệu và phân tích cơ chế, chưa được nhóm đo đối chứng. 
+ 2.3   Nhận   xét   và hướng tiếp cận 
+ Các nền tảng đã hỗ trợ giao tiếp, phòng và đồng bộ. Bài toán của nhóm là phối hợp chúng 
+với luật trả lời, thời hạn, phiên và lưu điểm. 
+ Vũ Môn Tranh Hùng   kết hợp WebSocket, xử lý tại máy chủ và ràng buộc lưu trữ trong 
+Java; đóng góp ở cách tích hợp, không đề xuất giao thức mới hay khẳng định vượt trội hiệu 
+năng. 
+
+=== TRANG 15 ===
+5 
+ CHƯƠNG   III 
+ ĐỊNH NGHĨA BÀI TOÁN 
+ 3.1 Mô hình hệ thống và giả định 
+ Nhiều trình duyệt kết nối một tiến trình Java qua HTTP, WebSocket/TCP và SSE. Máy 
+chủ xác thực bằng cookie, giữ phiên, phòng và hàng   chờ trong bộ nhớ; SQLite lưu tài 
+khoản, câu hỏi, lịch sử và kết quả. 
+ Mô hình được xây dựng với các giả định sau: 
+ •   A1:   Hệ thống hoạt động trên một máy chủ, không phân phối trạng thái giữa nhiều 
+máy chủ. 
+ •   A2:   Trình duyệt hỗ trợ JavaScript, cookie, WebSocket và EventSource. 
+ •   A3:   Máy chủ có quyền đọc tệp tĩnh và đọc, ghi tệp cơ sở dữ liệu. 
+ •   A4:   Độ trễ có thể khác nhau giữa các máy khách; kết nối có thể gián đoạn và đáp 
+án có thể đến sau thời hạn. 
+ •   A5:   Không giả định đồng hồ thiết bị đồng bộ; máy chủ kiểm tra thời hạn bằng thời 
+gian khi xử lý đáp án. 
+ •   A6:   TCP bảo đảm thứ tự byte trên từng kết nối, nhưng không bảo đảm thứ tự công 
+bằng giữa các máy khách. 
+ •   A7:   Dữ liệu do máy khách gửi cần được kiểm tra. Danh tính, thời hạn và điểm số 
+do máy chủ xác định. 
+ Khi   dùng   reverse   proxy,   TLS   có   thể   kết   thúc   tại   proxy   trước   khi   chuyển   tiếp 
+HTTP/WebSocket vào máy chủ Java. 
+ 3.2 Đầu vào và đầu ra 
+ B ả ng mô t ả   ngu ồ n d ữ   li ệ u, kênh x ử   lý và k ế t qu ả   c ủ a các thao tác chính : 
+ Thành 
+ph ầ n 
+ Ngu ồ n   Kênh   Đầ u vào   Đầ u ra 
+
+=== TRANG 16 ===
+6 
+ Tài 
+kho ả n 
+ Máy 
+khách 
+ HTTP   Thông tin đăng nhậ p   Phiên   đăng   nhậ p 
+và   cookie,   ho ặ c 
+thông báo l ỗ i 
+ Phòng 
+và   ghép 
+tr ậ n 
+ Máy 
+khách 
+ WebSocket   Ch ế   độ   chơi,   cấ u   hình 
+ho ặ c mã phòng 
+ Thông tin phòng, 
+mã tr ậ n và tr ạ ng 
+thái ch ờ 
+ Tr ả   l ờ i 
+câu h ỏ i 
+ Máy 
+khách 
+ WebSocket   matchId, questionToken, 
+answer 
+ Tr ạ ng   thái   ghi 
+nh ận đáp án hoặ c 
+thông báo t ừ   ch ố i 
+ K ế t thúc 
+tr ậ n 
+ N ộ i   b ộ 
+ máy ch ủ 
+ X ử   lý   n ộ i   b ộ ; 
+WebSocket   g ử i 
+k ế t qu ả 
+ Điể m s ố , tr ạ ng thái   b ỏ 
+ cu ộ c, ch ế   độ   và lu ật chơi 
+đượ c ghi l ạ i khi b ắt đầ u 
+tr ậ n 
+ K ế t qu ả , l ị ch s ử   và 
+ thay đổ i RP trong 
+ch ế   độ   RANKED 
+ Phiên và 
+k ế t n ố i 
+ Máy 
+khách và 
+máy ch ủ 
+ HTTP, 
+WebSocket, 
+SSE 
+ Cookie   phiên,   yêu   c ầ u 
+ đăng nhậ p m ớ i và s ự   ki ệ n 
+k ế t n ố i 
+ C ậ p nh ậ t hi ệ u l ự c 
+phiên,   tr ạ ng   thái 
+k ế t n ố i và x ử   lý r ờ i 
+tr ậ n 
+ B ả   ng 2 : Đặc tả đầu vào và đầu ra 
+ Máy ch ủ   l ấ y danh tính t ừ   phiên và th ờ i gian t ại bướ c ki ể m tra. Yêu c ầ u b ị   t ừ   ch ố i n ế u sai 
+phiên, quy ề n, mã tr ậ n, token, pha, th ờ i h ạ n, giá tr ị   đáp án hoặc đã trả   l ờ i; nhi ề u nguyên 
+nhân có th ể   dùng chung thông báo l ỗ i. RANKED là ch ế   độ   x ế p h ạ ng. 
+ 3.3 Ràng buộc   và bất biến 
+ Mỗi vòng Đường đua tương ứng một câu hỏi, với các bất biến: 
+ •   I1:   Mỗi người chơi có tối đa một đáp án được ghi nhận cho mỗi vòng của một trận. 
+ •   I2:   Đáp án chỉ được chấp nhận khi đúng mã trận, đúng token câu hỏi, trận đang ở 
+pha nhận đáp án (QUESTION) và chưa hết thời hạn. 
+ •   I3:   Với chế độ xếp hạng, mỗi cặp trận và tài khoản có tối đa một bản ghi điều chỉnh 
+RP cuối trận. 
+
+=== TRANG 17 ===
+7 
+ •   I4:   Phiên bị đăng xuất, thay thế hoặc thu hồi không được thực hiện tiếp thao tác yêu 
+cầu xác thực. 
+ •   I5:   Trận bị gián đoạn khi máy chủ khởi động lại không được tự động ghi nhận chiến 
+thắng hoặc trao RP. 
+ Đối với thao tác trả lời, đặt: 
+ •   S : trạng thái nghiệp vụ của trận, gồm pha, câu hỏi hiện tại, đáp án đã ghi nhận và 
+điểm số. 
+ •   m : thông điệp gồm matchId, questionToken và answer. 
+ •   t : thời điểm kiểm tra tại máy chủ. 
+ •   S′ : trạng thái sau khi xử lý thông điệp. 
+ Quy tắc chuyển trạng thái được diễn giải như sau: 
+ •   Nếu yêu cầu hợp lệ,   S′   được xác định bằng phép update(S, m, t). 
+ •   Nếu yêu cầu không hợp lệ, máy chủ từ chối và yêu cầu đó không làm thay đổi trạng 
+thái trận hoặc điểm số. 
+ update ghi đáp án và trạng thái liên quan; điểm chỉ cập nhật khi chốt vòng. Yêu cầu hợp lệ 
+phải đủ quyền, phiên còn hiệu lực (I4), thỏa I2, đáp án trong miền và chưa trả lời (I1). 
+ Mô hình trên diễn giải xử lý đáp án; cơ chế bảo vệ các bất biến được trình bày ở Chương 
+ 4. 
+ 3.4 Yêu cầu hệ thống 
+ Yêu   cầu chức năng và phi chức năng được liên hệ với bất biến và câu hỏi đánh giá. 
+ B ả   ng 3 : Yêu cầu chức năng 
+ Mã   Yêu cầu   Liên hệ 
+ FR1   Xác thực người dùng, tạo phiên   và từ chối thao tác từ phiên đã bị 
+vô hiệu hóa 
+ I4, RQ3 
+ FR2   Cho phép tạo, tham gia, rời phòng và ghép trận theo chế độ chơi   Phạm vi chức 
+năng 
+
+=== TRANG 18 ===
+8 
+ FR3   Truyền trạng thái phòng và trận đấu đến các máy khách liên quan 
+qua kết nối thời gian thực 
+ RQ1 
+ FR4   Kiểm tra câu hỏi, token, thời hạn, giá trị đáp án và việc đã trả lời 
+trước khi ghi nhận 
+ I1, I2, RQ2 
+ FR5   Lưu lịch sử, kết quả và điều chỉnh RP cho chế độ xếp hạng, tránh 
+ghi nhận trùng 
+ I3, RQ2 
+ FR6   Cho phép quản trị viên quản lý nội dung và cấu hình   trò chơi   Phạm vi chức 
+năng 
+ FR7   Đánh dấu trận chưa hoàn thành là gián đoạn khi máy chủ khởi 
+động lại, không tự trao chiến thắng hoặc RP 
+ I5 
+ B ả   ng 4 : Yêu cầu phi chức năng 
+ Mã   Yêu cầu   Liên 
+ hệ 
+ NFR1   Duy trì tính nhất quán của trạng thái và điểm số khi có thao tác đồng 
+thời hoặc gửi lặp 
+ I1 – I3, 
+RQ2 
+ NFR2   Hỗ trợ xác định nhóm nguyên nhân từ chối qua thông báo lỗi và tra 
+cứu kết quả theo mã trận 
+ RQ2, 
+RQ3 
+ NFR3   Cookie phiên có thuộc tính HttpOnly để ngăn JavaScript đọc trực tiếp, 
+sử dụng SameSite=Lax và được bổ sung Secure khi hệ thống cấu hình 
+ HTTPS. 
+ I4, 
+RQ3 
+ Các yêu cầu là cơ sở đối chiếu thiết kế và hiện thực; chưa có ngưỡng nghiệm thu về độ trễ, 
+thông lượng hoặc tải tối đa. 
+
+=== TRANG 19 ===
+9 
+ CHƯƠNG   IV 
+ GIẢI PHÁP ĐỀ XUẤT 
+ 4.1 Ý tưởng và quyết định thiết kế 
+ Máy chủ quyết định trạng thái và kết quả. Mỗi thao tác được kiểm tra phiên, quyền và luật 
+chơi trước khi ghi nhận, rồi phát cập nhật tới các máy khách liên quan. 
+ HTTP xử lý tài khoản, truy vấn và tệp tĩnh; WebSocket truyền lệnh/trạng thái trận; SSE 
+gửi thông báo. Trạng thái hoạt động nằm trong bộ nhớ, dữ liệu bền vững và RP nằm trong 
+ SQLite. 
+ B ả   ng 5 : Các quyết định thiết kế chính 
+ Quyết định   Lý do   Phương án thay 
+thế 
+ Đánh đổi   Liên 
+ hệ 
+ Máy chủ quyết định 
+trạng thái và điểm số 
+ Kiểm   soát   luật 
+chơi, thời hạn và 
+điều   kiện   chấp 
+nhận đáp án 
+ Máy   khách   tính 
+ trạng   thái   hoặc 
+điểm rồi gửi máy 
+chủ đối chiếu 
+ Máy   chủ   chịu 
+trách nhiệm xử 
+lý; độ trễ mạng 
+vẫn ảnh hưởng 
+thứ tự ghi nhận 
+ I1,   I2; 
+RQ1, 
+RQ2 
+ Phân   chia   HTTP, 
+WebSocket và SSE 
+ theo chức năng 
+ Chọn cơ chế phù 
+hợp với truy vấn, 
+tương   tác   hai 
+chiều   và   thông 
+báo một chiều 
+ Dùng polling định 
+kỳ hoặc tập trung 
+trao   đổi   qua 
+ WebSocket 
+ Cần quản lý và 
+phối hợp nhiều 
+kênh kết nối 
+ RQ1 
+ Giữ trạng thái trận 
+trong bộ nhớ, lưu kết 
+quả trong SQLite 
+ Tách   dữ   liệu 
+phục   vụ   trận 
+đang   diễn   ra 
+khỏi dữ liệu cần 
+lưu lâu dài 
+ Lưu toàn bộ trạng 
+thái trận vào cơ sở 
+dữ liệu 
+ Trạng thái trong 
+bộ   nhớ   không 
+được giữ lại khi 
+tiến trình dừng 
+ I3, I5 
+
+=== TRANG 20 ===
+10 
+ Dùng   synchronized 
+cho   các   thao   tác 
+ chuyển   trạng   thái 
+ dùng chung 
+ Tránh   nhiều 
+luồng đồng thời 
+sửa   trạng   thái 
+trận 
+ Hàng đợi sự kiện 
+hoặc   khóa   riêng 
+ theo phòng 
+ Các thao tác có 
+ thể   phải   chờ 
+ nhau 
+ I1,   I2; 
+RQ2 
+ Ghi   đáp   án   vào 
+SQLite trước khi cập 
+nhật bộ nhớ 
+ Không ghi nhận 
+đáp án trong bộ 
+nhớ khi thao tác 
+lưu dữ liệu thất 
+bại 
+ Cập nhật bộ nhớ 
+trước   rồi   lưu   dữ 
+liệu sau 
+ Ghi   cơ   sở   dữ 
+liệu và cập nhật 
+bộ nhớ vẫn   là 
+hai bước riêng 
+biệt 
+ I1,   I3; 
+RQ2 
+ Tính điểm khi chốt 
+ vòng 
+ Tổng hợp đáp án 
+hợp lệ và thứ tự 
+ghi   nhận   trước 
+khi   xác   định 
+điểm 
+ Tính   điểm   ngay 
+khi   từng   đáp   án 
+được ghi nhận 
+ Người   chơi 
+nhận   kết   quả 
+điểm   ở   bước 
+chốt vòng 
+ I1,   I2; 
+RQ2 
+ Phối   hợp   hiệu   lực 
+phiên với vòng đời 
+kết nối 
+ Từ chối thao tác 
+từ   phiên   bị   vô 
+hiệu hóa, kể cả 
+khi   kết   nối   cũ 
+còn tồn tại 
+ Chỉ kiểm tra phiên 
+khi mở kết nối 
+ Cần   phối   hợp 
+xử lý phiên, kết 
+nối và trạng thái 
+người chơi 
+ I4; 
+RQ3 
+ Đánh dấu trận chưa 
+ hoàn thành là gián 
+ đoạn khi khởi động 
+lại 
+ Không   tự   ghi 
+nhận chiến thắng 
+hoặc điều chỉnh 
+RP cho trận chưa 
+hoàn tất 
+ Lưu đủ trạng thái 
+để phục hồi trận và 
+tiếp tục chơi 
+ Trận đang diễn 
+ra không   được 
+phục hồi để chơi 
+tiếp 
+ I5 
+ Các phương án thay thế chỉ giải thích lựa chọn thiết kế, chưa được triển khai hoặc đo đối 
+chứng để xác định hiệu năng tối ưu. 
+ Thời hạn được xét khi máy chủ kiểm tra. Đáp án hợp lệ được lưu trước; điểm chỉ được tính 
+khi chốt vòng. 
+
+=== TRANG 21 ===
+11 
+ 4.2 Kiến trúc hệ thống 
+ Kiến trúc máy khách–máy chủ gồm một tiến trình Java, phân chia logic thành mạng, phiên, 
+trò chơi và truy cập dữ liệu; các thành phần không chạy độc lập trên nhiều máy chủ. 
+ H ì   nh 1 : Kiến trúc tổng thể hệ thống Vũ Môn Tranh Hùng 
+ 4.2.1 Các thành ph ầ n chính 
+ T ầ ng m ạ ng g ồ m   HttpAndWebSocketServer nh ậ n TCP, x ử   lý HTTP và nâng c ấ p /ws; 
+WebSocketClient ghi frame, h ỗ   tr ợ   Ping/Pong; ClientEvents cung c ấ p SSE t ạ i /api/events 
+cho thông báo h ệ   th ố ng và phiên. 
+ SessionManager, AdminSessions và AdminController qu ả n lý tài kho ản, phiên ngườ i 
+ chơi/quả n tr ị   riêng và các API qu ả n tr ị   n ộ i dung, phòng, c ấ u hình. 
+
+=== TRANG 22 ===
+12 
+ ArenaGame, WheelGame, SurvivalGame và KnowledgeRaceGame qu ả n lý   phòng, ngườ i 
+ chơi, lượ t và chuy ể n tr ạ ng thái. Scheduler x ử   lý h ế t h ạ n, chuy ển vòng và hành độ ng bot. 
+ UserRepository, AdminStore, RaceStore và MatchService truy c ậ p SQLite. Google OAuth 
+và SMTP là d ị ch v ụ   tùy ch ọn cho đăng nhậ p và email. 
+ 4.2.2 Tr ạ ng thái và mô hình lu ồ ng 
+ B ộ   nh ớ   gi ữ   phiên, k ế t n ố i, phòng và hàng ch ờ ; SQLite gi ữ   tài kho ả n, n ộ i dung, tr ậ n, vòng, 
+ đáp án và RP. Dữ   li ệu đã lưu chưa đủ   để   ph ụ c h ồ i tr ận đang chơi sau khi tiế n trình d ừ ng. 
+ Cached thread pool c ấ p tác v ụ   cho t ừ ng k ế t n ố i TCP; WebSocket và SSE gi ữ   tác v ụ   trong 
+su ố t th ờ i gian k ế t n ố i. 
+ Đường đua dùng scheduler đơn luồ ng g ọ i tick m ỗi 250 ms; handle và tick đồ ng b ộ   trên 
+ cùng đối tượ ng. Heartbeat và thông báo có scheduler riêng. 
+ 4.2.3 Thành ph ầ n b ả o v ệ   các b ấ t bi ế n 
+ B ả   ng 6 : Ánh xạ bất biến với thành phần và cơ chế bảo vệ 
+ B ấ t 
+bi ế n 
+ Thành ph ầ n ch ị u trách nhi ệ m   Cơ chế 
+ I1   KnowledgeRaceGame, RaceStore   Ki ểm tra đáp án đã ghi nhậ n; khóa chính 
+theo tr ận, vòng và người chơi ngăn bả n ghi 
+trùng 
+ I2   KnowledgeRaceGame   Ki ể m tra mã tr ậ n, token, pha, giá tr ị   đáp án 
+ và th ờ i h ạ n t ại bướ c x ử   lý 
+ I3   RaceStore   Giao d ịch điề u ch ỉ nh RP, ki ể m tra tr ạ ng thái 
+k ế t thúc và khóa duy nh ấ t theo tr ậ n, tài 
+kho ả n 
+
+=== TRANG 23 ===
+13 
+ I4   SessionManager, 
+HttpAndWebSocketServer 
+ Ki ểm tra phiên trước khi đị nh tuy ế n thao 
+tác; vô hi ệu hóa phiên cũ khi bị   thay th ế 
+ ho ặ c thu h ồ i 
+ I5   Main, MatchService, RaceStore   Khi kh ởi động, đánh dấ u các tr ận chưa hoàn 
+thành là gián đoạ n; không t ự   trao chi ế n 
+th ắ ng ho ặ c RP 
+ B ả ng th ể   hi ệ n trách nhi ệ m theo mã ngu ồ n; k ế t qu ả   ki ể m th ử   đượ c trình bày   ở   Chương 6. 
+ 4.2.4 Lu ồ ng d ữ   li ệ u 
+ B ả   ng 7 : Luồng xử lý và lưu dữ liệu chính 
+ D ữ   li ệ u   Ngu ồn và đườ ng x ử   lý   Nơi lưu hoặc đích nhậ n 
+ Phiên 
+ đăng nhậ p 
+ Yêu c ầu đăng nhập → xác thực → 
+ SessionManager 
+ Phiên trong b ộ   nh ớ; cookie đượ c 
+g ử i v ề   trình duy ệ t 
+ Đáp án   Máy khách → WebSocket → kiể m tra 
+ phiên   →   KnowledgeRaceGame   → 
+ RaceStore 
+ Ghi vào race_answers trướ c khi c ậ p 
+nh ậ t b ộ   nh ớ 
+ Tr ạ ng thái 
+vòng 
+ KnowledgeRaceGame và b ộ   l ậ p l ị ch 
+ → chuyể n tr ạng thái → tạo thông điệ p 
+ Tr ạ ng thái ho ạt độ ng trong b ộ   nh ớ ; 
+ thông   tin   vòng   được   lưu   trong 
+ SQLite; c ậ p nh ậ t g ửi đến ngườ i 
+ chơi 
+ K ế t   qu ả 
+ và RP 
+ Ch ố t vòng, k ế t thúc tr ận → RaceStore 
+→ giao dịch lưu kế t qu ả 
+ SQLite; k ế t qu ả   g ử i v ề   máy khách 
+ N ộ i dung 
+và   c ấ u 
+hình 
+ Trình duy ệ t qu ả n tr ị   → HTTP → 
+AdminController → Store 
+ SQLite; cung c ấ p d ữ   li ệ u cho các 
+thành ph ần trò chơi 
+
+=== TRANG 24 ===
+14 
+ Thông 
+báo 
+ Thay đổ i thông báo, b ả o trì ho ặ c phiên 
+ → ClientEvents 
+ Truy ền đế n trình duy ệ t qua SSE 
+ Máy ch ủ   ki ểm tra, lưu đáp án rồ i c ậ p nh ậ t b ộ   nh ớ ; ch ố t vòng m ới tính điể m. Trình t ự   trao 
+ đổi thông điệp đượ c mô t ả   t ạ i m ụ c 4.4. 
+ 4.3 Thuật toán nhận đáp án 
+ 4.3.1 Tiếp nhận đáp án 
+ KnowledgeRaceGame đồng bộ handle và tick trên cùng đối tượng để tuần tự hóa lệnh và 
+chuyển pha. Mọi phòng Đường đua dùng chung khóa này. 
+ Đầu vào:   kết nối máy khách, thông điệp race_answer gồm matchId, questionToken, 
+answer; thời điểm máy chủ kiểm tra đáp án là   t . 
+ Các bước xử lý: 
+ 1.   Tầng định tuyến kiểm tra phiên và quyền thao tác. Nếu phiên không còn hiệu lực, 
+thông điệp không được chuyển tới thành phần xử lý trận. 
+ 2.   Xác định phòng và người chơi tương ứng với kết nối. 
+ 3.   Kiểm tra pha QUESTION, điều kiện   t < deadline , mã trận và token câu hỏi hiện tại. 
+ 4.   Kiểm tra chỉ số đáp án thuộc khoảng 0–3 và người chơi chưa có đáp án trong vòng. 
+ 5.   Nếu điều kiện không thỏa mãn, từ chối thao tác; không ghi thêm đáp án hoặc điểm 
+số từ yêu cầu đó. 
+ 6.   Ghi đáp án vào bảng race_answers. Chỉ khi ghi thành công mới bổ sung đáp án vào 
+room.answers và phát trạng thái. 
+ 7.   Nếu tất cả người chơi chưa bỏ cuộc đã trả lời, thực hiện chốt vòng. Nếu chưa đủ, 
+tiếp tục chờ đáp án hoặc thời hạn. 
+ Đầu ra:   trạng thái đã cập nhật hoặc phản hồi từ chối thao tác. 
+ Sai pha, thời hạn, mã trận hoặc token dùng chung race_error; đáp án ngoài miền và gửi 
+trùng có thông báo riêng. Chưa có mã lỗi riêng cho mọi nguyên nhân. 
+
+=== TRANG 25 ===
+15 
+ Khóa chính (match_id, round_no, username) của race_answers cùng kiểm tra bộ nhớ bảo 
+vệ I1. Ghi thất bại thì máy chủ báo lỗi, không thêm đáp án vào bộ nhớ. 
+ Điều kiện   t < deadline   loại cả đáp án đúng tại hạn. handle và tick được tuần tự hóa; lấy 
+khóa trước vẫn bị từ chối nếu lúc kiểm tra đã hết hạn. 
+ Đáp án đúng đầu tiên được xét theo thứ tự máy chủ ghi nhận, chưa bù độ trễ mạng. Giữ 
+khóa khi truy cập database có thể làm phòng khác chờ; ảnh hưởng này chưa được đo riêng. 
+ 4.3.2 Chốt vòng và ghi kết quả cuối trận 
+ Chốt vòng khi mọi người chưa bỏ cuộc đã trả lời hoặc hết hạn. Quy tắc điểm: 
+ •   RANKED, CASUAL, BOT: đáp án đúng đầu tiên của người chưa bỏ cuộc được 3 
+điểm; các đáp án đúng sau được 2 điểm. 
+ •   Với DAILY: mỗi đáp án đúng nhận 2 điểm. 
+ •   Đáp án sai, người bỏ cuộc hoặc không có đáp án không được cộng điểm. 
+ Giao dịch lưu điểm và đóng vòng phải thành công trước khi cập nhật điểm trong bộ nhớ 
+và chuyển sang RESULT. Ghi đáp án và cộng điểm là hai bước riêng. 
+ Lỗi chốt vòng chỉ hoàn tác giao dịch đó; đáp án đã lưu thành công trước đó vẫn có thể tồn 
+tại. Lỗi được xử lý theo đường chạy tương ứng. 
+ H ì   nh 2 : Các pha chính của Đường đua Kiến thức 
+ Sau pha RESULT, máy chủ mở câu tiếp theo hoặc kết thúc trận. Khi kết thúc, 
+RaceStore.finish thực hiện trong một giao dịch: 
+
+=== TRANG 26 ===
+16 
+ 1.   Chuyển trạng thái lưu trữ từ ACTIVE sang COMPLETED bằng cập nhật có điều 
+kiện. 
+ 2.   Lưu điểm, thứ hạng và kết quả của người chơi. 
+ 3.   Với RANKED, điều chỉnh RP và ghi rank_ledger. 
+ 4.   Hoàn tất giao dịch; sau đó cập nhật trạng thái trong bộ nhớ và phát kết quả. 
+ Nếu đã quyết toán, phương thức đọc kết quả cũ thay vì cộng lại RP. Khóa chính rank_ledger 
+(match_id, user_id) bổ sung bảo vệ I3. 
+ 4.3.3 Phối hợp phiên và kết nối 
+ Khi tài khoản đăng nhập tại thiết bị khác, máy chủ thực hiện việc thay phiên dưới khóa 
+phối hợp truy cập: 
+ 1.   Thông báo tới các kết nối cũ. 
+ 2.   Xử lý việc ngắt kết nối của người chơi trong các chế độ đang tham gia và đóng 
+WebSocket cũ. 
+ 3.   Thay phiên đăng nhập bằng phiên mới. 
+ Mỗi thông điệp WebSocket tiếp tục được kiểm tra phiên. Phiên bị thay thế, đăng xuất hoặc 
+thu hồi mất quyền thao tác, bảo vệ I4. 
+ 4.3.4 Xử lý trận gián đoạn khi khởi động lại 
+ Khi khởi động lại, phiên, phòng và hàng chờ không được phục hồi để chơi tiếp. Các trận 
+ACTIVE/WAITING chuyển sang INTERRUPTED và giải phóng thông tin tham gia. 
+ Các trận này không tự được chuyển thành chiến thắng hoặc tự trao RP, phù hợp với I5. 
+ 4.4 Thiết kế giao tiếp mạng 
+ 4.4.1 Kết nối và giao thức 
+ Máy khách dùng HTTP cho tài khoản, tài nguyên và truy vấn; WebSocket cho trận; SSE 
+ cho thông báo ngoài phòng. 
+ Sau đăng nhập, cookie session_id được gửi khi nâng cấp /ws. Máy chủ bắt tay bằng Sec - 
+WebSocket- Accept; thông điệp là JSON UTF -8 trong text frame (Fette & Melnikov, 2011). 
+
+=== TRANG 27 ===
+17 
+ Máy chủ trả HTTP 101 trước khi xác thực ở tầng ứng dụng. Phiên sai nhận auth_error rồi 
+bị đóng kết nối; thông điệp tiếp theo vẫn được kiểm tra phiên. 
+ SSE /api/events dùng EventSource và text/event- stream, có vòng đời riêng với WebSocket 
+trò chơi   (WHATWG, 2026). 
+ B ả   ng 8 : Các thông điệp và sự kiện tiêu biểu 
+ Thông   điệp/sự 
+kiện 
+ Kênh và chiều   Dữ liệu hoặc ý nghĩa chính 
+ get_rooms   WebSocket,   máy 
+ khách → máy chủ 
+ Yêu cầu danh sách phòng; nhận   room_list 
+ race_queue   WebSocket,   máy 
+ khách → máy chủ 
+ mode, useShield, useDouble; đăng ký ghép 
+trận 
+ race_resume   WebSocket,   máy 
+ khách → máy chủ 
+ mode; yêu cầu gắn lại kết nối với trạng thái 
+còn được máy chủ giữ 
+ race_answer   WebSocket,   máy 
+ khách → máy chủ 
+ matchId, questionToken, answer 
+ race_state   WebSocket,   máy   chủ 
+→ máy khách 
+ Trạng thái phòng, vòng, người chơi và kết 
+quả 
+ race_error   WebSocket,   máy   chủ 
+→ máy khách 
+ message; thông báo thao tác không hợp lệ 
+hoặc lỗi lưu dữ liệu 
+ race_kicked   WebSocket,   máy   chủ 
+→ máy khách 
+ reason, message; thông báo bị đưa khỏi 
+ phòng 
+ auth_error   WebSocket,   máy   chủ 
+→ máy khách 
+ Lỗi xác thực hoặc thông báo phiên bị thay 
+thế/thu hồi, sau đó đóng kết nối 
+ account_notice   SSE, máy chủ → máy 
+ khách 
+ Thông báo liên quan tài khoản, gồm trường 
+hợp phiên bị thay thế 
+ Trong RANKED, useShield đưa RP âm về 0; useDouble nhân đôi RP dương khi kết thúc 
+trận. 
+
+=== TRANG 28 ===
+18 
+ Trong phòng chơi, race_state chứa các trường như phase, mode, matchId, round, 
+serverTime, deadline và players. Nội   dung bổ sung phụ thuộc pha: 
+ •   QUESTION: câu hỏi, các lựa chọn, token và đáp án của chính người chơi nếu đã 
+trả lời. 
+ •   RESULT: thêm solution, gồm đáp án đúng và lời giải. 
+ •   COMPLETED: kết quả cuối trận trong players[].result, gồm thay đổi RP khi áp 
+dụng. 
+ •   CANCELLED: lý do hủy trận qua reason. 
+ Kết quả cuối nằm trong race_state/COMPLETED, không có race_result riêng. IDLE, 
+QUEUED, OTHER_MODE phục vụ giao diện/hàng chờ; INTERRUPTED là trạng thái 
+lưu trữ. 
+ Ví dụ định dạng yêu cầu trả lời: 
+ { 
+ "type": "race_answer", 
+ "matchId": "<id-tran>", 
+ "questionToken": "<token-cau>", 
+ "answer": 1 
+ } 
+ answer = 1 là lựa chọn B; các chuỗi <...> phải thay bằng mã trận và token nhận từ máy 
+chủ. 
+ Ping, Pong và Close là các control frame của WebSocket, được xử lý riêng với thông điệp 
+JSON của ứng dụng. 
+
+=== TRANG 29 ===
+19 
+ 4.4.2 Luồng   giao   tiếp 
+ H ì   nh 3 : Luồng ghi nhận một đáp án hợp lệ và chốt vòng khi đủ đáp án 
+ Luồng giao tiếp gồm các trường hợp chính: 
+ Đáp án hợp lệ.   Router kiểm tra phiên; KnowledgeRaceGame kiểm tra lượt, ghi qua 
+RaceStore rồi cập nhật bộ nhớ và phát race_state. Khi đủ đáp án, máy chủ chốt vòng và 
+ phát RESULT. 
+ Đáp án bị từ chối.   Sai điều kiện hoặc gửi trùng nhận race_error, không ghi thêm đáp án 
+hay điểm. Sai phiên bị chặn tại router và có thể đóng kết nối. Scheduler hoặc người chơi 
+khác vẫn có thể làm trạng thái thay đổi độc lập. 
+ Đăng nhập thay phiên.   Máy chủ nhận HTTP, thông báo WebSocket/SSE tới thiết bị cũ, 
+xử lý ngắt kết nối và cấp cookie mới. Phiên cũ mất quyền thao tác. 
+ Kết   thúc   trận.   Máy   chủ   lưu   kết   quả   và   RP   trong   giao   dịch   rồi   phát 
+race_state/COMPLETED. Ghi đáp án, chốt vòng và kết thúc trận là ba thao tác lưu trữ 
+ riêng. 
+
+=== TRANG 30 ===
+20 
+ 4.4.3 Xử lý lỗi và mất kết nối 
+ Xử lý lỗi.   HTTP dùng 400 cho yêu cầu sai, 401 chưa xác thực, 403 thiếu quyền, 404 không 
+tìm thấy và 429 vượt giới hạn. 
+ WebSocket trả race_error cho lỗi nghiệp vụ, auth_error và đóng kết nối khi lỗi xác thực. 
+JSON sai chủ yếu được ghi log; frame quá 1 MiB hoặc control frame quá 125 byte làm kết 
+thúc kết nối. 
+ Ghi đáp án thất bại thì không cập nhật bộ nhớ. Lỗi chốt vòng về sau không làm mất hiệu 
+lực đáp án đã lưu trước đó. 
+ Phát hiện mất kết nối.   Heartbeat kiểm tra mỗi giây, gửi Ping sau khoảng 10 giây từ 
+heartbeat hợp lệ và chờ Pong tối đa 20 giây. Pong phải khớp payload; JSON thường không 
+thay thế Pong. 
+ Quá hạn Pong, máy chủ đóng socket và xử lý ngắt kết nối. Đây là tham số cấu hình, chưa 
+phải độ trễ phát hiện đo được hoặc giới hạn tối đa. 
+ WebSocketClient dùng chung writeLock cho text frame và control frame để tránh các 
+luồng ghi xen byte trên cùng kết nối. 
+ Kết nối lại.   Khi đóng kết nối ngoài thao tác rời trang, máy khách thử lại sau khoảng 1,5 
+giây và gửi race_resume. Khả năng tiếp tục tùy trạng thái còn giữ: 
+ •   Trong hàng chờ, mục mất kết nối được giữ khoảng 10 giây; trong phòng chờ, người 
+chơi được giữ khoảng 30 giây trước khi bị loại. 
+ •   Trận RANKED/DAILY cho gắn lại kết nối nếu còn quyền tham gia; thời gian trận 
+vẫn chạy khi mất mạng. 
+ •   Với trận CASUAL hoặc BOT đang chạy, mất kết nối được xử lý như bỏ cuộc; người 
+chơi không được bảo đảm tiếp tục trận. 
+ •   Chủ động rời trận hoặc khởi động lại máy chủ không được xử lý như việc tạm mất 
+kết nối để tiếp tục chơi. 
+
+=== TRANG 31 ===
+21 
+ CHƯƠNG   V 
+ HIỆN THỰC HỆ THỐNG 
+ 5.1 Module và lớp quan trọng 
+ Mã nguồn chia thành máy chủ, nghiệp vụ, thành phần chung và giao diện. Bảng   9   liệt kê 
+các thành phần chính. 
+ B ả   ng 9 : Các thành phần chính của hệ thống 
+ Module   Lớp hoặc tài nguyên   Vai trò   Liên hệ 
+ source/server   Main, 
+HttpAndWebSocketServer 
+ Khởi tạo hệ thống, nhận 
+kết nối TCP, xử lý HTTP 
+và định tuyến WebSocket 
+ I4, I5 
+ source/server   WebSocketClient   Đọc trạng thái kết nối, ghi 
+frame, phối hợp gửi dữ 
+liệu và quản lý heartbeat 
+ Giao tiếp 
+mạng 
+ source/server   ClientEvents   Duy trì kết nối SSE, phát 
+thông báo hệ thống và tài 
+khoản 
+ I4 
+ source/server   SessionManager, 
+AdminSessions 
+ Quản lý riêng phiên người 
+chơi và phiên quản trị 
+ I4 
+ source/server   AdminController   Xử lý chức năng quản trị, 
+quyền   truy   cập   và   điều 
+phối thao tác quản trị 
+ Quản trị 
+ source/server   GoogleOAuthService   Thực   hiện   luồng   đăng 
+nhập Google và lấy thông 
+ tin tài   khoản 
+ Xác thực 
+
+=== TRANG 32 ===
+22 
+ source/service   KnowledgeRaceGame   Quản lý hàng chờ, phòng, 
+đáp án, điểm và chuyển 
+pha Đường đua Kiến thức 
+ I1, I2 
+ source/service   ArenaGame,   WheelGame, 
+SurvivalGame 
+ Hiện thực ba trò chơi giải 
+ trí 
+ Phạm   vi 
+chức 
+năng 
+ source/service   DatabaseManager, 
+UserRepository 
+ Khởi tạo SQLite, cấu trúc 
+dữ liệu tài khoản và thao 
+tác truy cập tài khoản 
+ Lưu   trữ, 
+xác thực 
+ source/service   RaceStore, AdminStore   Lưu dữ liệu Đường đua, 
+quản   trị   nội   dung,   giao 
+dịch và sao lưu 
+ I1, I3, I5 
+ source/common   MatchService   Lưu lịch sử và kết quả của 
+ba trò chơi giải trí 
+ I5 
+ source/common   RankRules,   Question, 
+JsonUtil, Env 
+ Luật xếp hạng, mô hình 
+câu hỏi, xử lý JSON và 
+đọc cấu hình 
+ Xử   lý 
+nghiệp 
+vụ 
+ source/common   SmtpTransport, 
+PasswordResetMailer 
+ Gửi thư phục vụ xác minh 
+và khôi phục tài khoản 
+ Dịch   vụ 
+ ngoài 
+ source/client   HTML, CSS, JavaScript và 
+tài nguyên 
+ Hiển thị giao diện; giao 
+tiếp   bằng   Fetch, 
+ WebSocket   và 
+EventSource 
+ Máy 
+khách 
+ Đây là các thư mục mã nguồn trong một tiến trình. RankRules tập trung tính RP, đồng hạng 
+và chuyển bậc theo kết quả máy chủ. 
+ 5.2 Cấu trúc dữ liệu 
+ 5.2.1 Trạng thái Đường đua Kiến thức 
+ KnowledgeRaceGame sử dụng các cấu trúc chính sau: 
+
+=== TRANG 33 ===
+23 
+ •   LinkedHashMap:   giữ thứ tự phòng, hàng chờ, người chơi và đáp án; hàng chờ theo 
+thứ tự chèn, đáp án có thêm trường order. 
+ •   HashMap:   ánh xạ tên người chơi tới phòng qua membership, giúp tìm phòng khi 
+xử lý thao tác. 
+ •   HashSet:   lưu danh sách người bị đưa khỏi phòng trong Room.kicked, phục vụ kiểm 
+tra khi yêu cầu vào lại. 
+ •   List<Question>:   giữ các câu hỏi được sử dụng trong trận. 
+ Room giữ cấu hình, người chơi, đáp án, thời điểm mở, hạn và kết quả; phase gồm 
+ WAITING, QUESTION, RESULT, COMPLETED, CANCELLED. 
+ Player giữ kết nối, điểm, số câu đúng và bỏ cuộc. Entry giữ chế độ, thời điểm ghép trận, 
+rank và kết nối. 
+ Answer là một record gồm: 
+ •   index: chỉ số đáp án được chọn. 
+ •   elapsed: số mili giây từ lúc mở vòng tới thời điểm máy chủ kiểm tra đáp án, được 
+tính bằng max(0, now − opened). 
+ •   order: thứ tự ghi nhận, được xác định từ số đáp án   đã có trong vòng cộng một. 
+ Như vậy, elapsed và order được máy chủ xác định, không lấy từ đồng hồ hoặc thời điểm 
+bấm của máy khách. 
+
+=== TRANG 34 ===
+24 
+ H ì   nh 4 : Các cấu trúc chính và quan hệ tham chiếu trong Đường đua Kiến thức 
+ LinkedHashMap, HashMap và HashSet cần đồng bộ truy cập trạng thái chung theo mục 
+ 5.3. 
+ 5.2.2 Dữ liệu phiên 
+ SessionManager dùng ConcurrentHashMap lưu phiên–người dùng và CSRF. Thay phiên 
+cần duyệt theo tên người dùng để xóa phiên cũ; chưa có ánh xạ ngược riêng. 
+ Thông báo kết thúc   phiên được giữ tạm để thiết bị cũ biết nguyên nhân; thời hạn này không 
+phải hạn tự động của phiên người chơi. 
+ AdminSessions quản lý riêng phiên quản trị: hạn không hoạt động 30 phút, hạn tuyệt đối 
+8 giờ; không áp dụng cho phiên người chơi. 
+ 5.3 Cơ chế đồng thời 
+ HttpAndWebSocketServer   nhận   kết   nối   bằng   ServerSocket   rồi   giao   cho 
+Executors.newCachedThreadPool(), tái sử dụng hoặc tạo luồng khi cần (Oracle, n.d.). 
+ WebSocket và SSE giữ luồng trong suốt kết nối. Tài nguyên vì vậy tăng theo số kết nối dài 
+hạn; chưa đo được giới hạn phục vụ. 
+ B ả   ng 10 : Các cơ chế phối hợp truy cập đồng thời 
+ Cơ chế   Phạm vi bảo vệ   Vai trò 
+
+=== TRANG 35 ===
+25 
+ ConcurrentHashMap và tập 
+hợp đồng thời 
+ Danh sách kết nối, ánh xạ kết 
+nối–phiên và dữ liệu phiên 
+ Hỗ trợ truy   cập cấu 
+trúc   dùng   chung   từ 
+nhiều luồng 
+ playerAccessLock   Đăng nhập thay phiên, đăng ký 
+kết   nối   WebSocket   và   định 
+tuyến lệnh đã xác thực 
+ Phối hợp quyền thao 
+tác với vòng đời kết 
+nối, hỗ trợ I4 
+ synchronized   của 
+ KnowledgeRaceGame 
+ Các thao tác quản lý trạng thái 
+Đường đua, gồm handle, tick và 
+xử lý ngắt kết nối 
+ Tuần tự hóa thay đổi 
+trạng thái, hỗ trợ I1 và 
+ I2 
+ writeLock   của 
+ WebSocketClient 
+ Ghi text frame và control frame 
+ trên một kết nối 
+ Tránh   các   luồng   ghi 
+ xen byte 
+ heartbeatLock   Ping đang chờ, thời điểm gửi và 
+Pong nhận được 
+ Phối   hợp   kiểm   tra 
+ heartbeat 
+ Đồng   bộ   trên   từng 
+ Subscriber 
+ Ghi sự kiện và keepalive SSE   Tránh   ghi   chồng   dữ 
+liệu   trên   cùng   luồng 
+ SSE 
+ Scheduler đơn luồng gọi tick theo chu kỳ 250 ms; thời điểm thực thi thực tế phụ thuộc lập 
+lịch. 
+ Luồng lệnh lấy playerAccessLock trước khóa chung KnowledgeRaceGame. Database và 
+phát trạng thái có thể diễn ra khi giữ khóa, làm thao tác khác chờ nếu lưu/gửi chậm. 
+ Các khóa mô tả cách phối hợp hiện tại; chưa chứng minh không khóa chết hoặc bảo đảm 
+mức tải cụ thể. 
+ 5.4 Lưu trữ và tính nhất quán (Persistence and Consistency) 
+ 5.4.1 Kết nối và ràng buộc dữ liệu 
+ Hệ thống lưu dữ liệu trong SQLite tại data/game.db. DatabaseManager khởi tạo cơ sở dữ 
+liệu và bật journal_mode=WAL, foreign_keys=ON cùng busy_timeout=5000. 
+ DatabaseManager quản lý một kết nối; AdminStore.connect() và MatchService mở kết nối 
+riêng. Hệ thống chưa có connection pool chuyên biệt. 
+
+=== TRANG 36 ===
+26 
+ WAL hỗ trợ đọc–ghi đồng thời nhưng SQLite chỉ có một giao dịch ghi tại mỗi thời điểm; 
+nhiều kết nối không cho phép ghi song song tùy ý   (SQLite, 2026b, 2026c). 
+ Hai ràng buộc chính của Đường đua gồm: 
+ •   race_answers:   khóa chính (match_id, round_no, username) ngăn lưu nhiều đáp án 
+cho cùng người chơi trong một vòng, bảo vệ I1. 
+ •   rank_ledger:   khóa chính (match_id, user_id) ngăn tạo nhiều bản ghi điều chỉnh RP 
+cho cùng tài khoản trong một trận, bảo vệ I3. 
+ race_answers định danh bằng username, rank_ledger bằng user_id; race_players liên kết 
+cả hai với trận. 
+ Gửi trùng thường bị chặn trong bộ nhớ. Nếu chèn vi phạm khóa hoặc lỗi SQL, máy chủ 
+báo lỗi và không thêm vào room.answers. 
+ 5.4.2 Phạm vi giao dịch 
+ Các thao tác lưu trữ được chia theo từng bước xử lý: 
+ 1.   Ghi đáp án:   chèn một bản ghi vào race_answers; sau khi thành công mới bổ sung 
+đáp án vào bộ nhớ. 
+ 2.   Chốt vòng:   cập nhật điểm đáp án và đóng vòng trong một giao dịch, sau đó mới 
+cập nhật điểm bộ nhớ. 
+ 3.   Kết thúc trận:   cùng giao dịch cập nhật trạng thái, kết quả, RP/ledger, thẻ và giải 
+ phóng thông tin tham gia. 
+ Giao dịch commit khi hoàn tất, rollback khi lỗi. Kết thúc trận chỉ cập nhật trạng thái 
+ACTIVE; nếu đã xử lý thì đọc kết quả cũ, không trao RP lại. 
+ MatchService lưu ba trò giải trí; RaceStore lưu Đường đua và RP. Giao dịch chỉ bao trùm 
+từng bước, không bao trùm cả trận. 
+ 5.4.3 Khởi động lại và sao lưu 
+ Khi   khởi   động,   RaceStore.recoverInterrupted()   đổi   WAITING/ACTIVE   thành 
+INTERRUPTED, xóa thông tin tham gia và không tự trao RP (I5). MatchService cũng 
+đánh dấu các trận giải trí gián đoạn. 
+
+=== TRANG 37 ===
+27 
+ Phòng, hàng chờ, phiên   và kết nối trong bộ nhớ không được tái tạo để tiếp tục trận cũ. 
+ Sao lưu dùng VACUUM INTO tạo ảnh chụp database nhất quán, tránh sao chép riêng tệp 
+chính khi WAL còn dữ liệu (SQLite, 2025). 
+ 5.5 Thành phần mạng và dịch vụ ngoài 
+ 5.5.1 Nhận TCP và xử lý HTTP 
+ Main đặt cổng 3000; HttpAndWebSocketServer nhận TCP tại 0.0.0.0:3000, đọc dòng yêu 
+cầu/header và định tuyến tới API, tệp tĩnh hoặc nâng cấp WebSocket. 
+ Cookie phiên có tên   session_id, được cấu hình HttpOnly, SameSite=Lax và bổ sung Secure 
+khi cấu hình địa chỉ HTTPS tương ứng. 
+ 5.5.2 Đọc và ghi WebSocket frame 
+ Máy chủ tính Sec -WebSocket- Accept bằng SHA - 1 và Base64 từ khóa do máy khách gửi 
+cùng hằng số của giao thức, rồi trả phản hồi HTTP 101. 
+ Bộ đọc lấy opcode, payload, masking key và giải mask bằng XOR. Độ dài hỗ trợ dạng trực 
+tiếp, 16/64 bit; giới hạn frame 1 MiB, control frame 125 byte. 
+ Text frame UTF- 8 chuyển tới router JSON; Ping/Pong/Close xử lý riêng. Chưa ghép 
+continuation frame nên chưa hỗ trợ đầy đủ thông điệp phân mảnh. 
+ sendFrame ghi header/payload dưới writeLock. Heartbeat dùng các mốc 10 giây trước 
+Ping, 20 giây chờ Pong, kiểm tra mỗi giây như mục 4.4.3. 
+ 5.5.3 Luồng SSE 
+ ClientEvents duy trì các kết nối text/event - stream; mỗi sự kiện gồm event, data JSON và 
+dòng trống kết thúc. 
+ SSE gửi keepalive khoảng ba giây và kiểm tra phiên trong vòng phục vụ; phiên sai hoặc 
+lỗi gửi làm đóng và bỏ kết nối. Scheduler kiểm tra thông báo mỗi năm giây. 
+ 5.5.4 Google OAuth và SMTP 
+ GoogleOAuthService dùng Java HttpClient qua HTTPS để đổi mã và lấy hồ sơ; quản lý 
+state, PKCE và yêu cầu chờ. Token nhà cung cấp chỉ dùng tại máy chủ. 
+
+=== TRANG 38 ===
+28 
+ SmtpTransport thiết lập TLS trực tiếp hoặc STARTTLS trước xác thực, kiểm tra hostname 
+và đặt timeout kết nối/đọc. 
+ Env đọc cấu hình dịch vụ; báo cáo chỉ nêu tên biến và vai trò, không công bố thông tin xác 
+thực. 
+
+=== TRANG 39 ===
+29 
+ CHƯƠNG VI 
+ THIẾT LẬP VÀ KẾT QUẢ THỰC NGHIỆM 
+ Chương này đánh giá tính đúng đắn, hiệu năng thao tác mạng và đối chứng polling– push 
+ bằng các lần chạy mới trên mã nguồn được định danh; không cộng số liệu lịch sử. 
+ 6.1 Thiết lập thực nghiệm 
+ B ảng 6.1 Môi trườ ng th ự c nghi ệm ngày 01 tháng 11 năm 2026 
+ Thuộc tính   Cấu hình thực tế 
+ Máy đo   ASUS TUF Gaming A15 (FA507NV) 
+ CPU   
+AMD Ryzen 7 7735HS with Radeon Graphics; 8 nhân, 16 bộ xử lý 
+ logic 
+ RAM và lưu trữ   
+RAM hệ điều hành nhận 15,25 GiB; ổ 
+Micron_2400_MTFDKBA512QFM, dung lượng 512,11 GB 
+ Hệ điều hành   
+Microsoft Windows 11 Home Single Language; phiên bản 
+ 10.0.26300; build 26300 
+ Java   
+Oracle JDK 25.0.3; javac 25.0.3; biên dịch   -- release 17; chạy trên 
+JDK 25, không phải phép thử runtime JDK 17 
+ Thư viện   sqlite-jdbc 3.45.3.0; slf4j-api và slf4j-nop 2.0.13 
+ Mạng   
+Loopback 127.0.0.1; client và server cùng máy; cổng thử cấp tự 
+động; không TLS, proxy hoặc ngrok 
+ Dữ liệu   
+Database SQLite riêng cho từng bộ/lần đo; 32 tài khoản thử cho 
+mỗi lần benchmark ứng dụng; không dùng dữ liệu vận hành 
+ Tải và lặp   
+1, 4, 16, 32 máy khách; 30 thao tác/máy khách/mức; 2 lượt làm 
+ nóng (warm- up); 3 lần chạy với database mới 
+ Trình duyệt   
+Google Chrome 156.0.8078.74; desktop 1.440 × 1.000 và viewport 
+ di động 390 × 844 
+ Phiên bản mã 
+ dd114d88b89d892ef0802cab8360bc3e17c0f599; SHA- 256 của 
+từng tệp server, service, common, client và JAR trong 
+ provenance.json 
+
+=== TRANG 40 ===
+30 
+ Mỗi bộ/lần đo dùng database riêng, chạy tuần tự; trình duyệt kiểm tra sau benchmark. Máy 
+khách và máy chủ cùng dùng một máy 16 luồng, nên tăng tải cũng tăng cạnh tranh tài 
+nguyên. Nguồn điện, chế độ nguồn và ứng dụng nền chưa được kiểm soát đầy đủ. 
+ run_experiments.ps1 biên dịch server, service, common và phục vụ source/client. Gói bằng 
+chứng kèm dữ liệu, log, mã thử và mã băm; thời gian UTC trong JSON đổi sang giờ Việt 
+Nam bằng cộng 7 giờ. 
+ 6.2 Biến đo và phương pháp 
+ Hai workload độc lập là GET /auth/me có phiên và get_rooms → room_list trên 
+WebSocket đã mở. Mỗi worker chỉ chờ một phản hồi; HTTP đóng socket nên tính cả kết 
+nối TCP mới, WebSocket loại chi phí bắt tay. System.nanoTime đo từ gửi tới kiểm tra phản 
+hồi, bỏ   warm- up. Thông lượng là số thao tác thành công/thời gian batch. Mỗi lần có 3.180 
+mẫu, ba lần 9.540 mẫu. Đây là tải vòng kín, không phải trận 32 người. 
+ Trung bình là trung bình cộng; P95 lấy phần tử ceil(0,95 × n) sau khi sắp tăng. Bảng báo 
+trung bình ba lần của mean, P95 và thông lượng; khoảng P95 là min–max giữa các lần, 
+không phải P95 gộp. analyze_results.py tính lại từ CSV để đối chiếu JSON. 
+ Không dùng /auth/me và get_rooms để so sánh giao thức vì khác nghiệp vụ/payload. Đối 
+chứng 6.6 đo từ công bố sự kiện tới khi client nhận chuỗi   JSON, trước phân tích. Phản hồi 
+thành công chưa chứng minh tải tối đa hay không mất dữ liệu trong mọi tình huống. 
+ 6.3 Ca kiểm thử và kịch bản 
+ ReportInvariantTest chứa INV01–INV12; ReportSupplementTest chứa INV13– INV14. 
+ Phần lớn gọi trực tiếp nghiệp vụ/lưu trữ với đồng hồ tiêm; INV08 dùng 16 luồng, INV11 
+kiểm tra SessionManager. INV14 dùng HTTP và TCP/WebSocket thật: cookie cũ kèm 
+frame đã mask nhận auth_error, không ghi đáp án. Các bộ tích hợp bổ sung rời trận, nối lại 
+ và heartbeat. 
+ B ả ng 6.2 Ca ki ể m th ử   b ấ t bi ế n và k ế t qu ả   th ự c t ế 
+ Mã   
+Bất 
+biến   
+Thao tác và điều kiện   Kết quả quan sát 
+ INV01   I2   Gửi mã trận sai   
+Từ chối, không có dòng đáp án; 
+ PASS 
+
+=== TRANG 41 ===
+31 
+ Mã   
+Bất 
+biến   
+Thao tác và điều kiện   Kết quả quan sát 
+ INV02   I2   Gửi token không khớp   
+Từ chối, không có dòng đáp án; 
+ PASS 
+ INV03   I2   Gửi answer = 4   Từ chối ngoài miền 0– 3; PASS 
+ INV04   I1, I2   Gửi lúc deadline − 1 ms   Ghi đúng một đáp án; PASS 
+ INV05   I1   Gửi lại đáp án đã nhận   Từ chối, số dòng vẫn là 1; PASS 
+ INV06   I2   Gửi đúng deadline   
+Từ chối, không ghi đáp án mới; 
+ PASS 
+ INV07   I2   
+Dùng token vòng   trước ở vòng 
+ 2 
+ Từ chối, vòng 2 chưa có đáp án; 
+ PASS 
+ INV08   I1   
+16 luồng tạo tải gửi cùng đáp 
+ án   
+Chỉ một dòng được lưu; PASS 
+ INV09   I1   
+Chèn trùng trực tiếp qua 
+ RaceStore 
+ Khóa chính từ chối dòng trùng; 
+ PASS 
+ INV10   I3   Gọi finish thêm hai lần   
+RP giữ nguyên; vẫn 2 dòng ledger 
+cho 2 người chơi; PASS 
+ INV11   I4   Tạo phiên mới cùng tài khoản   
+Phiên và CSRF cũ mất hiệu lực; 
+ PASS 
+ INV12   I5   Khôi phục khi có trận ACTIVE   
+Trạng thái INTERRUPTED; không 
+ thêm RP; PASS 
+ INV13   I2   Đúng mã trận/token và còn 
+hạn, gửi khi pha RESULT 
+ race_error; 2 dòng đáp án giữ 
+nguyên, điểm không đổi; PASS 
+ INV14   I4, I2   Sau đăng nhập thay phiên, gửi 
+cookie cũ kèm frame 
+ race_answer 
+ auth_error; không thêm đáp án 
+hoặc RP; PASS 
+ Cả 14 ca đạt. INV13 tách điều kiện pha; INV14 kiểm tra chặn phiên cũ qua mạng thật. 
+INV08 và INV09 kiểm chứng hai lớp chống trùng: đồng bộ nghiệp vụ và khóa chính. 
+INV12 chỉ gọi thủ tục khôi phục, chưa thử dừng/khởi động toàn tiến trình. Log và 
+ expected/ac tual xem Phụ lục C. 
+
+=== TRANG 42 ===
+32 
+ B ả ng 6.3 Các nhóm k ị ch b ản đánh giá 
+ Nhóm   Cách thực hiện   Nguồn minh chứng 
+ T01 Mạng ứng 
+dụng 
+ HTTP/WS tại bốn mức tải, ba 
+lần đo 
+ network- 1 đến network -3: CSV và 
+JSON 
+ T02 Tính nhất 
+ quán 
+ INV01 – INV10, INV12 – INV13; 
+ luật và giao dịch 
+ Hai log bất biến; 
+ RaceIntegrationTest.log 
+ T03 Phiên và kết 
+nối 
+ INV11, INV14; thay phiên, rời 
+trận, heartbeat và kết nối lại 
+ ReportSupplementTest.log; 
+lifecycle; connection notices 
+ T04 Rank và 
+backup 
+ RP lớn, migration, backup bất 
+biến và áp dụng cấu hình   
+RankBackupIntegrationTest.log 
+ T05 Giao diện   
+Đăng nhập, ôn tập, daily 10 câu, 
+ review, mobile, thay phiên   
+browser- cases.json; ảnh ui -*.png 
+ T06 Đối chứng 
+truyền 
+ Polling 100 ms và WS push, 
+ cùng JSON trạng thái 
+ baseline-summary.json; baseline- 
+samples.csv 
+ T07 Ngoài phạm 
+ vi 
+ LAN/WAN nhiều thiết bị, tải 
+ kéo dài, provider email/OAuth 
+ thật 
+ Chưa thực hiện; không có số liệu để 
+kết luận 
+ 6.4 Kết quả hiệu năng ứng dụng 
+ B ả ng 6.4 K ế t qu ả   HTTP /auth/me qua ba l ầ n ch ạ y 
+ Máy 
+khách   
+Số mẫu   
+Trung 
+bình (ms)   
+P95 (ms)   
+Khoảng P95 
+ (ms) 
+ Thông lượng 
+ (thao tác/giây)   
+Lỗi 
+ 1   90   7,14   8,01   7,79 – 8,29   139,99   0 
+ 4   360   7,42   11,73   10,95 – 12,82   504,56   0 
+ 16   1.440   17,52   37,22   36,74 – 38,06   834,16   0 
+ 32   2.880   26,57   69,95   68,26 – 73,13   1.064,13   0 
+ B ả ng 6.5 K ế t qu ả   WebSocket get_rooms qua ba l ầ n ch ạ y 
+ Máy 
+khách   
+Số mẫu   
+Trung 
+bình (ms)   
+P95 (ms)   
+Khoảng P95 
+ (ms) 
+ Thông lượng 
+ (thao tác/giây)   
+Lỗi 
+ 1   90   1,49   1,99   1,79 – 2,27   669,99   0 
+
+=== TRANG 43 ===
+33 
+ Máy 
+khách   
+Số mẫu   
+Trung 
+bình (ms)   
+P95 (ms)   
+Khoảng P95 
+ (ms) 
+ Thông lượng 
+ (thao tác/giây)   
+Lỗi 
+ 4   360   4,85   5,63   5,18 – 5,88   814,51   0 
+ 16   1.440   17,47   19,90   19,82 – 20,05   902,01   0 
+ 32   2.880   33,53   36,43   36,13 – 36,94   938,89   0 
+ Số mẫu cộng ba lần; mean, P95 và thông lượng lấy trung bình theo lần. Cả 9.540 thao tác 
+nhận phản hồi hợp lệ, không lỗi/timeout; CSV lưu độ trễ và trạng thái để tính lại. 
+ Hình 6.1 P95 và thông lượ ng trung bình c ủ a ba l ần đo ứ ng d ụ ng 
+ Ở 32 máy khách, P95/thông lượng HTTP là 69,95 ms/1.064,13 thao tác/giây; WebSocket 
+là 36,43 ms/938,89 thao tác/giây. Khác nghiệp vụ, payload và vòng đời kết nối nên không 
+suy ra ưu thế giao thức. Tải vòng kín khiến thông lượng không tăng tuyến tính; chưa tách 
+chi phí kết nối, database hoặc chờ khóa. 
+ 6.5 Kết quả kiểm thử tích hợp và giao diện 
+ B ả ng 6.6 K ế t qu ả   ch ạ y l ạ i các b ộ   ki ể m th ử   trên mã hi ệ n t ạ i 
+ Bộ kiểm thử   
+Số điều kiện 
+kiểm tra   
+Thời gian s   Kết quả 
+ ArenaRules   574   14,13   PASS 
+ SurvivalRules   46   31,49   PASS 
+ Portal   35   1,01   PASS 
+
+=== TRANG 44 ===
+34 
+ Bộ kiểm thử   
+Số điều kiện 
+kiểm tra   
+Thời gian s   Kết quả 
+ Race   572   3,96   PASS 
+ RankBackup   55   0,56   PASS 
+ PlayerLifecycle   141   3,53   PASS 
+ ConnectionNotices   36   33,41   PASS 
+ Tổng kiểm kê   1.459   PASS 
+ Bảy bộ đều exit code 0 và PASS: bốn bộ   trọng tâm có 804 điều kiện, ba bộ bổ trợ có 655, 
+tổng 1.459 assertion. Đây là kiểm kê, có thể chồng lặp, không phải số ca độc lập hay độ 
+bao phủ. Mười bốn ca bất biến và tám ca trình duyệt được báo riêng. 
+ B ả ng 6.7 Các ca ki ể m tra trình duy ệ t và k ế t qu ả 
+ Mã   Kiểm tra   Kết quả 
+ UI01   Đăng nhập và hiển thị đúng report_player   PASS 
+ UI02   Phòng học có 4 phương án   PASS 
+ UI03   Trả lời và nhận phản hồi; bộ đếm tăng lên 1   PASS 
+ UI04   Daily đi qua 10 câu và đạt COMPLETED   PASS 
+ UI05   Mở ôn tập và hiển thị đủ   10 câu   PASS 
+ UI06   Trang chủ không tràn ngang ở viewport 390 px   PASS 
+ UI07   Đăng nhập lần hai thành công   PASS 
+ UI08   Phiên trình duyệt cũ không còn loggedIn   PASS 
+ Tám ca Chrome dùng tài khoản thử, bao phủ ôn tập, daily và phiên; chưa thử Đường đua 
+nhiều người qua giao diện. RaceIntegrationTest dùng bốn WebSocket thật, xác nhận cùng 
+token và điểm 3 cho đáp án đúng đầu tiên, 2 cho ba đáp án sau. Ảnh chứng minh hiển thị; 
+assertion/phản hồi kiểm chứng bất biến (Phụ lục C, E). 
+ Kiểm tra di động chỉ xác   nhận trang chủ không tràn ngang ở 390 × 844, chưa đại diện mọi 
+chức năng/thiết bị. Ảnh bổ sung xem Phụ lục E. 
+
+=== TRANG 45 ===
+35 
+ Hình 6.2 Ph ả n h ồ i ôn t ậ p và b ộ   đế m sau m ột đáp án (UI03) 
+
+=== TRANG 46 ===
+36 
+ Hình 6.3 K ế t qu ả   sau mườ i câu daily (UI04) 
+
+=== TRANG 47 ===
+37 
+ Hình 6.4 Thông báo thay phiên   ở   trình duy ệt cũ (UI07– UI08) 
+ 6.6 Đối chứng polling và WebSocket push 
+ TransportBaseline dùng ServerSocket thử riêng: cùng nguồn sinh JSON seq, publishedNs, 
+phase, round, score; một nhánh polling GET /state mỗi 100 ms, một nhánh WebSocket 
+ push. Hai nhánh cùng payload   logic, máy, tải và đồng hồ, chạy riêng; không gồm xác thực, 
+database, luật quiz hay render. 
+ Mỗi cấu hình có 2 sự kiện warm - up và 12 sự kiện đo, công bố cách 200/217/234 ms; polling 
+lệch pha ban đầu, chờ một yêu cầu/lần và ngủ phần chu kỳ còn lại. Đảo thứ tự chạy hai 
+nhánh ở lần 2. HTTP đóng kết nối, WebSocket giữ kết nối. Đo từ publishedNs tới lúc nhận 
+chuỗi JSON, trước phân tích; payload không đệm độ dài cố định. 
+ B ảng 6.8 Độ   tr ễ   nh ậ n s ự   ki ệ n c ủa đố i ch ứ ng cùng tr ạ ng thái 
+ Máy 
+khách   
+Số lượt¹   
+TB poll 
+(ms) 
+ TB push 
+(ms) 
+ P95 poll 
+(ms) 
+ P95 push 
+(ms)   
+Thiếu/lỗi 
+ 1   36   51,61   0,42   71,56   0,58   0 / 0 
+ 4   144   45,77   0,48   91,67   0,67   0 / 0 
+ 16   576   45,12   0,81   92,78   1,32   0 / 0 
+
+=== TRANG 48 ===
+38 
+ Máy 
+khách   
+Số lượt¹   
+TB poll 
+(ms) 
+ TB push 
+(ms) 
+ P95 poll 
+(ms) 
+ P95 push 
+(ms)   
+Thiếu/lỗi 
+ 32   1.152   45,76   1,14   97,82   2,00   0 / 0 
+ Hình 6.5 Độ   tr ễ   nh ậ n s ự   ki ện trong đố i ch ứ ng polling 100 ms và push 
+ ¹ Số lượt nhận của mỗi nhánh, cộng ba lần chạy; các lượt cùng sự kiện không được giả định 
+độc lập. TB là trung bình theo ba lần. 
+ Có 3.816 lượt nhận, không thiếu sự kiện hoặc lỗi client. Mỗi mức/nhánh có 36 sự kiện qua 
+ba lần; 1.152 lượt ở 32 máy khách có thể tương quan, không phải quan sát độc lập. P95 lấy 
+trung bình theo lần, chưa suy ra khoảng tin cậy. Polling có mean 45,12– 51,61 ms, P95 
+71,56 –97,82 ms, chịu ảnh hưởng chu kỳ 100 ms và TCP mới; chưa đối chứng   keep-alive. 
+ Kết quả chỉ so sánh truyền trạng thái, không đánh giá toàn bộ quiz, token, RP, tải tối đa 
+hay xác suất chặn. 
+ B ảng 6.9 Đố i ch ứ ng t ạ i 32 máy khách qua ba l ầ n ch ạ y 
+ Chỉ số   
+Baseline polling 100 
+ms   
+WebSocket push 
+ Độ trễ trung bình (ms)   45,76   1,14 
+ P95 trung bình theo lần (ms)   97,82   2,00 
+ Lượt nhận sự kiện   1.152   1.152 
+ Sự kiện thiếu / lỗi client   0 / 0   0 / 0 
+
+=== TRANG 49 ===
+39 
+ Chỉ số   
+Baseline polling 100 
+ms   
+WebSocket push 
+ Số GET /state trong cửa sổ thử   2.820   0 
+ Thông lượng tối đa / xác suất chặn   Không đo   Không đo 
+ Số GET /state cộng ba lần, gồm warm - up, sự kiện đo và chờ cuối; không tính nâng cấp 
+WebSocket. Push có 0 GET /state nhưng vẫn có handshake/dữ liệu. Giảm chu kỳ polling 
+có thể giảm trễ và tăng yêu cầu; cần đo lại. 
+ 6.7 Tổng hợp bằng chứng theo câu hỏi đánh giá 
+ B ả ng 6.10 Ánh x ạ   câu h ỏ i   đánh giá vớ i b ằ ng ch ứ ng 
+ Câu hỏi   Bằng chứng chính   Giới hạn kết luận 
+ RQ1 Kiến trúc và 
+giao tiếp 
+ Chương 4–5; 9.540 mẫu ứng dụng; 
+đối chứng 6.6; WebSocket nhiều 
+người trong RaceIntegrationTest 
+ Hai thao tác vòng kín và bộ 
+truyền thử, chưa đo trọn trận 
+ trên LAN/WAN 
+ RQ2 Xử lý đáp án 
+nhất quán 
+ INV01 –INV10, INV13; khóa đồng 
+bộ và khóa chính; kiểm tra điểm qua 
+WebSocket thật 
+ Các tình huống hữu hạn; chưa 
+đo mọi lỗi giữa bộ nhớ và 
+ database 
+ RQ3 Phiên và mất 
+kết nối 
+ INV11, INV14; lifecycle; connection 
+notices; UI07 –UI08; kết nối lại ở 
+ 4.4.3 
+ Không suy ra hỗ trợ mọi sự cố 
+mạng hoặc tiếp tục trận sau 
+ restart 
+ CHƯƠNG VII THẢO LUẬN VÀ ĐÓNG GÓP 
+ 7.1 Diễn giải kết quả theo câu hỏi đánh giá 
+ RQ1   —   Tổ chức kiến trúc và giao tiếp để cập nhật trạng thái theo thời gian thực. 
+ HTTP, WebSocket và SSE đảm nhiệm truy vấn, tương tác trận và thông báo. Kiểm thử tích 
+hợp/giao diện xác nhận phối hợp đăng nhập, nhận câu hỏi, gửi đáp án và kết quả. Máy chủ 
+thống nhất câu hỏi, pha và thời hạn. 
+
+=== TRANG 50 ===
+40 
+ Đối chứng tại 32 máy khách cho mean polling/push 45,76/1,14 ms và P95 97,82/2,00 ms. 
+Kết quả hỗ trợ cơ chế đẩy trong bộ thử này, chưa đại diện độ trễ toàn trò chơi hoặc mọi 
+cấu hình polling; HTTP đóng kết nối còn WebSocket duy trì kết nối. 
+ RQ2   —   Xử lý đáp án đồng thời, gửi trùng và không hợp lệ.   INV01 – INV10, INV13 
+ kiểm tra mã trận, token, pha, hạn và miền đáp án. INV04 nhận trước hạn 1 ms; INV06 từ 
+chối đúng hạn; INV13 từ chối pha RESULT dù mã/token và thời hạn hợp lệ. 
+ INV08 cho 16 luồng cùng gửi nhưng   chỉ lưu một đáp án; INV09 xác nhận khóa chính từ 
+chối chèn trùng trực tiếp. Hai ca kiểm chứng lớp nghiệp vụ và lưu trữ. INV10 cho thấy 
+quyết toán lặp giữ nguyên RP và hai dòng ledger cho hai người chơi. 
+ RQ3   —   Quản lý phiên và kết nối khi mất mạng hoặc đăng nhập thay phiên.   INV11 
+ vô hiệu phiên/CSRF cũ; INV14 dùng kết nối thật nhận auth_error từ cookie cũ, không thêm 
+đáp án/RP. Lifecycle, connection notices và UI07–UI08 bổ sung bằng chứng thu hồi quyền 
+phiên cũ. 
+ Rời trận và mất kết nối được xử lý theo từng chế độ (mục 4.4.3). INV12 xác nhận khôi 
+phục đánh dấu gián đoạn, không trao RP; chưa thay thế thử dừng/khởi động tiến trình. 
+ 7.2 Tính mới và đóng góp 
+ Đóng góp là phối hợp mạng, trạng thái, phiên và lưu trữ trong Java Socket. Kiểm tra tại 
+máy chủ và định danh chống lặp bảo vệ kết quả vượt ngoài kiểm tra giao diện đơn thuần. 
+ Các kỹ thuật thành phần đã phổ biến; tính khác biệt nằm ở tích hợp và bằng chứng kiểm 
+chứng trong đồ án, không phải giao thức hoặc thuật toán mới. 
+ Bảng 7.1 Đóng góp và bằng chứng kiểm chứng 
+ Đóng góp   Khác biệt và ý nghĩa   Bằng chứng 
+ C1   Kiểm 
+soát   đáp 
+án tại máy 
+chủ 
+ Kiểm   tra   phiên,   mã 
+trận, token, pha, thời 
+hạn và giá trị đáp án 
+trước   khi   ghi   nhận; 
+hạn chế phụ thuộc vào 
+ KnowledgeRaceGame.answer/recordAnswer; INV01 – 
+INV08,   INV13;   các   kiểm   tra   WebSocket   trong 
+ RaceIntegrationTest. 
+
+=== TRANG 51 ===
+41 
+ dữ liệu do máy khách 
+tự khai báo. 
+ C2 Chống 
+ghi   nhận 
+và   quyết 
+toán lặp 
+ Kết   hợp   kiểm   tra 
+nghiệp vụ, khóa đáp 
+án   theo   trận– vòng – 
+người chơi và ledger 
+theo   trận–tài   khoản; 
+phối hợp cập nhật kết 
+quả bằng giao dịch. 
+ RaceStore.answer/finish; INV05, INV08 –INV10; lược 
+đồ dữ liệu và kiểm thử rank, backup. 
+ C3   Phối 
+hợp phiên 
+với   vòng 
+đời   kết 
+nối 
+ Thu   hồi   quyền   của 
+phiên   cũ   và   xử   lý 
+trạng   thái   tham   gia 
+khi   thay   phiên,   rời 
+trận hoặc mất kết nối. 
+ SessionManager, tầng định tuyến và các mô đun trò 
+chơi; INV11, INV14; kiểm thử lifecycle, connection 
+ notices và UI07 – UI08. 
+ C4   Đánh 
+giá có dữ 
+liệu   đối 
+chiếu 
+ Lưu kịch bản, dữ liệu 
+ thô và thông tin phiên 
+ bản để kiểm tra lại các 
+thống kê và truy vết 
+kết luận. 
+ 9.540 mẫu ứng dụng, 3.816 lượt nhận sự kiện đối 
+chứng, log kiểm thử và analyze_results.py. 
+ C1 –C3 thuộc thiết kế/hiện thực; C4 thuộc phương pháp đánh giá. Mã và kiểm thử đối chiếu 
+ C1 –C3; mục 6.6 chỉ đối chứng truyền trạng thái, chưa đối chứng toàn hệ thống quiz. 
+ 7.3 Ưu điểm và đánh đổi 
+ Máy chủ thống nhất điều kiện nhận đáp án và tính điểm. Token, pha, thời hạn loại thao tác 
+cũ; khóa lưu trữ ngăn ghi trùng, hỗ trợ truy vết theo trận– vòng –người chơi. 
+ Khóa chung KnowledgeRaceGame có thể làm phòng khác chờ khi database/gửi trạng thái 
+chậm. Độ trễ tăng theo tải nhưng chưa tách được nguyên nhân do khóa, kết nối, xử lý hay 
+cạnh tranh tài nguyên; cần đo trước tối ưu. 
+
+=== TRANG 52 ===
+42 
+ Tự xử lý HTTP/WebSocket làm rõ lập trình mạng nhưng tăng công kiểm tra giao thức. 
+SQLite gọn cho một máy chủ, hạn chế ghi đồng thời. Thời gian máy chủ giữ quy tắc nhất 
+quán nhưng chưa bù mạng chậm. 
+ 7.4 Hạn chế 
+ Phạm vi triển khai.   Mới đánh giá một máy chủ; phiên, phòng và hàng chờ không chia sẻ 
+giữa tiến trình. Khởi động lại chỉ ghi trạng thái gián đoạn, không phục hồi trận để chơi tiếp. 
+ Phạm vi đo hiệu năng.   Chỉ hai thao tác loopback, database nhỏ, ba lần ngắn trên cùng 
+máy; nguồn điện và ứng dụng nền chưa kiểm soát. Chưa đo tải dài, nhiều trận, LAN/WAN, 
+tài nguyên hoặc số người tối đa. 
+ Giới hạn của đối chứng.   Không gồm luật chơi, database, xác thực hoặc TLS. Polling 100 
+ms đóng kết nối; WebSocket giữ kết nối. Lượt nhận có thể tương quan, chưa suy ra khoảng 
+tin cậy hoặc cỡ mẫu hiệu dụng. 
+ Phạm vi kiểm thử và đánh giá người dùng.   Chưa chứng minh bao phủ mã hay loại mọi 
+ lỗi đồng thời; dùng đồng hồ tiêm và gọi khôi phục trực tiếp. Chưa thử giao diện Đường 
+đua nhiều người, đầy đủ Google/SMTP thật, nhiều trình duyệt hoặc người học; chưa kết 
+luận hiệu quả học tập. 
+ 7.5 Hướng phát triển 
+ Ưu tiên thử dừng tiến trình giữa trận, lỗi database giữa cập nhật, frame sai và mất kết nối 
+khi chuyển pha. Đối chiếu I1–I5 để xác định dữ liệu được giữ, hoàn tác hoặc đánh dấu gián 
+đoạn. 
+ Tách máy tạo tải, thử nhiều trận LAN và tăng thời lượng/lần lặp; ghi nguồn điện, ứng dụng 
+nền, CPU, RAM, luồng, chờ khóa. Bổ sung keep - alive, chu kỳ polling khác và phân tích 
+theo lần/cụm sự kiện. 
+ Sau khi đo điểm nghẽn, cân nhắc giới hạn luồng, khóa theo phòng hoặc hàng đợi sự kiện; 
+kiểm tra lại tính nhất quán với tải tương đương. Đồng thời đánh giá khả năng sử dụng và 
+hiệu quả học tập bằng nhiệm vụ, tiêu chí xác định trước. 
+
+=== TRANG 53 ===
+43 
+ CHƯƠNG VIII 
+ KẾT LUẬN 
+ Đồ án xây dựng Vũ Môn Tranh Hùng bằng Java TCP Socket, HTTP, WebSocket, SSE và 
+SQLite, tập trung giữ trạng thái/kết quả nhất quán khi thao tác đồng thời, gửi lặp, quá hạn 
+hoặc thay phiên. 
+ Máy chủ kiểm soát trạng thái, thời hạn, điểm và xác thực từng thao tác. Đồng bộ nghiệp 
+vụ, khóa duy nhất và giao dịch ngăn đáp án/quyết toán RP lặp; vòng đời phiên gắn với kết 
+nối để thu hồi quyền cũ. 
+ Bảy bộ kiểm thử đạt 1.459 điều kiện; 14 ca bất biến và tám ca trình duyệt đạt yêu cầu. Ba 
+lần benchmark có 9.540 mẫu loopback không lỗi theo tiêu chí bộ đo; đối chứng polling– 
+push ghi 3.816 lượt nhận trong cấu hình đã chọn. 
+ Đóng góp là tích hợp xử lý tại máy chủ, chống ghi lặp, quản lý   phiên –kết nối và bằng 
+chứng tái kiểm tra. Chưa xác định tải tối đa, hiệu năng toàn trò chơi trên Internet hoặc hiệu 
+quả học tập; cần mở rộng kiểm thử và đánh giá nhiều thiết bị. 
+
+=== TRANG 54 ===
+44 
+ TÀI LIỆU THAM KHẢO REFERENCES 
+ Colyseus. (n.d.).   State synchronization . Truy xuất ngày 1 tháng 11 năm 2026, từ 
+ https://docs.colyseus.io/state 
+ Fette,   I.,   &   Melnikov,   A.   (2011).   The   WebSocket   protocol   (RFC   6455).   Internet 
+Engineering Task Force.   https://www.rfc-editor.org/rfc/rfc6455 
+ Fielding, R., Nottingham, M., & Reschke, J. (2022).   HTTP semantics   (RFC 9110). Internet 
+Engineering Task Force.   https://www.rfc-editor.org/rfc/rfc9110 
+ Heroic Labs. (n.d.).   Authoritative multiplayer . Truy xuất ngày 1 tháng 11 năm 2026, từ 
+ https://heroiclabs.com/docs/nakama/concepts/multiplayer/authoritative/ 
+ Oracle.   (n.d.).   Executors .   Java   Platform,   Standard   Edition   17   API   Specification. 
+ https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/util/concurrent/Executo 
+ rs.html 
+ OWASP Foundation. (n.d.).   Session management cheat sheet . Truy xuất ngày 1 tháng 11 
+năm   2026,   từ 
+ https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html 
+ Socket.IO. (2026a, October 9).   Delivery guarantees .   https://socket.io/docs/v4/delivery- 
+ guarantees/ 
+ Socket.IO. (2026b, October 9).   Rooms .   https://socket.io/docs/v4/rooms/ 
+ SQLite. (2026a, May 6).   CREATE INDEX .   https://www.sqlite.org/lang_createindex.html 
+ SQLite. (2026b, February 18).   Transaction .   https://www.sqlite.org/lang_transaction.html 
+ SQLite. (2026c, August 25).   Write-ahead logging .   https://www.sqlite.org/wal.html 
+ WHATWG.   (2026,   October   30).   Server-sent   events .   HTML   Living   Standard. 
+ https://html.spec.whatwg.org/multipage/server-sent-events.html 
+ Kahoot! (2026a, September 30).   How points work .   https://support.kahoot.com/hc/en- 
+ us/articles/115002303908-How-points-work 
+
+=== TRANG 55 ===
+45 
+ Kahoot! (2026b, October 31).   How to host a live kahoot .   https://support.kahoot.com/hc/en- 
+ us/articles/360039422694-How-to-host-a-live-kahoot 
+ Danh mục liệt kê các nguồn dùng trong báo cáo; mã nguồn, CSV và log được định vị trong 
+phụ lục bằng chứng. 
+
+=== TRANG 56 ===
+46 
+ PHỤ LỤC APPENDICES 
+ A Đặ c t ả   giao th ứ c Protocol specification 
+ Đặc tả HTTP, WebSocket và SSE gồm endpoint/type, chiều truyền, trường dữ liệu, điều 
+kiện phiên/pha và lỗi; ví dụ race_answer dưới đây minh họa cấu trúc, không phải log thực 
+tế (mục 4.4). 
+ B ả ng A.1 M ẫu đặ c t ả   trườ ng c ủa thông điệ p race_answer 
+ Trường   Kiểu và điều kiện   Nguồn kiểm tra 
+ type   Chuỗi; race_answer   Router và game handler 
+ matchId   Chuỗi; trùng trận hiện tại   
+KnowledgeRaceGame.ans 
+wer 
+ questionToken   Chuỗi; trùng vòng hiện tại   
+KnowledgeRaceGame.ans 
+wer 
+ answer   Số nguyên; 0 đến 3   
+RaceStore.integer và kiểm 
+tra miền 
+ B C ấ u hình Configuration 
+ Cấu hình gồm JDK/classpath, đường dẫn client và database, cổng 3000, origin và proxy. 
+Các biến tùy chọn được mô tả tại source/.env.example; cổng và database hiện đặt trong 
+mã. Chỉ dùng giá trị minh họa, không công bố .env thật. 
+ C D ữ   li ệ u và k ế t qu ả   b ổ   sung Additional evidence 
+ Bằng   chứng   lịch   sử:   C1   network -benchmark.json;   C2   network-samples.csv;   C3 
+ test_rank_backup.log; C4 test_player_lifecycle.log; C5 test_connection_notices.log tại 
+statics/results   hoặc   statics/dataset.   Mã   đo:   source/scratch/NetworkBenchmark.java, 
+ benchmark_ne twork.ps1. Bằng chứng cập nhật gồm provenance.json, CSV/JSON ba lần 
+đo, log bất biến, tích hợp và browser - cases.json như Chương 6. 
+
+=== TRANG 57 ===
+47 
+ Ảnh tại statics/results/screenshots minh họa giao diện, không chứng minh tải hay số người 
+thật; ghi rõ kịch bản và che thông tin cá nhân khi sử dụng. 
+ D Lược đồ   d ữ   li ệ u Database schema 
+ B ả ng D.1 Các khóa c ố t lõi ph ụ c v ụ   ki ể m soát ghi l ặ p 
+ Bảng   Khóa hoặc liên kết   Ý nghĩa 
+ race_matches   id là khóa chính   Nhận diện trận 
+ race_rounds   
+PRIMARY KEY match_id 
+round_no 
+ Nhận diện vòng; token và 
+ deadline 
+ race_answers   
+PRIMARY KEY match_id 
+round_no username 
+ Tối đa một đáp án một 
+người một vòng 
+ rank_ledger   
+PRIMARY KEY match_id 
+user_id 
+ Tối đa một quyết toán RP 
+một tài khoản một trận 
+ Lược đồ chi tiết xem DatabaseManager, AdminStore và RaceStore; phân biệt tài khoản, 
+kết nối, bản ghi tham gia và người chơi. Không đưa dữ liệu cá nhân vào báo cáo. 
+ E Bi ể u m ẫu test case và đoạ n mã quan tr ọ ng Test cases and snippets 
+ Test case gồm mã, bất biến, điều kiện đầu, bước/input, expected/actual, minh chứng, phiên 
+bản và thời gian. Các đoạn mã kiểm tra token, ghi đáp án và quyết toán được định vị tại 
+ KnowledgeRaceGame và RaceStore. 
+ F B ả n gi ả i trình ch ỉ nh s ử a Revision record 
+ Biểu mẫu dùng khi học phần yêu cầu, ghi ý kiến góp ý, nội dung xử lý, vị trí và người thực 
+hiện. 
+
+=== TRANG 58 ===
+48 
+ B ả ng F.1 Bi ể u m ẫ u ghi nh ậ n n ộ i dung ch ỉ nh s ử a 
+ Ý kiến góp ý   Nội dung chỉnh sửa   Vị trí sau sửa   
+Người thực 
+hiện 

@@ -6,7 +6,7 @@ Backend Java SE tự xử lý TCP Socket, HTTP và WebSocket; trình duyệt là
 
 **Chạy tại máy cá nhân:** [Người chơi](http://localhost:3000/) · [Quản trị](http://localhost:3000/admin). Không có tài khoản/mật khẩu admin mặc định; xem [Database setup](#7-database-setup).
 
-![Trang chủ Vũ Môn Tranh Hùng](report/images/home.png)
+![Trang chủ Vũ Môn Tranh Hùng](statics/results/home.png)
 
 *Ảnh giao diện được chụp từ ứng dụng bằng dữ liệu thử. Tên người chơi và điểm trong ảnh chỉ để minh họa.*
 
@@ -58,9 +58,9 @@ Rời trận đang chơi có cảnh báo. Bỏ trận đấu thường với ng�
 
 ### Kiến trúc tổng thể
 
-![Kiến trúc tổng quan Vũ Môn Tranh Hùng](report/images/architecture.png)
+![Kiến trúc tổng quan Vũ Môn Tranh Hùng](statics/architecture.png)
 
-Ảnh thể hiện các thành phần của phiên bản đang triển khai. Tải [PNG độ phân giải cao](report/images/architecture.png) để đưa vào báo cáo, hoặc [SVG có thể chỉnh sửa](report/images/architecture.svg). Các luồng phụ được giản lược để sơ đồ dễ đọc.
+Ảnh thể hiện các thành phần của phiên bản đang triển khai. Tải [PNG độ phân giải cao](statics/architecture.png) để đưa vào báo cáo, hoặc [SVG có thể chỉnh sửa](statics/architecture.svg). Các luồng phụ được giản lược để sơ đồ dễ đọc.
 
 <details>
 <summary>Mã sơ đồ Mermaid</summary>
@@ -479,9 +479,9 @@ Phòng ôn luyện và bảng xếp hạng mở từ trang chủ. Admin dùng fo
 <details>
 <summary>Ảnh trang đăng nhập admin và đấu rank</summary>
 
-![Đăng nhập admin](report/images/admin-login.png)
+![Đăng nhập admin](statics/results/admin-login.png)
 
-![Đấu xếp hạng](report/images/ranked.png)
+![Đấu xếp hạng](statics/results/ranked.png)
 
 *Ảnh có dữ liệu mô phỏng, không phải số liệu đo hiệu năng.*
 

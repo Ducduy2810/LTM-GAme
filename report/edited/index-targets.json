@@ -1,0 +1,306 @@
+﻿[
+    {
+        "bookmark":  "ShortReport_362",
+        "title":  "CHƯƠNG I GIỚI THIỆU"
+    },
+    {
+        "bookmark":  "ShortReport_363",
+        "title":  "1.1 Bối cảnh và động lực"
+    },
+    {
+        "bookmark":  "ShortReport_366",
+        "title":  "1.2 Vấn đề nghiên cứu"
+    },
+    {
+        "bookmark":  "ShortReport_369",
+        "title":  "1.3 Mục tiêu và câu hỏi đánh giá"
+    },
+    {
+        "bookmark":  "ShortReport_375",
+        "title":  "1.4 Phạm vi Scope"
+    },
+    {
+        "bookmark":  "ShortReport_378",
+        "title":  "1.5 Đóng góp và tổ chức báo cáo"
+    },
+    {
+        "bookmark":  "ShortReport_384",
+        "title":  "CHƯƠNG II CƠ SỞ VÀ NGHIÊN CỨU LIÊN QUAN"
+    },
+    {
+        "bookmark":  "ShortReport_385",
+        "title":  "2.1 Kiến thức nền"
+    },
+    {
+        "bookmark":  "ShortReport_390",
+        "title":  "2.2 Giải pháp liên quan"
+    },
+    {
+        "bookmark":  "ShortReport_419",
+        "title":  "2.3 Nhận xét và hướng tiếp cận"
+    },
+    {
+        "bookmark":  "ShortReport_424",
+        "title":  "CHƯƠNG III ĐỊNH NGHĨA BÀI TOÁN"
+    },
+    {
+        "bookmark":  "ShortReport_425",
+        "title":  "3.1 Mô hình hệ thống và giả định"
+    },
+    {
+        "bookmark":  "ShortReport_436",
+        "title":  "3.2 Đầu vào và đầu ra"
+    },
+    {
+        "bookmark":  "ShortReport_470",
+        "title":  "3.3 Ràng buộc và bất biến"
+    },
+    {
+        "bookmark":  "ShortReport_487",
+        "title":  "3.4 Yêu cầu hệ thống"
+    },
+    {
+        "bookmark":  "ShortReport_529",
+        "title":  "CHƯƠNG IV GIẢI PHÁP ĐỀ XUẤT"
+    },
+    {
+        "bookmark":  "ShortReport_530",
+        "title":  "4.1 Ý tưởng và quyết định thiết kế"
+    },
+    {
+        "bookmark":  "ShortReport_581",
+        "title":  "4.2 Kiến trúc hệ thống"
+    },
+    {
+        "bookmark":  "ShortReport_641",
+        "title":  "4.3 Thuật toán nhận đáp án"
+    },
+    {
+        "bookmark":  "ShortReport_682",
+        "title":  "4.4 Thiết kế giao tiếp mạng"
+    },
+    {
+        "bookmark":  "ShortReport_755",
+        "title":  "CHƯƠNG V HIỆN THỰC HỆ THỐNG"
+    },
+    {
+        "bookmark":  "ShortReport_757",
+        "title":  "5.1 Module và lớp quan trọng"
+    },
+    {
+        "bookmark":  "ShortReport_821",
+        "title":  "5.2 Cấu trúc dữ liệu"
+    },
+    {
+        "bookmark":  "ShortReport_842",
+        "title":  "5.3 Cơ chế đồng thời"
+    },
+    {
+        "bookmark":  "ShortReport_870",
+        "title":  "5.4 Lưu trữ và tính nhất quán (Persistence and Consistency)"
+    },
+    {
+        "bookmark":  "ShortReport_891",
+        "title":  "5.5 Thành phần mạng và dịch vụ ngoài"
+    },
+    {
+        "bookmark":  "ShortReport_1067",
+        "title":  "CHƯƠNG VI THIẾT LẬP VÀ KẾT QUẢ THỰC NGHIỆM"
+    },
+    {
+        "bookmark":  "ShortReport_1069",
+        "title":  "6.1 Thiết lập thực nghiệm"
+    },
+    {
+        "bookmark":  "ShortReport_1098",
+        "title":  "6.2 Biến đo và phương pháp"
+    },
+    {
+        "bookmark":  "ShortReport_1102",
+        "title":  "6.3 Ca kiểm thử và kịch bản"
+    },
+    {
+        "bookmark":  "ShortReport_1193",
+        "title":  "6.4 Kết quả hiệu năng ứng dụng"
+    },
+    {
+        "bookmark":  "ShortReport_1272",
+        "title":  "6.5 Kết quả kiểm thử tích hợp và giao diện"
+    },
+    {
+        "bookmark":  "ShortReport_1349",
+        "title":  "6.6 Đối chứng polling và WebSocket push"
+    },
+    {
+        "bookmark":  "ShortReport_1417",
+        "title":  "6.7 Tổng hợp bằng chứng theo câu hỏi đánh giá"
+    },
+    {
+        "bookmark":  "ShortReport_1431",
+        "title":  "CHƯƠNG VI I THẢO LUẬN VÀ ĐÓNG GÓP"
+    },
+    {
+        "bookmark":  "ShortReport_1432",
+        "title":  "7.1 Diễn giải kết quả theo câu hỏi đánh giá"
+    },
+    {
+        "bookmark":  "ShortReport_1439",
+        "title":  "7.2 Tính mới và đóng góp"
+    },
+    {
+        "bookmark":  "ShortReport_1459",
+        "title":  "7.3 Ưu điểm và đánh đổi"
+    },
+    {
+        "bookmark":  "ShortReport_1463",
+        "title":  "7.4 Hạn chế"
+    },
+    {
+        "bookmark":  "ShortReport_1468",
+        "title":  "7.5 Hướng phát triển"
+    },
+    {
+        "bookmark":  "ShortReport_1473",
+        "title":  "CHƯƠNG VIII KẾT LUẬN"
+    },
+    {
+        "bookmark":  "ShortReport_1478",
+        "title":  "TÀI LIỆU THAM KHẢO REFERENCES"
+    },
+    {
+        "bookmark":  "ShortReport_1494",
+        "title":  "PHỤ LỤC APPENDICES"
+    },
+    {
+        "bookmark":  "ShortReport_417",
+        "title":  "Bảng 1: So sánh các phương pháp và giải pháp liên quan"
+    },
+    {
+        "bookmark":  "ShortReport_468",
+        "title":  "Bảng 2: Đặc tả đầu vào và đầu ra"
+    },
+    {
+        "bookmark":  "ShortReport_489",
+        "title":  "Bảng 3: Yêu cầu chức năng"
+    },
+    {
+        "bookmark":  "ShortReport_514",
+        "title":  "Bảng 4: Yêu cầu phi chức năng"
+    },
+    {
+        "bookmark":  "ShortReport_533",
+        "title":  "Bảng 5: Các quyết định thiết kế chính"
+    },
+    {
+        "bookmark":  "ShortReport_596",
+        "title":  "Bảng 6: Ánh xạ bất biến với thành phần và cơ chế bảo vệ"
+    },
+    {
+        "bookmark":  "ShortReport_617",
+        "title":  "Bảng 7: Luồng xử lý và lưu dữ liệu chính"
+    },
+    {
+        "bookmark":  "ShortReport_688",
+        "title":  "Bảng 8: Các thông điệp và sự kiện tiêu biểu"
+    },
+    {
+        "bookmark":  "ShortReport_759",
+        "title":  "Bảng 9: Các thành phần chính của hệ thống"
+    },
+    {
+        "bookmark":  "ShortReport_845",
+        "title":  "Bảng 10: Các cơ chế phối hợp truy cập đồng thời"
+    },
+    {
+        "bookmark":  "ShortReport_1070",
+        "title":  "Bảng 6.1 Môi trường thực nghiệm ngày 01 tháng 11 năm 2026"
+    },
+    {
+        "bookmark":  "ShortReport_1104",
+        "title":  "Bảng 6.2 Ca kiểm thử bất biến và kết quả thực tế"
+    },
+    {
+        "bookmark":  "ShortReport_1167",
+        "title":  "Bảng 6.3 Các nhóm kịch bản đánh giá"
+    },
+    {
+        "bookmark":  "ShortReport_1194",
+        "title":  "Bảng 6.4 Kết quả HTTP /auth/me qua ba lần chạy"
+    },
+    {
+        "bookmark":  "ShortReport_1231",
+        "title":  "Bảng 6.5 Kết quả WebSocket get_rooms qua ba lần chạy"
+    },
+    {
+        "bookmark":  "ShortReport_1273",
+        "title":  "Bảng 6.6 Kết quả chạy lại các bộ kiểm thử trên mã hiện tại"
+    },
+    {
+        "bookmark":  "ShortReport_1312",
+        "title":  "Bảng 6.7 Các ca kiểm tra trình duyệt và kết quả"
+    },
+    {
+        "bookmark":  "ShortReport_1352",
+        "title":  "Bảng 6.8 Độ trễ nhận sự kiện của đối chứng cùng trạng thái"
+    },
+    {
+        "bookmark":  "ShortReport_1393",
+        "title":  "Bảng 6.9 Đối chứng tại 32 máy khách qua ba lần chạy"
+    },
+    {
+        "bookmark":  "ShortReport_1418",
+        "title":  "Bảng 6.10 Ánh xạ câu hỏi đánh giá với bằng chứng"
+    },
+    {
+        "bookmark":  "ShortReport_1442",
+        "title":  "Bảng 7.1 Đóng góp và bằng chứng kiểm chứng"
+    },
+    {
+        "bookmark":  "ShortReport_1497",
+        "title":  "Bảng A.1 Mẫu đặc tả trường của thông điệp race_answer"
+    },
+    {
+        "bookmark":  "ShortReport_1520",
+        "title":  "Bảng D.1 Các khóa cốt lõi phục vụ kiểm soát ghi lặp"
+    },
+    {
+        "bookmark":  "ShortReport_1542",
+        "title":  "Bảng F.1 Biểu mẫu ghi nhận nội dung chỉnh sửa"
+    },
+    {
+        "bookmark":  "ShortReport_584",
+        "title":  "Hình 1: Kiến trúc tổng thể hệ thống Vũ Môn Tranh Hùng"
+    },
+    {
+        "bookmark":  "ShortReport_666",
+        "title":  "Hình 2: Các pha chính của Đường đua Kiến thức"
+    },
+    {
+        "bookmark":  "ShortReport_737",
+        "title":  "Hình 3: Luồng ghi nhận một đáp án hợp lệ và chốt vòng khi đủ đáp án"
+    },
+    {
+        "bookmark":  "ShortReport_836",
+        "title":  "Hình 4: Các cấu trúc chính và quan hệ tham chiếu trong Đường đua Kiến thức"
+    },
+    {
+        "bookmark":  "ShortReport_1270",
+        "title":  "Hình 6.1 P95 và thông lượng trung bình của ba lần đo ứng dụng"
+    },
+    {
+        "bookmark":  "ShortReport_1344",
+        "title":  "Hình 6.2 Phản hồi ôn tập và bộ đếm sau một đáp án (UI03)"
+    },
+    {
+        "bookmark":  "ShortReport_1346",
+        "title":  "Hình 6.3 Kết quả sau mười câu daily (UI04)"
+    },
+    {
+        "bookmark":  "ShortReport_1348",
+        "title":  "Hình 6.4 Thông báo thay phiên ở trình duyệt cũ (UI07–UI08)"
+    },
+    {
+        "bookmark":  "ShortReport_1390",
+        "title":  "Hình 6.5 Độ trễ nhận sự kiện trong đối chứng polling 100 ms và push"
+    }
+]
