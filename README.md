@@ -48,7 +48,7 @@ Server là nơi quyết định trạng thái trận, quản lí người chơi,
 | Xếp hạng | Đồng → Bạc → Vàng → Bạch Kim → Kim Cương, mỗi bậc 3 cấp; sau Kim Cương 1 là Cao Thủ tích lũy RP; Top 10 Cao Thủ mang danh hiệu Huyền Thoại |
 | Quản trị | Quản lý tài khoản và online/offline; nội dung/CSV/chủ đề; phòng và lịch sử; cấu hình; thông báo; nhật ký; sao lưu |
 
-Chỉ chế độ **RANKED** của Đường đua thay đổi RP xếp hàng. Khi chơi chế độ **RANK** người chơi sẽ được chơi với người chơi khác cùng mức RANK với mình để tránh ghép với người chơi lệch trình độ trong đấu xếp hạng, gây mất cân bằng xếp hàng.Ngoài ra mỗi mức RANK sẽ có các bộ câu hỏi riêng dành cho mức RANK đó.
+Chỉ chế độ **RANKED** của Đường đua thay đổi RP xếp hàng. Khi chơi chế độ **RANK** người chơi sẽ được chơi với người chơi khác cùng mức RANK với mình để tránh ghép với người chơi lệch trình độ trong đấu xếp hạng, gây mất cân bằng xếp hạng.Ngoài ra mỗi mức RANK sẽ có các bộ câu hỏi riêng dành cho mức RANK đó.
 
  Ba trò chơi giải trí, đấu thường, chơi bot và thử thách ngày không cộng rank. Thử thách ngày có thể thưởng thẻ dùng trong đấu rank.
 
