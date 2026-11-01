@@ -144,6 +144,8 @@ public class WheelRoom {
 
     // Theo dõi username đã từng trong phòng (để cho phép rejoin khi đang chơi)
     private final Set<String> recentlyLeftUsernames = Collections.synchronizedSet(new HashSet<>());
+    private final Set<String> forfeitedUsernames=new HashSet<>();
+    public synchronized boolean hasForfeited(String username){return username!=null&&"PLAYING".equals(gameState)&&forfeitedUsernames.contains(username.toLowerCase(Locale.ROOT));}
     // Thứ tự lượt đấu (người thật + bot)
     private final List<PlayerSlot> orderedPlayers = new CopyOnWriteArrayList<>();
 
@@ -253,6 +255,7 @@ public class WheelRoom {
 
         // Chặn người mới hoàn toàn khi đang chơi; cho phép người đã từng trong phòng vào lại
         boolean gameActive = "PLAYING".equals(gameState);
+        if(gameActive&&forfeitedUsernames.contains(username.toLowerCase(Locale.ROOT))){sendError(client,"Bạn đã rời trận này và không được tính thành tích. Hãy chờ trận mới.");return false;}
         if (gameActive && !recentlyLeftUsernames.contains(username.toLowerCase())) {
             sendError(client, "Trận đấu đang diễn ra! Không thể vào phòng lúc này.");
             return false;
@@ -307,6 +310,8 @@ public class WheelRoom {
         boolean wasHost = isHost(client.getUsername());
         WheelPlayerState removed = players.remove(client);
         if (removed == null) return;
+        boolean active="PLAYING".equals(gameState);
+        if(active&&!kickedUsernames.contains(removed.username.toLowerCase(Locale.ROOT))){MatchService.forfeit(matchId,removed.username);forfeitedUsernames.add(removed.username.toLowerCase(Locale.ROOT));client.send(JsonUtil.toJson(Map.of("type","match_forfeited","message","Bạn đã rời trận. Không tính điểm, chiến thắng hoặc thành tích của trận này; không thể vào lại trận đang diễn ra.")));}
 
         // Ghi nhận username để cho phép rejoin sau
         recentlyLeftUsernames.add(removed.username.toLowerCase());
@@ -348,6 +353,7 @@ public class WheelRoom {
         }
 
         if ("PLAYING".equals(gameState)) {
+            if(orderedPlayers.size()==1&&players.size()==1){endGame("Đối thủ đã rời trận; người ở lại chiến thắng.");broadcastPlayers();return;}
             if (removeIdx >= 0 && removeIdx < turnIndex) turnIndex--;
             if (turnIndex >= orderedPlayers.size()) turnIndex = 0;
             if (removedCurrent || orderedPlayers.isEmpty()) {
@@ -392,6 +398,7 @@ public class WheelRoom {
         WheelPhrase selected;
         try{selected=WheelPhraseBank.getRandomPhrase(topic);}catch(IllegalArgumentException e){broadcast(Map.of("type","wheel_error","message",e.getMessage()));return;}
         gameState = "PLAYING";
+        forfeitedUsernames.clear();recentlyLeftUsernames.clear();
         turnIndex = 0;
         currentAction = "SPIN";
         currentSpinValue = 0;

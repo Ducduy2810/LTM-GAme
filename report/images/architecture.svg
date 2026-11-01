@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1390" viewBox="0 0 1600 1390" role="img" aria-labelledby="title desc">
+  <title id="title">Kiến trúc tổng quan Vũ Môn Tranh Hùng</title>
+  <desc id="desc">Trình duyệt kết nối trực tiếp hoặc qua proxy tùy chọn đến một server Java cổng 3000. Server xử lý HTTP, WebSocket, SSE, tài khoản, ba game giải trí và Đường đua Kiến thức. Dữ liệu lưu trong SQLite và các bản sao lưu. Xác thực Google và gửi thư dùng dịch vụ bên ngoài.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M1 1 9 5 1 9" fill="none" stroke="#466a85" stroke-width="1.8" stroke-linejoin="round"/></marker>
+    <marker id="event-arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M1 1 9 5 1 9" fill="none" stroke="#467f76" stroke-width="1.8" stroke-linejoin="round"/></marker>
+    <style>
+      text{font-family:'Segoe UI',Arial,sans-serif;fill:#223f54}
+      .heading{font-size:36px;font-weight:750}.caption{font-size:20px;fill:#536d80}
+      .name{font-size:24px;font-weight:700}.line{font-size:19px;fill:#3d5b70}
+      .small{font-size:17px;fill:#536d80}.section{font-size:18px;letter-spacing:1.5px;font-weight:750;fill:#24648b}
+      .client{fill:#edf6ff;stroke:#9cbdd8;stroke-width:1.7}.network{fill:#f8fafc;stroke:#aebecb;stroke-width:1.5;stroke-dasharray:8 6}
+      .server{fill:#f5faff;stroke:#9cbfd7;stroke-width:2}.entry{fill:#dceefa;stroke:#8fb6d0;stroke-width:1.7}
+      .protocol{fill:#ffffff;stroke:#b1c8d9;stroke-width:1.5}.module{fill:#fff9e9;stroke:#d9c58e;stroke-width:1.5}
+      .data{fill:#eaf4eb;stroke:#a2c3ab;stroke-width:1.6}.external{fill:#f3effb;stroke:#bcb0d4;stroke-width:1.5}
+      .edge{fill:none;stroke:#466a85;stroke-width:2;stroke-linejoin:round;marker-end:url(#arrow)}
+      .event{fill:none;stroke:#467f76;stroke-width:1.7;stroke-dasharray:7 5;marker-end:url(#event-arrow)}
+    </style>
+  </defs>
+  <rect width="1600" height="1390" fill="#ffffff"/>
+  <text x="800" y="55" class="heading" text-anchor="middle">VŨ MÔN TRANH HÙNG</text>
+  <text x="800" y="91" class="caption" text-anchor="middle">Kiến trúc tổng quan · Web client / Java server / SQLite</text>
+
+  <rect x="160" y="130" width="480" height="100" rx="14" class="client"/>
+  <text x="400" y="170" class="name" text-anchor="middle">Trình duyệt người chơi</text>
+  <text x="400" y="203" class="line" text-anchor="middle">HTML / CSS / JavaScript · giao diện game</text>
+  <rect x="960" y="130" width="480" height="100" rx="14" class="client"/>
+  <text x="1200" y="170" class="name" text-anchor="middle">Trình duyệt quản trị</text>
+  <text x="1200" y="203" class="line" text-anchor="middle">/admin · nội dung, phòng, tài khoản, cấu hình</text>
+  <path d="M400 230V280" class="edge"/>
+  <path d="M1200 230V280" class="edge"/>
+  <rect x="200" y="282" width="1200" height="88" rx="12" class="network"/>
+  <text x="800" y="318" class="name" text-anchor="middle">Kết nối trực tiếp hoặc qua ngrok / reverse proxy</text>
+  <text x="800" y="348" class="line" text-anchor="middle">Local / LAN: HTTP, WS · Công khai: HTTPS, WSS qua proxy tùy chọn · SSE cho thông báo</text>
+
+  <path d="M60 410H1540V1125H550V965H60Z" class="server"/>
+  <text x="90" y="444" class="section">JAVA SERVER · 01 TIẾN TRÌNH · JAVA SE 17+</text>
+  <path d="M800 370V475" class="edge"/>
+  <rect x="350" y="477" width="900" height="82" rx="12" class="entry"/>
+  <text x="800" y="511" class="name" text-anchor="middle">TCP ServerSocket · 0.0.0.0:3000</text>
+  <text x="800" y="540" class="line" text-anchor="middle">HttpAndWebSocketServer · nhận kết nối và phân loại request / Upgrade</text>
+
+  <path d="M620 559V590H300V625" class="edge"/>
+  <path d="M800 559V625" class="edge"/>
+  <path d="M980 559V590H1300V625" class="edge"/>
+  <rect x="100" y="627" width="400" height="97" rx="12" class="protocol"/>
+  <text x="300" y="665" class="name" text-anchor="middle">HTTP router</text>
+  <text x="300" y="697" class="line" text-anchor="middle">API JSON + file HTML / CSS / JS</text>
+  <rect x="600" y="627" width="400" height="97" rx="12" class="protocol"/>
+  <text x="800" y="665" class="name" text-anchor="middle">WebSocket dispatcher</text>
+  <text x="800" y="697" class="line" text-anchor="middle">/ws · JSON · frame · Ping / Pong</text>
+  <rect x="1100" y="627" width="400" height="97" rx="12" class="protocol"/>
+  <text x="1300" y="665" class="name" text-anchor="middle">SSE · ClientEvents</text>
+  <text x="1300" y="697" class="line" text-anchor="middle">/api/events · thông báo / phiên</text>
+
+  <path d="M300 724V801" class="edge"/>
+  <path d="M800 724V801" class="edge"/>
+  <path d="M800 760H1300V801" class="edge"/>
+  <rect x="100" y="803" width="400" height="128" rx="12" class="module"/>
+  <text x="300" y="839" class="name" text-anchor="middle">Tài khoản &amp; quản trị</text>
+  <text x="300" y="872" class="line" text-anchor="middle">SessionManager · AdminSessions</text>
+  <text x="300" y="900" class="line" text-anchor="middle">AdminController · GoogleOAuthService</text>
+  <rect x="600" y="803" width="400" height="128" rx="12" class="module"/>
+  <text x="800" y="839" class="name" text-anchor="middle">Ba game giải trí</text>
+  <text x="800" y="872" class="line" text-anchor="middle">ArenaGame · WheelGame</text>
+  <text x="800" y="900" class="line" text-anchor="middle">SurvivalGame · phòng / lượt / timer</text>
+  <rect x="1100" y="803" width="400" height="128" rx="12" class="module"/>
+  <text x="1300" y="839" class="name" text-anchor="middle">Đường đua Kiến thức</text>
+  <text x="1300" y="872" class="line" text-anchor="middle">KnowledgeRaceGame · ghép trận / bot</text>
+  <text x="1300" y="900" class="line" text-anchor="middle">Rank / đấu thường / luyện máy / daily</text>
+
+  <path d="M500 829H535V748H1480V724" class="event"/>
+  <text x="1075" y="744" class="small" text-anchor="middle">Phát sự kiện tài khoản / thông báo</text>
+  <path d="M300 931V982H680V1015" class="edge"/>
+  <path d="M800 931V1015" class="edge"/>
+  <path d="M1300 931V1015" class="edge"/>
+  <rect x="577" y="1017" width="923" height="82" rx="12" class="data"/>
+  <text x="1038" y="1051" class="name" text-anchor="middle">UserRepository · AdminStore · RaceStore · MatchService</text>
+  <text x="1038" y="1080" class="line" text-anchor="middle">JDBC · giao dịch kết quả / RP · snapshot nội dung và cấu hình</text>
+
+  <path d="M300 982V1030" class="edge"/>
+  <rect x="100" y="1032" width="400" height="100" rx="12" class="external"/>
+  <text x="300" y="1068" class="name" text-anchor="middle">Dịch vụ bên ngoài</text>
+  <text x="300" y="1101" class="line" text-anchor="middle">Google OAuth: HTTPS · SMTP: TLS</text>
+
+  <path d="M800 1099V1200" class="edge"/>
+  <text x="815" y="1170" class="small">đọc / ghi</text>
+  <path d="M1300 1099V1200" class="edge"/>
+  <text x="1316" y="1170" class="small">VACUUM INTO</text>
+  <rect x="590" y="1202" width="420" height="96" rx="12" class="data"/>
+  <text x="800" y="1239" class="name" text-anchor="middle">SQLite · data/game.db</text>
+  <text x="800" y="1272" class="line" text-anchor="middle">Tài khoản · nội dung · lịch sử · RP</text>
+  <rect x="1090" y="1202" width="420" height="96" rx="12" class="data"/>
+  <text x="1300" y="1239" class="name" text-anchor="middle">data/backups/*.db</text>
+  <text x="1300" y="1272" class="line" text-anchor="middle">Bản sao nhất quán · cấu hình cố định</text>
+
+  <text x="80" y="1342" class="small">Luồng chính được giản lược để đọc ở mức tổng quan. Gameplay và chấm điểm do server quyết định.</text>
+  <text x="80" y="1371" class="small">Database lưu trên ổ đĩa; phòng, hàng chờ và phiên đang hoạt động nằm trong bộ nhớ của một tiến trình Java.</text>
+</svg>

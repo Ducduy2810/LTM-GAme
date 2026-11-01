@@ -131,8 +131,9 @@ public class AccountFeaturesIntegrationTest {
         check(request("/auth/change-password",owner.cookie(),Map.of("currentPassword","incorrect","newPassword","NextPassword456"),owner.csrf()).statusCode()==400,"wrong current password rejected");
         check(request("/auth/change-password",owner.cookie(),Map.of("currentPassword","PlayerPass123","newPassword","short"),owner.csrf()).statusCode()==400,"new password length enforced");
         Player second=login("owner","PlayerPass123");
+        check(!Boolean.TRUE.equals(obj(request("/auth/me",owner.cookie(),null,null).body()).get("loggedIn")),"second login replaces the first session");
         try(Events stream=new Events(second.cookie())){
-            check(request("/auth/change-password",owner.cookie(),Map.of("currentPassword","PlayerPass123","newPassword","NextPassword456"),owner.csrf()).statusCode()==200,"player password changed");
+            check(request("/auth/change-password",second.cookie(),Map.of("currentPassword","PlayerPass123","newPassword","NextPassword456"),second.csrf()).statusCode()==200,"player password changed from current session");
             check(stream.await("account_notice","Mật khẩu")!=null,"other active page receives password change notice");
         }
         check(!Boolean.TRUE.equals(obj(request("/auth/me",second.cookie(),null,null).body()).get("loggedIn")),"all old sessions revoked");

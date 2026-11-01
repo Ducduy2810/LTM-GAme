@@ -3,14 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Đấu Trường Sinh Tử - Survival Arena</title>
+    <title>Đấu Trường Sinh Tử · Vũ Môn Tranh Hùng</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="survival_theme.css">
     <link rel="stylesheet" href="room_notices.css">
 <link rel="stylesheet" href="/system_client.css">
 <script src="/system_client.js" defer></script>
+<link rel="icon" type="image/svg+xml" href="/assets/brand/vu-mon-crest.svg">
+<link rel="stylesheet" href="/vm_theme.css">
+<script src="/vm_theme.js" defer></script>
 </head>
-<body>
+<body class="vm-theme vm-game vm-survival">
     <div id="room-notices" class="room-notices" role="log" aria-live="polite" aria-relevant="additions"></div>
     <div class="survival-app">
         <!-- 1. HEADER & HUD SINH TỒN -->
@@ -150,7 +153,7 @@
                     <!-- Thanh máu ingame -->
                     <div style="min-width: 170px;">
                         <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:800; margin-bottom:4px;">
-                            <span style="color:#fca5a5;">Máu của bạn:</span>
+                            <span class="vm-health-label">Máu của bạn:</span>
                             <span style="color:#10b981;" id="game-my-hp">100 / 100</span>
                         </div>
                         <div class="hp-bar" id="game-hp-bar">
@@ -159,7 +162,7 @@
                     </div>
 
                     <!-- Điểm số trận đấu -->
-                    <div style="font-weight: 800; font-size: 14px; color: #fde047; background: rgba(0,0,0,0.4); padding: 6px 14px; border-radius: 12px; border: 1px solid rgba(245,158,11,0.3);">
+                    <div class="vm-score-panel" style="font-weight: 800; font-size: 14px; padding: 6px 14px; border-radius: 12px; border: 1px solid;">
                         🏆 Điểm: <strong id="game-my-score">0</strong>
                     </div>
 
@@ -220,7 +223,7 @@
                 </div>
 
                 <!-- Danh sách vừa bị loại vòng này -->
-                <div style="margin-top: 14px; background: rgba(0,0,0,0.35); padding: 12px; border-radius: 12px; font-size: 14px; text-align: left; border: 1px solid rgba(220,38,38,0.2);">
+                <div class="vm-summary-box" style="margin-top: 14px; padding: 12px; border-radius: 12px; font-size: 14px; text-align: left; border: 1px solid;">
                     <span style="color: #ef4444; font-weight: 800;">💀 Đấu thủ vừa bị loại vòng này:</span>
                     <span id="eliminated-list" style="color: #cbd5e1; margin-left: 8px;">Không có ai</span>
                 </div>

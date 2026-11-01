@@ -3,13 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chiếc Nón Kỳ Diệu - Gameshow VTV3</title>
+    <title>Chiếc Nón Kỳ Diệu · Vũ Môn Tranh Hùng</title>
     <link rel="stylesheet" href="wheel_theme.css">
     <link rel="stylesheet" href="room_notices.css">
 <link rel="stylesheet" href="/system_client.css">
 <script src="/system_client.js" defer></script>
+<link rel="icon" type="image/svg+xml" href="/assets/brand/vu-mon-crest.svg">
+<link rel="stylesheet" href="/vm_theme.css">
+<script src="/vm_theme.js" defer></script>
 </head>
-<body>
+<body class="vm-theme vm-game vm-wheel">
     <div id="room-notices" class="room-notices" role="log" aria-live="polite" aria-relevant="additions"></div>
     <div class="wheel-app">
         <!-- HEADER TRƯỜNG QUAY -->
@@ -182,7 +185,7 @@
 
             <!-- KHUNG LỊCH SỬ THAO TÁC / CHAT TRƯỜNG QUAY -->
             <div style="width:100%; text-align:left; margin-bottom:6px;">
-                <span style="font-size:13px; font-weight:700; color:#94a3b8;">📢 Nhật ký trường quay:</span>
+                <span class="wheel-log-title" style="font-size:13px; font-weight:700;">📢 Nhật ký trường quay:</span>
             </div>
             <div class="wheel-log-box" id="wheel-chat-box">
                 <div><i>Chào mừng đến với Chiếc Nón Kỳ Diệu!</i></div>
@@ -204,7 +207,7 @@
                     Đã giải mã thành công ô chữ!
                 </p>
 
-                <div style="background:#09132b; border:1px solid #1e3a8a; border-radius:10px; padding:12px 20px; width:100%; margin-bottom:20px;">
+                <div class="vm-summary-box" style="border:1px solid; border-radius:10px; padding:12px 20px; width:100%; margin-bottom:20px;">
                     <div style="font-size:13px; color:#94a3b8;">Ô chữ trọn vẹn:</div>
                     <div id="end-full-phrase" style="font-size:24px; font-weight:900; color:#38bdf8; letter-spacing:2px; margin-top:4px;">
                         ...

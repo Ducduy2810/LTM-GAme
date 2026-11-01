@@ -232,11 +232,15 @@ public final class AdminStore {
         try(Connection c=connect()){List<Map<String,Object>> found=rows(c,"SELECT * FROM matches WHERE id=?",id);if(found.isEmpty())throw new IllegalArgumentException("Không tìm thấy trận.");return Map.of("match",found.get(0),"players",rows(c,"SELECT username,score,placement,outcome FROM match_players WHERE match_id=? ORDER BY placement,score DESC",id));}
     }
     public static List<Map<String,Object>> logs(String query,int offset) throws SQLException {try(Connection c=connect()){return rows(c,"SELECT * FROM admin_audit_logs WHERE actor LIKE ? OR action LIKE ? OR target LIKE ? ORDER BY id DESC LIMIT 50 OFFSET ?","%"+query+"%","%"+query+"%","%"+query+"%",offset);}}
-    @SuppressWarnings("unchecked")
-    public static Map<String,Object> settings() throws SQLException {
+    private static Map<String,Object> runtimeDefaults(){
         Map<String,Object> result=new LinkedHashMap<>();result.put("maintenance",false);result.put("maintenanceUntil",0L);result.put("message","Máy chủ đang bảo trì. Vui lòng quay lại sau.");
         result.put("enabled",Map.of("ARENA",true,"WHEEL",true,"SURVIVAL",true));
         result.put("defaults",Map.of("ARENA",Map.of("questionCount",10,"timeLimit",5,"mainPlayerTimeLimit",15,"botCount",0),"WHEEL",Map.of("timeLimit",10,"botCount",0),"SURVIVAL",Map.of("startingHp",100,"totalRounds",25)));
+        return result;
+    }
+    @SuppressWarnings("unchecked")
+    public static Map<String,Object> settings() throws SQLException {
+        Map<String,Object> result=runtimeDefaults();
         try(Connection c=connect();PreparedStatement ps=c.prepareStatement("SELECT value FROM app_settings WHERE key='runtime'" );ResultSet rs=ps.executeQuery()){if(rs.next())result.putAll((Map<String,Object>)JsonUtil.parse(rs.getString(1)));}
         long until=((Number)result.get("maintenanceUntil")).longValue();
         if(until>0&&System.currentTimeMillis()>=until)result.put("maintenance",false);
@@ -296,8 +300,28 @@ public final class AdminStore {
     private static void range(Map<?,?> v,String key,int min,int max){if(!(v.get(key) instanceof Number n)||n.doubleValue()!=n.intValue()||n.intValue()<min||n.intValue()>max)throw new IllegalArgumentException(key+" phải trong khoảng "+min+"–"+max);}
     public static String backup(String actor) throws Exception {
         Path folder=Path.of("data/backups");Files.createDirectories(folder);String name="admin-"+System.currentTimeMillis()+"-"+UUID.randomUUID().toString().substring(0,8)+".db";
-        try(Connection c=connect();PreparedStatement ps=c.prepareStatement("VACUUM INTO ?")){ps.setString(1,folder.resolve(name).toString());ps.execute();}
+        Path staging=folder.resolve("snapshot-"+UUID.randomUUID()+".tmp");
+        try{
+            try(Connection c=connect();PreparedStatement ps=c.prepareStatement("VACUUM INTO ?")){ps.setString(1,staging.toString());ps.execute();}
+            // Fill implicit defaults from the copied database, never from the changing live database.
+            try(Connection c=DriverManager.getConnection("jdbc:sqlite:"+staging.toAbsolutePath())){
+                try(Statement st=c.createStatement()){st.execute("PRAGMA journal_mode=DELETE");}
+                c.setAutoCommit(false);
+                for(var entry:backupDefaults().entrySet()){
+                    Map<String,Object> value=new LinkedHashMap<>(entry.getValue());
+                    var stored=rows(c,"SELECT value FROM app_settings WHERE key=?",entry.getKey());
+                    if(!stored.isEmpty())value.putAll(JsonUtil.parseObject((String)stored.get(0).get("value")));
+                    try(PreparedStatement ps=c.prepareStatement("INSERT INTO app_settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")){ps.setString(1,entry.getKey());ps.setString(2,JsonUtil.toJson(value));ps.executeUpdate();}
+                }
+                try(PreparedStatement ps=c.prepareStatement("INSERT INTO app_settings(key,value) VALUES('backup_manifest',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")){ps.setString(1,JsonUtil.toJson(Map.of("formatVersion",1,"createdAt",System.currentTimeMillis())));ps.executeUpdate();}
+                c.commit();
+            }
+            Files.move(staging,folder.resolve(name),StandardCopyOption.ATOMIC_MOVE);
+        }finally{Files.deleteIfExists(staging);}
         audit(actor,"DATABASE_BACKUP",name,Map.of());return name;
+    }
+    private static Map<String,Map<String,Object>> backupDefaults(){
+        Map<String,Map<String,Object>> defaults=new LinkedHashMap<>();defaults.put("runtime",runtimeDefaults());defaults.put("race_settings",RaceStore.defaultSettings());defaults.put("announcement",Map.of("enabled",false,"text","","expiresAt",0));return defaults;
     }
     public static String uploadBackup(String actor,byte[] data)throws Exception{
         byte[] magic="SQLite format 3\0".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
@@ -336,7 +360,8 @@ public final class AdminStore {
     /** Only explicitly supported settings are read; application data is never imported. */
     public static Map<String,Object> backupConfiguration(String name)throws Exception{
         Path file=backupPath(name);String fingerprint=fileFingerprint(file);
-        Map<String,Map<String,Object>> values=new LinkedHashMap<>(),current=new LinkedHashMap<>();List<String> warnings=new ArrayList<>();
+        Map<String,Map<String,Object>> values=new LinkedHashMap<>(),snapshot=new LinkedHashMap<>(),current=new LinkedHashMap<>();List<String> warnings=new ArrayList<>();
+        long createdAt=Files.getLastModifiedTime(file).toMillis();
         try(Connection c=DriverManager.getConnection("jdbc:sqlite:"+file.toUri()+"?mode=ro&immutable=1");Statement st=c.createStatement()){
             st.execute("PRAGMA trusted_schema=OFF");
             try(ResultSet rs=st.executeQuery("PRAGMA quick_check")){if(!rs.next()||!"ok".equals(rs.getString(1))||rs.next())throw new IllegalArgumentException("File dữ liệu bị lỗi.");}
@@ -344,6 +369,16 @@ public final class AdminStore {
             Map<String,String> source=new HashMap<>();
             for(var row:rows(c,"SELECT key,value FROM app_settings WHERE key IN ('runtime','race_settings','announcement')")){
                 String key=(String)row.get("key");if(source.put(key,(String)row.get("value"))!=null)throw new IllegalArgumentException("File chứa cấu hình trùng lặp.");
+            }
+            var manifest=rows(c,"SELECT value FROM app_settings WHERE key='backup_manifest'");
+            if(!manifest.isEmpty()){Object time=JsonUtil.parseObject((String)manifest.get(0).get("value")).get("createdAt");if(time instanceof Number n)createdAt=n.longValue();}
+            boolean implicitDefaults=!rows(c,"SELECT 1 FROM app_settings WHERE key='race_questions_seeded' AND value='true'").isEmpty();
+            for(var entry:backupDefaults().entrySet()){
+                if(!source.containsKey(entry.getKey())&&!implicitDefaults)continue;
+                Map<String,Object> frozen=new LinkedHashMap<>(entry.getValue());
+                if(source.containsKey(entry.getKey()))frozen.putAll(JsonUtil.parseObject(source.get(entry.getKey())));
+                else warnings.add("Bản sao lưu cũ chưa ghi tường minh nhóm "+switch(entry.getKey()){case "race_settings"->"Đường đua (mặc định 10 câu)";case "runtime"->"máy chủ";default->"thông báo";}+"; dùng giá trị mặc định, không lấy cấu hình máy chủ hiện tại.");
+                source.put(entry.getKey(),JsonUtil.toJson(frozen));snapshot.put(entry.getKey(),frozen);
             }
             for(String key:List.of("runtime","race_settings","announcement"))if(source.containsKey(key)){
                 Map<String,Object> input=JsonUtil.parseObject(source.get(key)),value;
@@ -372,7 +407,7 @@ public final class AdminStore {
         }catch(SQLException|ClassCastException|NullPointerException e){throw new IllegalArgumentException("Không đọc được cấu hình hợp lệ từ file dữ liệu.");}
         if(values.isEmpty())throw new IllegalArgumentException("File không có cấu hình máy chủ, Đường đua hoặc thông báo để áp dụng.");
         if(!fingerprint.equals(fileFingerprint(file)))throw new IllegalArgumentException("File đã thay đổi. Hãy mở lại phần xem trước.");
-        return Map.of("name",name,"fingerprint",fingerprint,"values",values,"current",current,"warnings",warnings);
+        return Map.of("name",name,"createdAt",createdAt,"fingerprint",fingerprint,"snapshot",snapshot,"values",values,"current",current,"warnings",warnings);
     }
     @SuppressWarnings("unchecked")
     public static synchronized Map<String,Object> applyBackupConfiguration(String actor,String name,String fingerprint)throws Exception{

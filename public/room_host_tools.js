@@ -1,8 +1,27 @@
 (() => {
   'use strict';
-  let panel,trackedRoom='',roomState='WAITING',players=[],hostUsername='';
-  function hide(reset=false){if(panel)panel.hidden=true;if(reset){trackedRoom='';players=[];hostUsername='';roomState='WAITING';}}
+  let panel,trackedRoom='',roomState='WAITING',players=[],hostUsername='',approved=false,lastContext=null;
+  function hide(reset=false){if(panel)panel.hidden=true;if(reset){trackedRoom='';players=[];hostUsername='';roomState='WAITING';approved=false;}}
+  const active=()=>Boolean(trackedRoom)&&!['WAITING','END','CLOSED'].includes(roomState);
+  function confirmLeave(){
+    if(!active()||approved)return true;
+    const onlyMe=players.filter(p=>!p.isBot).length===1;
+    approved=confirm(onlyMe?'Rời trận đang chơi? Trận sẽ bị hủy và không tính thành tích.':'Rời trận đang chơi? Bạn sẽ bị ghi nhận bỏ cuộc, không tính điểm hoặc chiến thắng của trận này và không thể vào lại trận đang diễn ra.');
+    return approved;
+  }
+  window.MatchLeaveGuard={confirmLeave,reset:()=>hide(true),active};
+  document.addEventListener('click',event=>{
+    const target=event.target.closest?.('button,a');if(!target||!active())return;
+    const leaveButton=['btn-leave-room','btn-end-leave','btn-game-leave','btn-result-leave','btn-leave-game-ingame','btn-leave-result-ingame'].includes(target.id);
+    const navigation=target.tagName==='A'&&target.hasAttribute('href')&&target.target!=='_blank'&&!target.hasAttribute('download')&&new URL(target.href,location.href).pathname!==location.pathname;
+    if(!leaveButton&&!navigation)return;
+    if(!confirmLeave()){event.preventDefault();event.stopImmediatePropagation();return;}
+    if(navigation&&lastContext)lastContext.send({type:{arena:'leave_room',wheel:'leave_wheel_room',survival:'leave_survival_room'}[lastContext.game]});
+  },true);
+  window.addEventListener('beforeunload',event=>{if(active()&&!approved){event.preventDefault();event.returnValue='';}});
   window.RoomHostTools={observe(data,context){
+    lastContext=context;
+    if(data.type==='match_forfeited')window.SystemClient?.showDeparture(data);
     if(data.explanation){
       const screen=document.getElementById(data.type==='wheel_end_game'?'end-screen':'result-screen');
       if(screen){let note=screen.querySelector('.learning-explanation');if(!note){note=document.createElement('p');note.className='learning-explanation';screen.append(note);}note.textContent='Lời giải: '+data.explanation;}
@@ -12,7 +31,7 @@
     if(data.cancelled&&['arena_room_closed','survival_room_closed','left_wheel_room'].includes(data.type))window.SystemClient?.showCancellation(data);
     if(data.type==='room_kicked')window.SystemClient?.showKick(data);
     if(data.type==='server_notice'||(data.type==='left_wheel_room'&&data.message))window.RoomNotices?.show({username:'Thông báo',message:data.message});
-    if(['left_room_success','left_wheel_room','left_survival_room','arena_room_closed','survival_room_closed','auth_error','room_kicked'].includes(data.type)){hide(true);return;}
+    if(['left_room_success','left_wheel_room','left_survival_room','left_survival_room_success','survival_left_room_success','arena_room_closed','survival_room_closed','auth_error','room_kicked'].includes(data.type)){hide(true);return;}
     if(data.roomCode&&context.roomCode&&data.roomCode!==context.roomCode&&!data.type.endsWith('_room_info')&&data.type!=='room_info')return;
     const code=data.roomCode||context.roomCode;
     if(!code||!context.currentUsername)return;

@@ -1,0 +1,6 @@
+? B?ng SQLite ?� s?n s�ng (users, leaderboard)
+? SQLite ?� k?t n?i: C:\Users\admin\Documents\ki1nam4\LTM-thayQuyen\LTM-GAme-main\scratch\presence-test-c4d0bd6a2cb1404995aaaa6c4355cd29\data\game.db
+? [Java Server] ?ang l?ng nghe k?t n?i t?i c?ng 0 (0.0.0.0)
+PASS: 36 real WebSocket presence, all-game disconnect and heartbeat checks.
+? ?� t?i leaderboard: 0 ng??i ch?i t? SQLite.
+? SQLite connection ?� ?�ng.

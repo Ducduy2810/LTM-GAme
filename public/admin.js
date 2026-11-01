@@ -5,10 +5,11 @@
   const gameNames={ARENA:'Đấu Trường 100',WHEEL:'Chiếc Nón Kỳ Diệu',SURVIVAL:'Đấu Trường Sinh Tử'};
   const rankTierNames={BRONZE:'Đồng',SILVER:'Bạc',GOLD:'Vàng',PLATINUM:'Bạch Kim',DIAMOND:'Kim Cương'};
   const statusNames={ACTIVE:'Đang chơi',WAITING:'Đang chờ',STARTING:'Chuẩn bị',QUESTION:'Trả lời',RESULT:'Kết quả',PLAYING:'Đang chơi',END:'Kết thúc',COMPLETED:'Hoàn thành',CANCELLED:'Đã hủy',INTERRUPTED:'Gián đoạn',PUBLISHED:'Đã xuất bản',DRAFT:'Bản nháp',ARCHIVED:'Đã ẩn'};
-  const titles={overview:['Tổng quan hệ thống','Một góc nhìn xuyên suốt về thế giới Vũ Môn.'],users:['Quản lý người chơi','Tra cứu tài khoản, khóa/mở khóa và kết thúc phiên đăng nhập.'],rooms:['Phòng & trận trực tiếp','Theo dõi người chơi, gửi thông báo và điều hành các phòng.'],questions:['Ngân hàng câu hỏi','Quản lý câu hỏi, đáp án và lời giải dùng cho lượt chơi mới.'],wheel:['Ngân hàng ô chữ','Quản lý ô chữ, gợi ý và kiến thức bổ sung.'],topics:['Chủ đề kiến thức','Sắp xếp nội dung học tập theo các chủ đề có thể bật hoặc ẩn.'],matches:['Lịch sử trận đấu','Tra cứu kết quả và nội dung đã được dùng trong từng trận.'],logs:['Nhật ký quản trị','Lưu vết thao tác của quản trị viên và các lần kick của chủ phòng.'],settings:['Cấu hình & bảo trì','Điều chỉnh hoạt động máy chủ và cấu hình mặc định phòng mới.'],backups:['Sao lưu dữ liệu','Tạo và tải các bản sao nhất quán của cơ sở dữ liệu.'],account:['Tài khoản quản trị','Quản lý mật khẩu và phiên đăng nhập riêng.']};
+  const titles={overview:['Tổng quan hệ thống','Một góc nhìn xuyên suốt về thế giới Vũ Môn Tranh Hùng.'],users:['Quản lý người chơi','Tra cứu tài khoản, khóa/mở khóa và kết thúc phiên đăng nhập.'],rooms:['Phòng & trận trực tiếp','Theo dõi người chơi, gửi thông báo và điều hành các phòng.'],questions:['Ngân hàng câu hỏi','Quản lý câu hỏi, đáp án và lời giải dùng cho lượt chơi mới.'],wheel:['Ngân hàng ô chữ','Quản lý ô chữ, gợi ý và kiến thức bổ sung.'],topics:['Chủ đề kiến thức','Sắp xếp nội dung học tập theo các chủ đề có thể bật hoặc ẩn.'],matches:['Lịch sử trận đấu','Tra cứu kết quả và nội dung đã được dùng trong từng trận.'],logs:['Nhật ký quản trị','Lưu vết thao tác của quản trị viên và các lần kick của chủ phòng.'],settings:['Cấu hình & bảo trì','Điều chỉnh hoạt động máy chủ và cấu hình mặc định phòng mới.'],backups:['Sao lưu dữ liệu','Tạo và tải các bản sao nhất quán của cơ sở dữ liệu.'],account:['Tài khoản quản trị','Quản lý mật khẩu và phiên đăng nhập riêng.']};
   let csrf='',username='',view='overview',seq=0,topics=[],contentKind='QUESTION',editor=null,action=null,previewCsv=null,backupConfig=null;
   titles.announcements=['Thông báo toàn server','Phát hoặc tắt dòng chữ chạy trên toàn bộ giao diện người chơi.'];
   titles.integrations=['Google & Email','Kiểm tra cấu hình đăng nhập và kết nối gửi thư từ chính máy server.'];
+  titles.users[1]='Trạng thái tài khoản và kết nối online/offline được hiển thị riêng. Tự cập nhật mỗi 3 giây khi đang xem trang.';
   titles.race=['Đường đua & Rank','Điều hành ghép trận, phòng thi đấu, điểm RP và thẻ.'];
   titles.leaderboard=['Bảng xếp hạng toàn server','Tra cứu thứ hạng, rank và RP của toàn bộ người chơi đã có trận xếp hạng.'];
   const offsets={users:0,matches:0,logs:0,leaderboard:0};
@@ -122,7 +123,7 @@
     actionDialog(`${titles[type]} · ${user.username}`,type==='lock'?'Tài khoản sẽ bị đăng xuất và không thể đăng nhập trong thời gian khóa.':type==='disconnect'?'Tất cả phiên chơi và kết nối của tài khoản sẽ bị kết thúc.':'Cho phép tài khoản đăng nhập trở lại.',async(reason,minutes)=>{await api('/users/action',{userId:user.id,action:type,reason,minutes});},type==='lock');
   }
   function renderUsers(rows){
-    table($('users-table'),[['Tài khoản',r=>textMeta(r.username,r.email||'Không có email')],['Quyền',r=>r.role==='admin'?'Quản trị viên':'Người chơi'],['Trạng thái',r=>{const blocked=Number(r.blocked_until)===-1||Number(r.blocked_until)>Date.now();return textMeta(blocked?'Đã khóa':'Hoạt động',blocked?(Number(r.blocked_until)===-1?'Đến khi mở thủ công':date(r.blocked_until)):'');}],['Thao tác',r=>r.role==='admin'?el('span','Tài khoản quản trị riêng','muted'):group(button('Lịch sử',()=>{$('matches-query').value=r.username;offsets.matches=0;show('matches');}),button('Ngắt phiên',()=>userAction(r,'disconnect')),button(Number(r.blocked_until)===-1||Number(r.blocked_until)>Date.now()?'Mở khóa':'Khóa',()=>userAction(r,Number(r.blocked_until)===-1||Number(r.blocked_until)>Date.now()?'unlock':'lock'),'danger'))]],rows);
+    table($('users-table'),[['Tài khoản',r=>textMeta(r.username,r.email||'Không có email')],['Quyền',r=>r.role==='admin'?'Quản trị viên':'Người chơi'],['Trạng thái tài khoản',r=>{const blocked=Number(r.blocked_until)===-1||Number(r.blocked_until)>Date.now();return textMeta(blocked?'Bị khóa':'Được phép đăng nhập',blocked?(Number(r.blocked_until)===-1?'Đến khi mở thủ công':date(r.blocked_until)):'');}],['Kết nối người chơi',r=>r.role==='admin'?el('span','Phiên quản trị riêng','muted'):el('span',r.online?'● Online':'○ Offline','presence-badge '+(r.online?'is-online':'is-offline'))],['Thao tác',r=>r.role==='admin'?el('span','Tài khoản quản trị riêng','muted'):group(button('Lịch sử',()=>{$('matches-query').value=r.username;offsets.matches=0;show('matches');}),button('Ngắt phiên',()=>userAction(r,'disconnect')),button(Number(r.blocked_until)===-1||Number(r.blocked_until)>Date.now()?'Mở khóa':'Khóa',()=>userAction(r,Number(r.blocked_until)===-1||Number(r.blocked_until)>Date.now()?'unlock':'lock'),'danger'))]],rows);
     pagination('users',rows.length);
   }
   function roomAction(room,type,target=''){
@@ -165,9 +166,124 @@
   async function showRevisions(row){try{const data=await api('/revisions?'+new URLSearchParams({kind:contentKind,id:row.id}));const nodes=[];if(!data.items.length)nodes.push(el('p','Nội dung được nhập từ dữ liệu ban đầu; chưa có chỉnh sửa.','muted'));data.items.forEach(r=>{nodes.push(el('h3',`Phiên bản ${r.revision} · ${r.actor} · ${date(r.created_at)}`),el('pre',JSON.stringify(JSON.parse(r.payload_json),null,2)));});detail('Lịch sử phiên bản',nodes);}catch(e){notify(e.message,true);}}
   function renderTopics(rows){table($('topics-table'),[['Tên chủ đề',r=>textMeta(r.name,r.code)],['Loại',r=>r.scope==='QUESTION'?'Câu hỏi':'Ô chữ'],['Trạng thái',r=>Number(r.active)?badge('PUBLISHED'):badge('ARCHIVED')],['Thao tác',r=>button('Chỉnh sửa',()=>openTopic(r),'secondary')]],rows);}
   function openTopic(row=null){$('topic-form').reset();$('topic-scope').value=row?.scope||'QUESTION';$('topic-code').value=row?.code||'';$('topic-name').value=row?.name||'';$('topic-active').checked=row?!!Number(row.active):true;$('topic-code').readOnly=!!row;$('topic-scope').disabled=!!row;$('topic-dialog').querySelector('.dialog-error').textContent='';$('topic-dialog').showModal();}
-  async function matchDetail(id){try{const data=await api('/match?'+new URLSearchParams({id}));const players=el('div');table(players,[['Người chơi',r=>r.username],['Điểm',r=>r.score],['Thứ hạng',r=>r.placement||'—'],['Kết quả',r=>r.outcome]],data.players);detail('Chi tiết trận · '+data.match.room_code,[el('p',`${gameNames[data.match.game_type]} · ${statusNames[data.match.status]} · ${date(data.match.started_at)}`,'muted'),players,el('h3','Lý do kết thúc'),el('p',data.match.reason||'—'),el('h3','Cấu hình & nội dung tại thời điểm bắt đầu'),el('pre',JSON.stringify(JSON.parse(data.match.config_json),null,2))]);}catch(e){notify(e.message,true);}}
+  const outcomeNames={WIN:'Chiến thắng',LOSS:'Thua cuộc',DRAW:'Hòa',LEFT:'Đã rời trận',FORFEITED:'Bỏ cuộc · Không tính thành tích',KICKED:'Bị mời rời phòng',CANCELLED:'Trận đã hủy',INTERRUPTED:'Trận bị gián đoạn'};
+  const auditNames={ADMIN_LOGIN:'Đăng nhập quản trị',ADMIN_LOGIN_FAILED:'Đăng nhập quản trị thất bại',ADMIN_LOGOUT:'Đăng xuất quản trị',ADMIN_PASSWORD_CHANGE:'Đổi mật khẩu quản trị',ADMIN_BOOTSTRAP:'Khởi tạo quản trị viên',ADMIN_LOCAL_GENERATE:'Tạo tài khoản quản trị tại máy chủ',ADMIN_LOCAL_SETUP:'Thiết lập tài khoản quản trị',PLAYER_PASSWORD_CHANGE:'Người chơi đổi mật khẩu',USER_LOCK:'Khóa tài khoản người chơi',USER_UNLOCK:'Mở khóa tài khoản người chơi',USER_DISCONNECT:'Ngắt phiên đăng nhập người chơi',TOPIC_SAVE:'Lưu chủ đề kiến thức',CONTENT_SAVE:'Lưu câu hỏi / ô chữ',CONTENT_IMPORT:'Nhập câu hỏi / ô chữ từ CSV',SETTINGS_SAVE:'Cập nhật cấu hình máy chủ',DATABASE_BACKUP:'Tạo bản sao lưu dữ liệu',BACKUP_UPLOAD:'Tải bản sao lưu lên máy chủ',BACKUP_DOWNLOAD:'Tải bản sao lưu về máy',BACKUP_CONFIG_APPLY:'Áp dụng cấu hình từ bản sao lưu',SERVER_ANNOUNCE:'Phát thông báo toàn máy chủ',SERVER_ANNOUNCEMENT_CLEAR:'Tắt thông báo toàn máy chủ',SMTP_CONNECTION_TEST:'Kiểm tra kết nối gửi email',ADMIN_KICK:'Quản trị viên mời người chơi rời phòng',HOST_KICK:'Chủ phòng mời người chơi rời phòng',HOST_ROOM_DELETE:'Chủ phòng xóa phòng',RACE_SETTINGS:'Cập nhật cấu hình Đường đua & Rank',RACE_SERVICE_SETTINGS:'Cập nhật dịch vụ Đường đua',DAILY_SETTINGS:'Cập nhật thử thách hằng ngày',RACE_SETRANK:'Điều chỉnh rank và điểm RP',RACE_SETCARDS:'Điều chỉnh thẻ của người chơi',RACE_RESETDAILY:'Cấp lại lượt thử thách hằng ngày'};
+  const detailLabels={topic:'Chủ đề',difficulty:'Độ khó',questionCount:'Số câu hỏi',botCount:'Số người chơi máy',timeLimit:'Thời gian mỗi lượt',mainPlayerTimeLimit:'Thời gian lượt người chơi chính',startingHp:'Máu khởi đầu',totalRounds:'Số vòng đấu',phrase:'Đáp án ô chữ',hint:'Gợi ý',explanation:'Lời giải / kiến thức bổ sung',questions:'Danh sách câu hỏi',text:'Nội dung',options:'Các lựa chọn',correct:'Đáp án đúng',id:'Mã bản ghi',remote:'Địa chỉ kết nối đến máy chủ',reason:'Lý do',minutes:'Thời hạn',target:'Người chơi bị tác động',targetUsername:'Người chơi bị tác động',success:'Kết quả thực hiện',code:'Mã thông báo',state:'Trạng thái phòng',operation:'Cách thiết lập',count:'Số nội dung đã nhập',name:'Tên hiển thị',scope:'Loại nội dung',active:'Cho phép sử dụng',status:'Trạng thái',revision:'Phiên bản',kind:'Loại nội dung',usage:'Phạm vi sử dụng',rankTier:'Bộ câu hỏi bậc rank',rank_tier:'Bộ câu hỏi bậc rank',maintenance:'Chế độ bảo trì',maintenanceUntil:'Thời điểm kết thúc bảo trì',maintenanceHours:'Thời lượng bảo trì',message:'Nội dung thông báo',enabled:'Cho phép hoạt động',defaults:'Cấu hình mặc định các trò chơi',rankedEnabled:'Cho phép đấu xếp hạng',dailyEnabled:'Cho phép thử thách hằng ngày',queueSeconds:'Thời gian chờ ghép trận',targetPlayers:'Số người chơi mỗi trận',dailyTimeLimit:'Thời gian mỗi câu thử thách ngày',dailyCorrect:'Số câu đúng để nhận thưởng',firstRP:'RP hạng nhất',secondRP:'RP hạng nhì',duelSecondRP:'RP hạng nhì khi đấu hai người',thirdRP:'RP hạng ba',fourthRP:'RP hạng tư',rankBuffer:'Khoảng điểm ghép rank',demotionRP:'RP sau khi xuống hạng',shieldReward:'Thẻ bảo vệ được thưởng',doubleReward:'Thẻ nhân đôi RP được thưởng',expiresAt:'Thời điểm hết hạn',updatedAt:'Thời điểm cập nhật',updated_at:'Thời điểm cập nhật',size:'Dung lượng file',groups:'Nhóm cấu hình được áp dụng',safetyBackup:'Bản sao lưu an toàn trước khi áp dụng',before:'Dữ liệu trước khi thay đổi',request:'Nội dung điều chỉnh',rank:'Xếp hạng',cards:'Thẻ hỗ trợ',daily:'Lượt thử thách hằng ngày',step:'Bậc / cấp rank',rp:'Điểm RP trong cấp',shields:'Thẻ bảo vệ',doubles:'Thẻ nhân đôi RP',username:'Tên tài khoản',user_id:'Mã người chơi',userId:'Mã người chơi',action:'Thao tác',current_step:'Bậc / cấp rank hiện tại',highest_step:'Bậc / cấp rank cao nhất',current_tier:'Bậc rank hiện tại',highest_tier:'Bậc rank cao nhất',current_points:'Điểm RP hiện tại',highest_points:'Điểm RP cao nhất',day:'Ngày thử thách',match_id:'Mã trận đấu',rewarded:'Đã nhận thưởng',roomCode:'Mã phòng',game:'Trò chơi',mode:'Chế độ chơi',mainSelectionMode:'Cách chọn người chơi chính',mainPlayerUsername:'Người chơi chính'};
+  const readableEnums={...gameNames,...rankTierNames,...statusNames,...outcomeNames,ALL:'Tất cả chủ đề',NETWORKING:'Lập trình mạng',GENERAL:'Kiến thức tổng hợp',SCIENCE:'Khoa học',HISTORY:'Lịch sử',GEOGRAPHY:'Địa lý',SPORTS:'Thể thao',TECHNOLOGY:'Công nghệ',EASY:'Dễ',MEDIUM:'Trung bình',HARD:'Khó',INCREASING:'Tăng dần',RANDOM:'Ngẫu nhiên',MANUAL:'Chọn thủ công',QUESTION:'Câu hỏi trắc nghiệm',LEGACY:'Ba game ban đầu và Phòng học',RACE:'Đường đua Kiến thức',BOTH:'Cả ba game ban đầu và Đường đua',RANKED:'Đấu xếp hạng',CASUAL:'Đấu thường',BOT:'Chơi với máy',DAILY:'Thử thách hằng ngày',UNRANKED:'Chưa xếp hạng',CLOSED:'Đã đóng',NONE:'Không có',lock:'Khóa tài khoản',unlock:'Mở khóa tài khoản',disconnect:'Ngắt phiên',setRank:'Điều chỉnh rank và RP',setCards:'Điều chỉnh thẻ',resetDaily:'Cấp lại lượt thử thách',runtime:'Cấu hình máy chủ',race_settings:'Đường đua & Rank',announcement:'Thông báo toàn máy chủ','--create':'Tạo tài khoản','--reset':'Đặt lại mật khẩu','requested-local-setup':'Thiết lập tại máy chủ theo yêu cầu',SMTP_CONFIG:'Cấu hình gửi email chưa hợp lệ',SMTP_CONNECT:'Không kết nối được máy chủ email',SMTP_AUTH:'Xác thực email thất bại',SMTP_TLS:'Không thiết lập được kết nối email bảo mật'};
+  Object.assign(auditNames,{RACE_CANCEL:'Hủy trận Đường đua',RACE_KICK:'Mời người chơi rời trận Đường đua',RACE_NOTICE:'Gửi thông báo đến trận Đường đua',RACE_DEQUEUE:'Xóa người chơi khỏi hàng chờ ghép trận'});
+  Object.assign(detailLabels,{matchId:'Mã trận đấu',publishedAt:'Thời điểm phát thông báo',publishedBy:'Người phát thông báo',enabledGames:'Trò chơi được phép hoạt động'});
+  Object.assign(readableEnums,{IT:'Công nghệ thông tin',CULTURE:'Văn hóa',LITERATURE:'Văn học',MATH:'Toán học',MUSIC:'Âm nhạc',cancel:'Hủy trận đấu',kick:'Mời người chơi rời phòng',notice:'Gửi thông báo',dequeue:'Xóa khỏi hàng chờ ghép trận',SMTP_PROTOCOL:'Phản hồi từ máy chủ email chưa hợp lệ',SMTP_RECIPIENT:'Địa chỉ nhận email chưa hợp lệ',SMTP_SEND:'Kết nối bị gián đoạn khi gửi email',SMTP_REJECTED:'Máy chủ email từ chối yêu cầu'});
+  function parsedDetails(value){
+    if(typeof value!=='string')return value??{};
+    try{return JSON.parse(value);}catch{return null;}
+  }
+  function humanWords(value){return String(value).replace(/([a-z])([A-Z])/g,'$1 $2').replace(/[_-]+/g,' ').toLocaleLowerCase('vi-VN');}
+  function fieldLabel(key){return detailLabels[key]||gameNames[key]||humanWords(key);}
+  function readableValue(key,value){
+    if(value===null||value===undefined||value==='')return 'Chưa ghi nhận';
+    if(typeof value==='boolean')return key==='success'?(value?'Thành công':'Thất bại'):(value?'Có':'Không');
+    if(['active','rewarded'].includes(key)&&[0,1].includes(value))return value?'Có':'Không';
+    if(['maintenanceUntil','expiresAt','updatedAt','updated_at','publishedAt'].includes(key))return Number(value)>0?date(value):'Không đặt thời hạn';
+    if(['timeLimit','mainPlayerTimeLimit','queueSeconds','dailyTimeLimit'].includes(key))return value+' giây';
+    if(key==='maintenanceHours')return value+' giờ';
+    if(key==='minutes')return Number(value)===-1?'Đến khi mở khóa thủ công':Number(value)===0?'Không đặt thời hạn':value+' phút';
+    if(key==='size')return (Number(value)/1024).toLocaleString('vi-VN',{maximumFractionDigits:1})+' KB';
+    if(['step','current_step','highest_step'].includes(key)&&Number(value)===15)return 'Cao Thủ';
+    if(['step','current_step','highest_step'].includes(key)&&Number.isInteger(Number(value))&&Number(value)>=0&&Number(value)<15)return ['Đồng','Bạc','Vàng','Bạch Kim','Kim Cương'][Math.floor(Number(value)/3)]+' '+(3-Number(value)%3);
+    if(key==='remote'&&['::1','0:0:0:0:0:0:0:1','127.0.0.1'].includes(value))return 'Kết nối nội bộ máy chủ ('+value+')';
+    if(key==='topic')return topics.find(t=>t.code===value)?.name||readableEnums[value]||String(value);
+    // Free text and identifiers must keep their original contents.
+    if(['text','phrase','hint','explanation','reason','message','username','target','targetUsername','name','id','userId','user_id','match_id','roomCode','safetyBackup'].includes(key))return String(value);
+    return readableEnums[value]||String(value);
+  }
+  function detailSection(title,...nodes){const section=el('section',undefined,'detail-section');section.append(el('h3',title),...nodes);return section;}
+  function factGrid(entries){
+    const grid=el('dl',undefined,'detail-facts');
+    for(const [label,value] of entries){const field=el('div',undefined,'detail-field');field.append(el('dt',label),value instanceof Node?value:el('dd',value));grid.append(field);}
+    return grid;
+  }
+  function readableFields(value){
+    if(value===null)return el('p','Thông tin đã lưu không đọc được.','muted');
+    if(Array.isArray(value)){
+      if(!value.length)return el('p','Không có dữ liệu được ghi nhận.','muted');
+      if(value.length===1&&value[0]&&typeof value[0]==='object')return readableFields(value[0]);
+      const list=el('div',undefined,'detail-stack');value.forEach((item,index)=>list.append(item&&typeof item==='object'?detailSection('Mục '+(index+1),readableFields(item)):el('p',readableValue('',item))));return list;
+    }
+    if(typeof value!=='object')return el('p',readableValue('',value));
+    const entries=Object.entries(value),root=el('div',undefined,'detail-stack');
+    if(!entries.length){root.append(el('p','Không có thông tin bổ sung được ghi nhận.','muted'));return root;}
+    const fields=[],nested=[];
+    for(const [key,item] of entries){
+      if(item!==null&&typeof item==='object')nested.push(detailSection(fieldLabel(key),readableFields(item)));
+      else fields.push([fieldLabel(key),key==='correct'&&Number.isInteger(item)&&Array.isArray(value.options)&&item>=0&&item<value.options.length?String.fromCharCode(65+item)+' · '+value.options[item]:readableValue(key,item)]);
+    }
+    if(fields.length)root.append(factGrid(fields));root.append(...nested);return root;
+  }
+  function matchSnapshot(config,game){
+    if(!config||typeof config!=='object'||Array.isArray(config))return el('p','Chưa có cấu hình hợp lệ được lưu cho trận này.','muted');
+    const root=el('div',undefined,'detail-stack');
+    const settings=Object.fromEntries(Object.entries(config).filter(([key])=>!['questions','phrase','hint','explanation'].includes(key)));
+    root.append(detailSection('Thiết lập trận đấu',readableFields(settings)));
+    if(game==='WHEEL'||Object.hasOwn(config,'phrase'))root.append(detailSection('Ô chữ của trận đấu',factGrid(['phrase','hint','explanation'].map(key=>[fieldLabel(key),readableValue(key,config[key])]))));
+    if(Array.isArray(config.questions)){
+      const content=detailSection('Nội dung câu hỏi đã sử dụng · '+config.questions.length+' câu');
+      config.questions.forEach((q,index)=>{
+        if(!q||typeof q!=='object'){content.append(el('p','Câu '+(index+1)+': nội dung lưu chưa hợp lệ.','muted'));return;}
+        const item=el('details',undefined,'detail-question');item.open=index===0;
+        item.append(el('summary','Câu '+(index+1)+' · '+(q.text||'Chưa có nội dung')));
+        item.append(factGrid([['Chủ đề',readableValue('topic',q.topic)],['Độ khó',readableValue('difficulty',q.difficulty)]]));
+        const options=el('ol',undefined,'detail-options'),answers=Array.isArray(q.options)?q.options:[],correct=q.correct;
+        answers.forEach((answer,i)=>{const option=el('li',undefined,i===correct?'correct-option':'');option.append(el('span',String.fromCharCode(65+i),'option-letter'),el('span',answer));if(i===correct)option.append(el('strong','Đáp án đúng'));options.append(option);});
+        item.append(options,el('p',Number.isInteger(correct)&&correct>=0&&correct<answers.length?'Đáp án đúng: '+String.fromCharCode(65+correct)+' · '+answers[correct]:'Đáp án đúng chưa được ghi nhận.','detail-answer'),el('p','Lời giải: '+(q.explanation||'Chưa có lời giải.'),'detail-explanation'));content.append(item);
+      });
+      root.append(content);
+    }
+    return root;
+  }
+  function auditAction(row){
+    if(['CONTENT_SAVE','CONTENT_IMPORT'].includes(row.action))return (row.action==='CONTENT_SAVE'?'Lưu ':'Nhập từ CSV · ')+(String(row.target).startsWith('WHEEL')?'ô chữ':'câu hỏi');
+    if(auditNames[row.action])return auditNames[row.action];
+    const room=/^ROOM_(CANCEL|KICK|NOTICE)_(REQUEST|DONE)$/.exec(row.action||'');
+    if(room)return {CANCEL:'Hủy phòng và trận đấu',KICK:'Mời người chơi rời phòng',NOTICE:'Gửi thông báo đến phòng'}[room[1]]+(room[2]==='REQUEST'?' · Đã yêu cầu':' · Đã hoàn tất');
+    return 'Thao tác quản trị khác';
+  }
+  function auditTarget(row){
+    const target=String(row.target||''),[kind,...rest]=target.split(':'),value=rest.join(':');
+    if(row.action==='TOPIC_SAVE'&&value)return 'Chủ đề '+readableValue('topic',value)+' · '+(kind==='WHEEL'?'Ô chữ':'Câu hỏi');
+    if(['QUESTION','WHEEL'].includes(kind)&&row.action.startsWith('CONTENT_'))return value?(kind==='WHEEL'?'Ô chữ số ':'Câu hỏi số ')+value:(kind==='WHEEL'?'Ngân hàng ô chữ':'Ngân hàng câu hỏi');
+    if(gameNames[kind]&&value)return 'Phòng '+value+' · '+gameNames[kind];
+    if(kind==='QUESTION')return value?'Câu hỏi số '+value:'Ngân hàng câu hỏi';
+    if(kind==='WHEEL'&&!value)return 'Ngân hàng ô chữ';
+    if(row.action==='RACE_DEQUEUE')return 'Người chơi '+(parsedDetails(row.details)?.targetUsername||target||'chưa ghi nhận');
+    if(['RACE_CANCEL','RACE_KICK','RACE_NOTICE'].includes(row.action))return target?'Trận Đường đua · '+target:'Trận Đường đua';
+    if(/^(USER_|RACE_SET|RACE_RESET|PLAYER_PASSWORD)/.test(row.action))return 'Tài khoản '+target;
+    return {login:'Trang đăng nhập quản trị',session:'Phiên đăng nhập quản trị',account:'Tài khoản quản trị',server:'Máy chủ'}[target]||target||'Chưa ghi nhận đối tượng';
+  }
+  function auditSummary(row){
+    const data=parsedDetails(row.details);
+    if(!data||typeof data!=='object')return 'Thông tin chi tiết chưa đọc được.';
+    if(data.reason)return 'Lý do: '+data.reason;
+    if(data.remote)return readableValue('remote',data.remote);
+    if(Object.hasOwn(data,'success'))return 'Kết quả: '+readableValue('success',data.success);
+    if(Object.hasOwn(data,'count'))return 'Đã nhập '+data.count+' nội dung.';
+    if(data.text)return data.text;
+    if(data.name)return 'Tên hiển thị: '+data.name;
+    if(data.groups)return 'Áp dụng '+data.groups.length+' nhóm cấu hình.';
+    if(row.action==='SETTINGS_SAVE')return 'Đã lưu cấu hình trò chơi và chế độ bảo trì.';
+    if(row.action==='SERVER_ANNOUNCEMENT_CLEAR')return 'Dừng hiển thị thông báo toàn máy chủ.';
+    return 'Xem thông tin của thao tác này.';
+  }
+  function auditDetail(row){
+    const summary=factGrid([['Thao tác',auditAction(row)],['Người thực hiện',row.actor||'Chưa ghi nhận'],['Thời gian',date(row.created_at)],['Đối tượng',auditTarget(row)]]);
+    detail('Chi tiết nhật ký',[summary,detailSection('Thông tin của thao tác',readableFields(parsedDetails(row.details)))]);
+  }
+  async function matchDetail(id){try{
+    const data=await api('/match?'+new URLSearchParams({id})),match=data.match,players=el('div',undefined,'table-wrap');
+    table(players,[['Người chơi',r=>r.username],['Điểm',r=>r.score],['Thứ hạng',r=>r.placement||'—'],['Kết quả',r=>outcomeNames[r.outcome]||statusNames[r.outcome]||'Chưa có kết quả']],data.players);
+    detail('Chi tiết trận · '+match.room_code,[factGrid([['Trò chơi',gameNames[match.game_type]||'Trò chơi'],['Trạng thái',statusNames[match.status]||'Chưa ghi nhận'],['Bắt đầu',date(match.started_at)],['Kết thúc',date(match.ended_at)]]),detailSection('Kết quả người chơi',players),detailSection('Lý do kết thúc',el('p',match.reason==='Room closed'?'Phòng đã đóng':match.reason||'Chưa ghi nhận')),el('h3','Cấu hình & nội dung tại thời điểm bắt đầu'),matchSnapshot(parsedDetails(match.config_json),match.game_type)]);
+  }catch(e){notify(e.message,true);}}
   function renderMatches(rows){table($('matches-table'),[['Phòng / game',r=>textMeta(r.room_code,gameNames[r.game_type])],['Trạng thái',r=>badge(r.status)],['Người chơi',r=>r.player_count],['Bắt đầu',r=>date(r.started_at)],['Thao tác',r=>button('Chi tiết',()=>matchDetail(r.id),'secondary')]],rows);pagination('matches',rows.length);}
-  function renderLogs(rows){table($('logs-table'),[['Thời gian',r=>date(r.created_at)],['Người thực hiện',r=>r.actor],['Thao tác',r=>r.action],['Đối tượng',r=>r.target],['Chi tiết',r=>button('Xem',()=>detail('Chi tiết nhật ký',[el('p',r.action+' · '+r.actor,'muted'),el('pre',JSON.stringify(JSON.parse(r.details),null,2))]),'secondary')]],rows);pagination('logs',rows.length);}
+  function renderLogs(rows){table($('logs-table'),[['Thời gian',r=>date(r.created_at)],['Người thực hiện',r=>r.actor],['Thao tác',r=>auditAction(r)],['Đối tượng',r=>auditTarget(r)],['Chi tiết',r=>{const cell=el('div',undefined,'audit-summary');cell.append(el('p',auditSummary(r)),button('Xem chi tiết',()=>auditDetail(r),'secondary'));return cell;}]],rows);pagination('logs',rows.length);}
   const settingFields={ARENA:[['questionCount','Số câu hỏi',1,100],['timeLimit','Giây lượt phụ',1,120],['mainPlayerTimeLimit','Giây lượt chính',1,120],['botCount','Số bot',0,100]],WHEEL:[['timeLimit','Giây mỗi lượt',5,120],['botCount','Bot tối đa',0,3]],SURVIVAL:[['startingHp','HP khởi đầu',1,1000],['totalRounds','Số vòng',5,25]]};
   let maintenanceSaved=false,maintenanceBusy=false;
   function maintenanceControls(){
@@ -237,12 +353,12 @@
   async function openBackupConfiguration(name){
     try{
       const data=await api('/backup-config?'+new URLSearchParams({name}));backupConfig=data;
-      $('backup-config-name').textContent=data.name;$('backup-config-error').textContent='';
+      $('backup-config-name').textContent=data.name+(data.createdAt?' · Sao lưu lúc '+date(data.createdAt):'');$('backup-config-error').textContent='';
       $('backup-config-warnings').replaceChildren(...data.warnings.map(text=>el('p',text,'info-strip')));
       $('backup-config-preview').replaceChildren();
-      Object.entries(data.values).forEach(([key,value])=>{
+      Object.entries(data.snapshot||data.values).forEach(([key,value])=>{
         const section=el('section'),root=el('div',undefined,'table-wrap'),current=configRows(key,data.current[key]),next=configRows(key,value);
-        section.append(el('h3',configGroups[key]),root);table(root,[['Thiết lập',r=>r.label],['Đang dùng',r=>r.current],['Trong file',r=>r.value]],next.map((r,i)=>({...r,current:current[i]?.value||'—'})));$('backup-config-preview').append(section);
+        section.append(el('h3',configGroups[key]),root);table(root,[['Thiết lập',r=>r.label],['Tại thời điểm sao lưu · Cố định',r=>el('strong',r.value,'backup-frozen-value')],['Máy chủ hiện tại · Đối chiếu',r=>textMeta(r.current,r.current!==r.value?'Khác bản sao lưu':'Giống bản sao lưu')]],next.map((r,i)=>({...r,current:current[i]?.value??'—'})));$('backup-config-preview').append(section);
       });
       $('backup-config-dialog').showModal();
     }catch(error){notify(error.message,true);}
@@ -302,16 +418,6 @@
   $('announcement-clear').addEventListener('click',async()=>{const b=$('announcement-clear');b.disabled=true;try{await api('/announcement',{enabled:false,text:'',minutes:0});await load();notify('Đã tắt thông báo trên toàn server.');}catch(e){notify(e.message,true);}finally{b.disabled=false;}});
   $('mail-test').addEventListener('click',async()=>{const b=$('mail-test'),r=$('mail-test-result');b.disabled=true;r.textContent='Đang kiểm tra TLS và xác thực SMTP…';try{const d=await api('/mail-test',{});r.textContent=d.message||'Kết nối và xác thực SMTP thành công.';}catch(e){r.textContent=e.message;}finally{b.disabled=false;}});
   $('password-form').addEventListener('submit',async e=>{e.preventDefault();const form=e.currentTarget;if($('new-password').value!==$('confirm-password').value){notify('Mật khẩu xác nhận không khớp.',true);return;}const b=form.querySelector('button');b.disabled=true;try{await api('/password',{currentPassword:$('old-password').value,newPassword:$('new-password').value});form.reset();loginScreen();$('login-error').textContent='Đã đổi mật khẩu. Đăng nhập lại để tiếp tục.';}catch(error){notify(error.message,true);}finally{b.disabled=false;}});
-  $('backup-upload-file').addEventListener('change',()=>{const file=$('backup-upload-file').files[0];$('backup-upload-status').textContent=file?file.name+' · '+(file.size/1024/1024).toFixed(2)+' MB':'Chưa chọn file.';});
-  $('backup-upload-form').addEventListener('submit',async event=>{
-    event.preventDefault();const file=$('backup-upload-file').files[0],button=$('backup-upload-submit'),status=$('backup-upload-status');
-    if(!file){status.textContent='Hãy chọn file dữ liệu để tải lên.';return;}
-    if(!/\.(db|sqlite|sqlite3)$/i.test(file.name)||!file.size||file.size>50*1024*1024){status.textContent='Chọn file .db, .sqlite hoặc .sqlite3 hợp lệ, tối đa 50 MB.';return;}
-    button.disabled=true;$('backup-upload-file').disabled=true;status.textContent='Đang tải lên và kiểm tra file…';
-    try{const data=await api('/backup-upload',file);$('backup-upload-form').reset();status.textContent='Đã tải lên: '+data.name;await load();notify('Đã lưu file dữ liệu. Chọn Áp dụng cấu hình để xem trước và cập nhật thiết lập.');}
-    catch(error){status.textContent=error.message;notify(error.message,true);}
-    finally{button.disabled=false;$('backup-upload-file').disabled=false;}
-  });
   $('create-backup').addEventListener('click',async()=>{const b=$('create-backup');b.disabled=true;try{const data=await api('/backup',{});await load();notify('Đã tạo bản sao lưu '+data.name);}catch(e){notify(e.message,true);}finally{b.disabled=false;}});
   $('open-import').addEventListener('click',()=>{$('import-form').reset();previewCsv=null;$('confirm-import').disabled=true;$('import-preview').replaceChildren();$('import-dialog').querySelector('.dialog-error').textContent='';$('import-dialog').showModal();});
   $('csv-text').addEventListener('input',()=>{previewCsv=null;$('confirm-import').disabled=true;$('import-preview').replaceChildren();});
@@ -321,7 +427,7 @@
   $('import-form').addEventListener('submit',e=>formSubmit(e,async()=>{if(previewCsv===null||previewCsv!==$('csv-text').value)throw new Error('Hãy kiểm tra CSV trước khi nhập.');await api('/content/import',{kind:contentKind,csv:previewCsv,dryRun:false});previewCsv=null;},'import-dialog'));
   const raceSettings=['questionCount','timeLimit','queueSeconds','targetPlayers','firstRP','secondRP','duelSecondRP','thirdRP','fourthRP','rankBuffer','demotionRP'];
   const dailySettings=['dailyTimeLimit','dailyCorrect','shieldReward','doubleReward'];
-  const rankNames=['Đồng 3','Đồng 2','Đồng 1','Bạc 3','Bạc 2','Bạc 1','Vàng 3','Vàng 2','Vàng 1','Bạch Kim 3','Bạch Kim 2','Bạch Kim 1','Kim Cương 3','Kim Cương 2','Kim Cương 1'];
+  const rankNames=['Đồng 3','Đồng 2','Đồng 1','Bạc 3','Bạc 2','Bạc 1','Vàng 3','Vàng 2','Vàng 1','Bạch Kim 3','Bạch Kim 2','Bạch Kim 1','Kim Cương 3','Kim Cương 2','Kim Cương 1','Cao Thủ'];
   function raceAction(action,matchId,targetUsername){actionDialog('Đường đua · '+({cancel:'Hủy trận',kick:'Kick người chơi',dequeue:'Xóa khỏi hàng chờ',notice:'Thông báo phòng'}[action]),targetUsername||matchId,reason=>api('/race/action',{action,matchId,targetUsername,reason}));}
   function renderRaceSettings(settings,versions){
     if(!canRenderForm('race-settings-form',versions))return;
@@ -336,7 +442,9 @@
   }
   async function raceReview(row){try{const data=await api('/race/review?'+new URLSearchParams({id:row.id,username:row.username}));const nodes=[el('p',row.username+' · '+data.match.status,'muted')];for(const r of data.questions){const q=r.question;nodes.push(el('h3',r.round_no+'. '+q.text),el('p','Đã chọn: '+(r.answer===null?'Chưa trả lời':q.options[r.answer])),el('p','Đáp án đúng: '+q.options[q.correct]),el('p',q.explanation));}detail('Ôn tập · '+row.room_name,nodes);}catch(e){notify(e.message,true);}}
   function openRacePlayer(row={}){$('race-player-form').reset();$('race-target').value=row.username||'';$('race-step').value=row.current_step||0;$('race-rp').value=row.current_points||0;$('race-shields').value=row.shields||0;$('race-doubles').value=row.doubles||0;racePlayerFields();$('race-player-dialog').querySelector('.dialog-error').textContent='';$('race-player-dialog').showModal();}
-  function racePlayerFields(){const action=$('race-player-action').value;$('race-rank-fields').classList.toggle('hidden',action!=='setRank');$('race-card-fields').classList.toggle('hidden',action!=='setCards');}
+  function raceRankLimit(){const master=Number($('race-step').value)===15;$('race-rp').max=master?'':'99';$('race-rp-label').textContent=master?'Điểm Cao Thủ · Không áp trần RP':'RP trong cấp · 0–99';}
+  function racePlayerFields(){const action=$('race-player-action').value;$('race-rank-fields').classList.toggle('hidden',action!=='setRank');$('race-card-fields').classList.toggle('hidden',action!=='setCards');raceRankLimit();}
+  $('race-step').addEventListener('change',raceRankLimit);
   $('race-open-player').addEventListener('click',()=>openRacePlayer());$('race-player-action').addEventListener('change',racePlayerFields);
   $('race-settings-form').addEventListener('submit',e=>formSubmit(e,()=>{const value={rankedEnabled:$('race-rankedEnabled').checked};for(const key of raceSettings)value[key]=Number($('race-'+key).value);return api('/race/rank-settings',value);}));
   $('race-player-form').addEventListener('submit',e=>formSubmit(e,()=>api('/race/action',{action:$('race-player-action').value,targetUsername:$('race-target').value.trim(),step:Number($('race-step').value),rp:Number($('race-rp').value),shields:Number($('race-shields').value),doubles:Number($('race-doubles').value),reason:$('race-player-reason').value.trim()}),'race-player-dialog'));
@@ -354,6 +462,7 @@
   $('rank-board-search').addEventListener('submit',e=>{e.preventDefault();offsets.leaderboard=0;load();});
   $('rank-board-prev').addEventListener('click',()=>{offsets.leaderboard=Math.max(0,offsets.leaderboard-50);load();});$('rank-board-next').addEventListener('click',()=>{offsets.leaderboard+=50;load();});
   setInterval(()=>{if(username&&!document.hidden&&['overview','rooms','race','leaderboard','settings','announcements'].includes(view)&&!document.querySelector('dialog[open]')&&(view!=='leaderboard'||document.activeElement!==$('rank-board-query')))load();},10000);
+  setInterval(()=>{if(username&&!document.hidden&&view==='users'&&!document.querySelector('dialog[open]'))load();},3000);
   let lastTouch=0;document.addEventListener('pointerdown',()=>{if(username&&Date.now()-lastTouch>60000){lastTouch=Date.now();api('/session').catch(()=>{});}});
   api('/session').then(signedIn).catch(()=>loginScreen());
 })();

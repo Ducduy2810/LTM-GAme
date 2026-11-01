@@ -14,20 +14,20 @@ let isMyHost = false;
 // ── VẼ VÒNG QUAY THEO TỈ LỆ ĐÚNG ─────────────────────────────
 // Định nghĩa các ô: màu, điểm, tỉ lệ %
 const WHEEL_SEGMENTS = [
-    { value: 100,  label: '100',  color: '#2563eb', darkColor: '#1d4ed8', weight: 50 }, // Xanh dương
-    { value: 200,  label: '200',  color: '#f59e0b', darkColor: '#d97706', weight: 25 }, // Vàng
-    { value: 500,  label: '500',  color: '#ef4444', darkColor: '#dc2626', weight: 15 }, // Đỏ
-    { value: 1000, label: '1000', color: '#374151', darkColor: '#1f2937', weight: 7  }, // Đen
-    { value: 2000, label: '2000', color: '#7c3aed', darkColor: '#6d28d9', weight: 3  }, // Tím
+    { value: 100,  label: '100',  color: '#bce6f7', darkColor: '#a7d9ef', weight: 50 }, // Xanh trời
+    { value: 200,  label: '200',  color: '#f7dc86', darkColor: '#efca65', weight: 25 }, // Vàng sáng
+    { value: 500,  label: '500',  color: '#f4c8b5', darkColor: '#eeb79e', weight: 15 }, // Cam nhạt
+    { value: 1000, label: '1000', color: '#cfe4b9', darkColor: '#bcd6a2', weight: 7  }, // Xanh lá nhạt
+    { value: 2000, label: '2000', color: '#ded3f5', darkColor: '#cdbce9', weight: 3  }, // Tím nhạt
 ];
 
 // Màu tương ứng để highlight khi quay trúng
 const SPIN_COLOR_MAP = {
-    100:  '#2563eb',
-    200:  '#f59e0b',
-    500:  '#ef4444',
-    1000: '#374151',
-    2000: '#7c3aed',
+    100:  '#bce6f7',
+    200:  '#f7dc86',
+    500:  '#f4c8b5',
+    1000: '#cfe4b9',
+    2000: '#ded3f5',
 };
 
 function buildWheelSVG() {
@@ -64,7 +64,7 @@ function buildWheelSVG() {
             const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             path.setAttribute('d', `M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${largeArc},1 ${x2.toFixed(2)},${y2.toFixed(2)} Z`);
             path.setAttribute('fill', fill);
-            path.setAttribute('stroke', '#0f172a');
+            path.setAttribute('stroke', '#a5c5d5');
             path.setAttribute('stroke-width', '1');
             slices.appendChild(path);
 
@@ -79,7 +79,7 @@ function buildWheelSVG() {
             text.setAttribute('y', ly.toFixed(2));
             text.setAttribute('text-anchor', 'middle');
             text.setAttribute('dominant-baseline', 'middle');
-            text.setAttribute('fill', seg.value === 1000 ? '#facc15' : '#ffffff');
+            text.setAttribute('fill', '#314b60');
             text.setAttribute('font-size', sliceAngle >= 30 ? '9' : (sliceAngle >= 15 ? '7' : '6'));
             text.setAttribute('font-weight', '900');
             text.setAttribute('font-family', 'Arial, sans-serif');
@@ -276,7 +276,7 @@ function renderRoomList(rooms) {
 
         let adminDeleteBtn = '';
         if ((isCurrentUserAdmin||(r.hostUsername||'').toLowerCase()===(currentUsername||'').toLowerCase()) && ['WAITING','END'].includes(r.gameState) && r.roomCode !== 'CNKD') {
-            adminDeleteBtn = `<button class="btn-join-card" style="background:#ef4444; color:#fff; margin-left:6px;" onclick="closeRoomByAdmin('${r.roomCode}')">Đóng</button>`;
+            adminDeleteBtn = `<button class="btn-join-card" style="background:#985442; color:#fff; margin-left:6px;" onclick="closeRoomByAdmin('${r.roomCode}')">Đóng</button>`;
         }
 
         card.innerHTML = `
@@ -488,7 +488,7 @@ function handleWheelState(data) {
             waitBox.style.display = 'none';
             const spinColor = SPIN_COLOR_MAP[data.currentSpinValue] || '#facc15';
             document.getElementById('spin-result-banner').innerHTML =
-                `🎉 Bạn vừa quay vào ô: <span style="color:${spinColor}; font-size:1.3em; font-weight:900;">■</span> <strong style="color:${spinColor};">${data.currentSpinValue} ĐIỂM!</strong>`;
+                `🎉 Bạn vừa quay vào ô: <span aria-hidden="true" style="color:${spinColor}; font-size:1.3em; font-weight:900;">■</span> <strong>${data.currentSpinValue} ĐIỂM!</strong>`;
             const guessInput = document.getElementById('guess-input');
             guessInput.value = '';
             guessInput.focus();
@@ -689,6 +689,6 @@ document.getElementById('btn-submit-create-room').addEventListener('click', () =
 });
 
 // ĐÓNG WEBSOCKET KHI RỜI TRANG
-window.addEventListener('beforeunload', () => {
+window.addEventListener('pagehide', () => {
     socket.close();
 });

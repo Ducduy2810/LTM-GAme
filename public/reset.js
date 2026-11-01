@@ -10,7 +10,7 @@ emailInput.value = sessionStorage.getItem('password-reset-email') || '';
 
 function showMessage(message, success = false) {
     msgBox.textContent = message;
-    msgBox.style.color = success ? '#10b981' : '#ef4444';
+    msgBox.style.color = success ? 'var(--vm-success, #3f6e47)' : 'var(--vm-danger, #a44b3d)';
 }
 
 function updateButtons() {

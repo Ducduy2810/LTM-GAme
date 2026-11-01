@@ -111,6 +111,8 @@ public class ArenaRoom {
 
     // Theo dõi username đã từng trong phòng (để cho phép rejoin khi đang chơi)
     private final Set<String> recentlyLeftUsernames = Collections.synchronizedSet(new HashSet<>());
+    private final Set<String> forfeitedUsernames=new HashSet<>();
+    public synchronized boolean hasForfeited(String username){return username!=null&&!Set.of("WAITING","END").contains(gameState)&&forfeitedUsernames.contains(username.toLowerCase(Locale.ROOT));}
 
     // Bot đối thủ (chỉ active khi PLAYING)
     private final List<BotOpponent> bots = new CopyOnWriteArrayList<>();
@@ -231,6 +233,7 @@ public class ArenaRoom {
     public synchronized boolean handleJoin(WebSocketClient client) {
         String username = client.getUsername();
         if (username == null || !canJoin(username)) return false;
+        if(!Set.of("WAITING","END").contains(gameState)&&forfeitedUsernames.contains(username.toLowerCase(Locale.ROOT))){sendError(client,"Bạn đã rời trận này và không được tính thành tích. Hãy chờ trận mới.");return false;}
         PlayerState previous = players.values().stream().filter(p -> p.username.equalsIgnoreCase(username)).findFirst().orElse(null);
 
         // Xóa kết nối cũ cùng username nếu còn (reconnect/rejoin)
@@ -297,6 +300,8 @@ public class ArenaRoom {
         if (!players.containsKey(client)) return;
         String leavingUsername = client.getUsername();
         boolean wasHost = (leavingUsername != null && leavingUsername.equalsIgnoreCase(hostUsername));
+        boolean active=!Set.of("WAITING","END","CLOSED").contains(gameState);
+        if(active&&!kickedUsernames.contains(leavingUsername.toLowerCase(Locale.ROOT))){MatchService.forfeit(matchId,leavingUsername);forfeitedUsernames.add(leavingUsername.toLowerCase(Locale.ROOT));client.send(JsonUtil.toJson(Map.of("type","match_forfeited","message","Bạn đã rời trận. Không tính điểm, chiến thắng hoặc thành tích của trận này; không thể vào lại trận đang diễn ra.")));}
 
         // Ghi nhận username đã từng trong phòng để cho phép rejoin sau
         if (leavingUsername != null) {
@@ -309,7 +314,8 @@ public class ArenaRoom {
         if (leavingUsername != null && leavingUsername.equalsIgnoreCase(selectedMainPlayerUsername)) selectedMainPlayerUsername = null;
 
         if (players.isEmpty()) {
-            // Chỉ reset khi không đang chơi — nếu đang chơi giữ nguyên để phòng tồn tại cho rejoin
+            if(active){MatchService.finish(matchId,true,"Người chơi rời trận; hủy trận đang chơi và không tính thành tích",List.of());++timerGeneration;gameState="WAITING";bots.clear();if(currentTimer!=null){currentTimer.cancel(false);currentTimer=null;}}
+            // No participants remain; the running match was cancelled above.
             if ("WAITING".equals(gameState) || "END".equals(gameState)) {
                 gameState = "WAITING";
                 currentQuestionIndex = 0;
@@ -325,6 +331,10 @@ public class ArenaRoom {
                     broadcastRoomInfoToAll();
                 }
             }
+        }
+        if(active&&!players.isEmpty()){
+            if(Objects.equals(leavingUsername,mainPlayerUsername))endGame(false,"Người chơi chính đã rời trận; không tính thành tích cho người bỏ cuộc.");
+            else if(countAliveOpponents()==0)endGame(true,"Các đối thủ đã rời trận; người ở lại chiến thắng.");
         }
         broadcastPlayers();
         broadcastRoomInfoToAll();
@@ -372,6 +382,7 @@ public class ArenaRoom {
         try{selected=QuestionBank.getArenaQuestions(topic,difficulty,questionCount);}catch(IllegalArgumentException e){broadcast(Map.of("type","arena_error","message",e.getMessage()));return;}
         if(selected.isEmpty()){broadcast(Map.of("type","arena_error","message","Chưa có câu hỏi đã xuất bản phù hợp."));return;}
         gameState = "STARTING";
+        forfeitedUsernames.clear();recentlyLeftUsernames.clear();
         currentQuestionIndex = 0;
         totalEliminatedOpponents = 0;
         isPaused = false; // YÊU CẦU 5: Reset trạng thái tạm dừng

@@ -26,10 +26,10 @@ public final class ClientEvents implements AutoCloseable {
         Subscriber s=new Subscriber(socket,out,username,validSession,sessionId);
         try{
             out.write(("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream; charset=utf-8\r\nCache-Control: no-store\r\nX-Accel-Buffering: no\r\nConnection: keep-alive\r\n\r\n").getBytes(StandardCharsets.US_ASCII));out.flush();subscribers.add(s);
-            s.send("announcement",ServerAnnouncement.publicView());s.send("maintenance",vn.game.db.AdminStore.maintenanceStatus());long nextPing=System.currentTimeMillis()+12000;
+            s.send("announcement",ServerAnnouncement.publicView());s.send("maintenance",vn.game.db.AdminStore.maintenanceStatus());long nextPing=System.currentTimeMillis()+3000;
             while(!closed&&!socket.isClosed()){
                 if(username!=null&&!validSession.test(sessionId)){s.send("session_ended",Map.of("message","Phiên đăng nhập đã kết thúc."));break;}
-                if(System.currentTimeMillis()>=nextPing){s.ping();nextPing=System.currentTimeMillis()+12000;}
+                if(System.currentTimeMillis()>=nextPing){s.ping();nextPing=System.currentTimeMillis()+3000;}
                 try{Thread.sleep(500);}catch(InterruptedException e){Thread.currentThread().interrupt();break;}
             }
         }catch(java.sql.SQLException e){throw new IOException("Cannot load announcements",e);}

@@ -56,6 +56,7 @@ public final class PlayerAccountStore {
             @SuppressWarnings("unchecked") Map<String,Object> current=(Map<String,Object>)race.get("current");
             @SuppressWarnings("unchecked") Map<String,Object> highest=(Map<String,Object>)race.get("highest");
             rank.put("currentName",current.get("name"));rank.put("highestName",highest.get("name"));rank.put("current_points",current.get("rp"));rank.put("highest_points",highest.get("rp"));rank.put("title",race.get("title"));rank.put("highestTitle",race.get("highestTitle"));
+            rank.put("current_step",current.get("step"));rank.put("highest_step",highest.get("step"));
             return Map.of("username",username,"email",Objects.toString(user.get("email"),""),"googleLinked",user.get("google_id")!=null,"hasLocalPassword",user.get("password_hash")!=null,"rank",rank,"rankEnabled",true,"accountNotice",latestNotice(username),"race",race);
         }
     }

@@ -169,6 +169,8 @@ public class SurvivalGame implements AutoCloseable {
     }
 
     private synchronized void joinRoomInternal(WebSocketClient client, SurvivalRoom room) {
+        if(clientRoomMap.get(client)==room)return;
+        if(room.hasForfeited(client.getUsername())){sendError(client,"Bạn đã rời trận này và không được tính thành tích. Hãy chờ trận mới.");return;}
         if (!room.canJoin(client.getUsername())) { sendError(client, "Trận đấu đang diễn ra hoặc phòng đã đóng. Không thể vào lúc này."); return; }
         // Chỉ rời phòng cũ nếu client đang thực sự ở phòng nào đó
         if (clientRoomMap.containsKey(client)) {

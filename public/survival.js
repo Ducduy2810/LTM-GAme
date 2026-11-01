@@ -390,7 +390,7 @@
         const safeMax = (max && max > 0) ? max : 100;
         const current = Math.max(0, hp !== undefined ? hp : 0);
         const pct = Math.max(0, Math.min(100, (current / safeMax) * 100));
-        const color = pct > 60 ? '#10b981' : pct > 30 ? '#f59e0b' : '#ef4444';
+        const color = pct > 60 ? '#3f6e47' : pct > 30 ? '#f59e0b' : '#a44b3d';
         return `<div class='hp-bar'><div class='hp-bar-fill' style='width:${pct}%;background:${color};'></div></div>`;
     }
 
@@ -398,7 +398,7 @@
         const safeMax = (max && max > 0) ? max : 100;
         const safeHp  = Math.max(0, Math.min(safeMax, hp !== undefined ? hp : 0));
         const pct     = Math.max(0, Math.min(100, (safeHp / safeMax) * 100));
-        const color   = pct > 60 ? '#10b981' : pct > 30 ? '#f59e0b' : '#ef4444';
+        const color   = pct > 60 ? '#3f6e47' : pct > 30 ? '#f59e0b' : '#a44b3d';
 
         // Cập nhật HUD Header
         const hudHpVal  = document.getElementById('hud-hp-val');
@@ -604,7 +604,7 @@
                 waitingMsg.style.color = '#34d399';
             } else {
                 waitingMsg.innerText = 'Đang chờ các đấu thủ sẵn sàng...';
-                waitingMsg.style.color = '#fde047';
+                waitingMsg.style.color = '#9a7135';
             }
         }
     }
@@ -714,7 +714,7 @@
         if (feedbackMsg) {
             if (!myIsAlive) {
                 feedbackMsg.innerText = '💀 Bạn đã bị loại và đang theo dõi trận đấu ở chế độ Khán Giả.';
-                feedbackMsg.style.color = '#ef4444';
+                feedbackMsg.style.color = '#a44b3d';
             } else {
                 feedbackMsg.innerText = '';
             }
@@ -783,7 +783,7 @@
         const feedbackMsg = document.getElementById('feedback-msg');
         if (feedbackMsg) {
             feedbackMsg.innerText = '🔒 Đã chốt phương án sinh tồn! Hồi hộp chờ phán quyết...';
-            feedbackMsg.style.color = '#fde047';
+            feedbackMsg.style.color = '#9a7135';
         }
     }
 
@@ -882,16 +882,16 @@
             if (!participated) {
                 statusText = '<span style="color:#94a3b8;">Bạn đang xem trận đấu, không tham gia trả lời ở vòng này và không bị trừ HP.</span>';
             } else if (myIsCorrect) {
-                statusText = '<span style="color:#10b981;">✅ Bạn đã chọn <strong>' + selectedDescription + '</strong> — ĐÚNG! Giữ nguyên HP và nhận +10 điểm.</span>';
+                statusText = '<span style="color:#3f6e47;">✅ Bạn đã chọn <strong>' + selectedDescription + '</strong> — ĐÚNG! Giữ nguyên HP và nhận +10 điểm.</span>';
                 soundEffect = 'playCorrect';
             } else if (myAnswer === null) {
-                statusText = '<span style="color:#ef4444;">⏰ Bạn không trả lời — bị trừ ' + hpLost + ' HP.' + (!myIsAlive ? ' Bạn đã bị loại.' : '') + '</span>';
+                statusText = '<span style="color:#a44b3d;">⏰ Bạn không trả lời — bị trừ ' + hpLost + ' HP.' + (!myIsAlive ? ' Bạn đã bị loại.' : '') + '</span>';
                 soundEffect = 'playDamage';
             } else {
-                statusText = '<span style="color:#ef4444;">❌ Bạn đã chọn <strong>' + selectedDescription + '</strong> — SAI! Bị trừ ' + hpLost + ' HP.' + (!myIsAlive ? ' Bạn đã bị loại.' : '') + '</span>';
+                statusText = '<span style="color:#a44b3d;">❌ Bạn đã chọn <strong>' + selectedDescription + '</strong> — SAI! Bị trừ ' + hpLost + ' HP.' + (!myIsAlive ? ' Bạn đã bị loại.' : '') + '</span>';
                 soundEffect = 'playDamage';
             }
-            resultInfo.innerHTML = '<div>Đáp án đúng: <strong style="color:#38bdf8;">' + correctDescription
+            resultInfo.innerHTML = '<div>Đáp án đúng: <strong style="color:#5a7450;">' + correctDescription
                 + '</strong></div><div style="margin-top:8px;">' + statusText + '</div>';
             if (soundEffect) playSoundEffect(soundEffect);
         }
@@ -915,7 +915,7 @@
         }
         if (resultMyHp) {
             resultMyHp.innerText = `${myHp} HP`;
-            resultMyHp.style.color = myHp > 50 ? '#10b981' : (myHp > 20 ? '#fde047' : '#ef4444');
+            resultMyHp.style.color = myHp > 50 ? '#3f6e47' : (myHp > 20 ? '#9a7135' : '#a44b3d');
         }
 
         // Danh sách đấu thủ vừa bị loại vòng này
@@ -979,15 +979,15 @@
 
             const rowClass = `${isMe ? 'is-me-row' : ''} ${!isAlive ? 'eliminated-row' : ''}`;
             const statusBadge = isAlive
-                ? `<span style="color:#10b981; font-weight:800;">💚 SỐNG</span>`
-                : `<span style="color:#ef4444; font-weight:800;">💀 ĐÃ LOẠI</span>`;
+                ? `<span style="color:#3f6e47; font-weight:800;">💚 SỐNG</span>`
+                : `<span style="color:#a44b3d; font-weight:800;">💀 ĐÃ LOẠI</span>`;
 
             html += `
                 <tr class="${rowClass}">
                     <td style="font-weight:900;">${rankLabel}</td>
                     <td>
                         <strong>${escapeHtml(p.username)}</strong>
-                        ${isMe ? ' <span style="color:#fde047; font-size:11px;">(Bạn)</span>' : ''}
+                        ${isMe ? ' <span style="color:#9a7135; font-size:11px;">(Bạn)</span>' : ''}
                     </td>
                     <td>
                         <div style="display:flex; align-items:center; gap:8px;">
@@ -995,7 +995,7 @@
                             <span style="font-size:11px; font-weight:800; min-width:38px; text-align:right;">${playerHp}</span>
                         </div>
                     </td>
-                    <td style="text-align:center; color:#fde047; font-weight:800;">${p.score || 0}</td>
+                    <td style="text-align:center; color:#9a7135; font-weight:800;">${p.score || 0}</td>
                     <td style="text-align:right;">${statusBadge}</td>
                 </tr>
             `;
@@ -1039,20 +1039,20 @@
             if (trophyEl) trophyEl.innerText = '🏆';
             if (endTitle) {
                 endTitle.innerText = 'CHIẾN THẮNG TUYỆT ĐỐI!';
-                endTitle.style.color = '#fde047';
+                endTitle.style.color = '#9a7135';
             }
             playSoundEffect('playVictory');
         } else if (myIsAlive) {
             if (trophyEl) trophyEl.innerText = '🏅';
             if (endTitle) {
                 endTitle.innerText = 'BẠN ĐÃ SỐNG SÓT ĐẾN CÙNG!';
-                endTitle.style.color = '#38bdf8';
+                endTitle.style.color = '#5a7450';
             }
         } else {
             if (trophyEl) trophyEl.innerText = '💀';
             if (endTitle) {
                 endTitle.innerText = 'BẠN ĐÃ BỊ LOẠI TRƯỚC VẠCH ĐÍCH';
-                endTitle.style.color = '#ef4444';
+                endTitle.style.color = '#a44b3d';
             }
         }
 
@@ -1260,6 +1260,7 @@
 
     // ── HÀM RỜI PHÒNG DÙNG CHUNG ─────────────────────────────────────
     function leaveCurrentRoom() {
+        if(!(window.MatchLeaveGuard?.confirmLeave()??true))return;
         if (socket && socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({
                 type: 'leave_survival_room',
@@ -1289,9 +1290,7 @@
     const btnGameLeave = document.getElementById('btn-game-leave');
     if (btnGameLeave) {
         btnGameLeave.addEventListener('click', () => {
-            if (confirm('Bạn có chắc chắn muốn bỏ cuộc và rời trận đấu về sảnh?')) {
-                leaveCurrentRoom();
-            }
+            leaveCurrentRoom();
         });
     }
 
@@ -1332,7 +1331,7 @@
     }
 
     // Đóng kết nối khi rời trang
-    window.addEventListener('beforeunload', () => {
+    window.addEventListener('pagehide', () => {
         if (socket && socket.readyState === WebSocket.OPEN) {
             if (currentRoomCode) {
                 socket.send(JSON.stringify({

@@ -1,0 +1,6 @@
+? B?ng SQLite ?� s?n s�ng (users, leaderboard)
+? SQLite ?� k?t n?i: C:\Users\admin\Documents\ki1nam4\LTM-thayQuyen\LTM-GAme-main\scratch\account-test-policy-786d828895834d68adfa304060560549\data\game.db
+? [Java Server] ?ang l?ng nghe k?t n?i t?i c?ng 0 (0.0.0.0)
+? ?� t?i leaderboard: 0 ng??i ch?i t? SQLite.
+PASS: 141 lifecycle checks: online/offline, session takeover and concurrent login, all 3 games voluntary/abrupt abandonment, result exclusion, rejoin blocking, and bot cancellation.
+? SQLite connection ?� ?�ng.

@@ -40,9 +40,9 @@ public class RaceIntegrationTest {
         check(RankRules.advance(new RankRules.Position(3,5),-15).equals(new RankRules.Position(3,0)),"first loss at positive RP stops at zero");
         check(RankRules.advance(new RankRules.Position(3,0),-10).equals(new RankRules.Position(2,70)),"only losing from zero demotes with 70");
         check(RankRules.advance(new RankRules.Position(0,0),-15).equals(new RankRules.Position(0,0)),"Bronze 3 floor");
-        check(RankRules.advance(new RankRules.Position(14,98),50).equals(new RankRules.Position(14,148)),"Diamond 1 continues accumulating");
+        check(RankRules.advance(new RankRules.Position(14,98),50).equals(new RankRules.Position(15,68)),"Diamond 1 advances to Master with overflow and tier buffer");
         check(RankRules.tiedReward(2,0,2)==13,"duel tie averages reward rounded in player favor");check(RankRules.tiedReward(4,2,2)==-12,"negative tie rounding");
-        check(RankRules.title(14,1).equals("Huyền Thoại")&&RankRules.title(14,100).equals("Cao Thủ")&&RankRules.title(13,1).isEmpty()&&RankRules.title(14,101).isEmpty(),"elite title gate and boundaries");
+        check(RankRules.title(15,1).equals("Huyền Thoại")&&RankRules.title(15,100).equals("Cao Thủ")&&RankRules.title(14,1).isEmpty()&&RankRules.title(15,101).equals("Cao Thủ"),"Master top ten are Legendary; other Masters keep their rank");
         for(int step=0;step<15;step++){var p=new RankRules.Position(step,0);check(p.name().endsWith(String.valueOf(3-step%3)),"division label "+step);}
     }
     static List<Question> drawRankedQuestions(String tier,int count)throws Exception{
@@ -384,11 +384,11 @@ public class RaceIntegrationTest {
         check(request("/api/race/overview",null,null,null).statusCode()==401,"race data requires authentication");String player=login("racer0");check(request("/api/admin/race",player,null,null).statusCode()==401,"player cannot inspect admin queues");
         var overview=obj(request("/api/race/overview",player,null,null).body());check(overview.containsKey("leaderboard")&&overview.containsKey("account"),"player overview includes ranked profile and board");
         var config=map(obj(request("/api/admin/race",adminCookie,null,null).body()).get("settings"));check(request("/api/admin/race/settings",adminCookie,config,null).statusCode()==403,"rank administration requires CSRF");
-        var peers=new ArrayList<Peer>();try{
-            for(int i=0;i<4;i++){Peer p=new Peer();HTTP.newWebSocketBuilder().header("Cookie",login("racer"+i)).buildAsync(URI.create(base.replace("http:","ws:")+"/ws"),p).join();peers.add(p);p.send("race_queue",Map.of("mode","RANKED"));}
+        var peers=new ArrayList<Peer>();var playerCookies=new ArrayList<String>();try{
+            for(int i=0;i<4;i++){Peer p=new Peer();String activeCookie=login("racer"+i);playerCookies.add(activeCookie);HTTP.newWebSocketBuilder().header("Cookie",activeCookie).buildAsync(URI.create(base.replace("http:","ws:")+"/ws"),p).join();peers.add(p);p.send("race_queue",Map.of("mode","RANKED"));}
             until(()->peers.stream().allMatch(p->p.state().getOrDefault("phase","").equals("QUESTION")),"four real WebSockets share question");String id=(String)peers.get(0).state().get("matchId");String token=(String)map(peers.get(0).state().get("question")).get("token");
             check(peers.stream().allMatch(p->map(p.state().get("question")).get("token").equals(token)),"all clients receive same opaque question token");
-            check(request("/api/race/review?id="+id,player,null,null).statusCode()==400,"HTTP cannot leak active question answer");
+            check(request("/api/race/review?id="+id,playerCookies.get(0),null,null).statusCode()==400,"HTTP cannot leak active question answer");
             java.util.concurrent.atomic.AtomicBoolean recovered=new java.util.concurrent.atomic.AtomicBoolean();HttpAndWebSocketServer collision=new HttpAndWebSocketServer(server.getPort(),new File("."),users,new SessionManager(),null,null,null);
             try{collision.start(()->recovered.set(true));throw new AssertionError("Second server unexpectedly bound same port");}catch(BindException expected){checks++;}finally{collision.stop();}
             check(!recovered.get(),"failed second server cannot run match recovery against live server");

@@ -20,7 +20,7 @@
   async function api(path){const r=await fetch(path,{cache:'no-store'}),data=await r.json();if(r.status===401){location.assign('/');throw new Error('Vui lòng đăng nhập.');}if(!r.ok)throw new Error(data.error||'Không tải được dữ liệu.');return data;}
   function send(type,extra={}){if(!socket||socket.readyState!==WebSocket.OPEN){message('Đang kết nối lại máy chủ. Hãy chờ trong giây lát.');return false;}socket.send(JSON.stringify({type,...extra}));return true;}
   function choose(next){
-    mode=modeNames[next]?next:'RANKED';document.body.dataset.mode=mode.toLowerCase();document.title=(mode==='DAILY'?'Thử thách hằng ngày':'Đường đua · '+modeNames[mode])+' · Vũ Môn';
+    mode=modeNames[next]?next:'RANKED';document.body.dataset.mode=mode.toLowerCase();document.title=(mode==='DAILY'?'Thử thách hằng ngày':'Đường đua · '+modeNames[mode])+' · Vũ Môn Tranh Hùng';
     const parent={RANKED:'rank',CASUAL:'pvp',BOT:'bot',DAILY:'daily'}[mode];$('back-to-portal').href='/#'+parent;$('back-to-portal').textContent='← '+{RANKED:'Đấu xếp hạng',CASUAL:'Đấu thường PvP',BOT:'Chơi với máy',DAILY:'Thử thách hằng ngày'}[mode];
     $('page-title').textContent={RANKED:'Đường đua xếp hạng',CASUAL:'Đường đua đấu thường',BOT:'Đường đua luyện với máy',DAILY:'Thử thách hằng ngày'}[mode];
     $('mode-brand-label').textContent=mode==='DAILY'?'THỬ THÁCH HẰNG NGÀY':'ĐƯỜNG ĐUA KIẾN THỨC';
@@ -48,8 +48,11 @@
     $('create-button').disabled=!s.enabled;
   }
   function account(data){
-    const a=data.account,current=a.current,highest=a.highest;$('current-rank').textContent=a.title||current.name;$('rank-rp').textContent=current.step===14?`${current.rp} RP · Kim Cương 1`:`${current.rp} / 100 RP`;
-    $('highest-rank').textContent='Cao nhất: '+(a.highestTitle||highest.name)+` · ${highest.rp} RP`;$('rank-progress').style.width=(current.step===14?100:current.rp)+'%';$('rank-emblem').className='rank-emblem '+current.tier.toLowerCase();
+    const a=data.account,current=a.current,highest=a.highest;$('current-rank').textContent=a.title||current.name;$('rank-rp').textContent=current.step>=15?'Tích lũy RP không giới hạn':'Tích lũy đủ 100 RP để lên cấp tiếp theo';
+    $('highest-rank').textContent='Cao nhất: '+(a.highestTitle||highest.name)+` · ${Number(highest.rp).toLocaleString('vi-VN')} RP`;$('rank-emblem').className='rank-emblem '+current.tier.toLowerCase();
+    const settled=state.phase==='COMPLETED'&&state.mode==='RANKED'?state.players?.find(p=>p.username===state.me)?.result:null;
+    const transition=settled?.after&&settled.after.step===current.step&&settled.after.rp===current.rp?{before:settled.before,delta:settled.rpDelta,key:state.matchId}:{};
+    window.RankProgress?.render($('rank-summary-meter'),current,{title:a.title,...transition});
     $('rank-leaderboard').replaceChildren();if(!data.leaderboard.length)$('rank-leaderboard').append(el('p','Chưa có kết quả rank. Hãy là người mở đường!','empty'));
     data.leaderboard.forEach(p=>{const row=el('div',undefined,'leader-entry'),info=el('div');info.append(el('strong',`#${p.position} · ${p.username}`),el('small',(p.title?p.title+' · ':'')+p.rankName));row.append(info,el('strong',`${p.current_points} RP`));$('rank-leaderboard').append(row);});
     const rooms=data.rooms.filter(r=>r.bots===0);$('open-rooms').replaceChildren();if(!rooms.length)$('open-rooms').append(el('p','Chưa có phòng chờ. Bạn có thể tạo phòng và chia sẻ mã cho bạn bè.','empty'));
@@ -58,7 +61,7 @@
   async function refresh(){try{overview=await api('/api/race/overview');account(overview);renderMenu();}catch(e){message(e.message);}}
   async function history(){try{const data=await api('/api/race/history');$('race-history').replaceChildren();if(!data.items.length)$('race-history').append(el('p','Chưa có trận Đường đua nào.','empty'));
     const items=data.items.filter(r=>r.mode===mode);if(data.items.length&&!items.length)$('race-history').append(el('p','Chưa có trận ở chế độ này.','empty'));
-    for(const r of items){const row=el('div',undefined,'history-entry'),info=el('div');const forfeited=r.mode==='RANKED'&&r.forfeited===1&&['ACTIVE','COMPLETED'].includes(r.status);info.append(el('strong',modeNames[r.mode]+' · '+r.room_name),el('small',new Date(r.started_at).toLocaleString('vi-VN')+' · '+(forfeited?'Thua · Bỏ cuộc':statusNames[r.status])),el('small',r.status==='COMPLETED'?`Hạng ${r.placement} · ${r.correct_count} câu đúng · ${r.mode==='RANKED'?((r.result.rpDelta>=0?'+':'')+r.result.rpDelta+' RP'):'Không tính rank'}`:forfeited?'Không thể vào lại trận. RP được chốt khi trận kết thúc.':r.reason||'Chưa hoàn thành'));
+    for(const r of items){const row=el('div',undefined,'history-entry'),info=el('div');const forfeited=r.forfeited===1&&['ACTIVE','COMPLETED','CANCELLED'].includes(r.status),casualForfeit=forfeited&&r.mode!=='RANKED';info.append(el('strong',modeNames[r.mode]+' · '+r.room_name),el('small',new Date(r.started_at).toLocaleString('vi-VN')+' · '+(forfeited?(casualForfeit?'Bỏ cuộc · Không tính thành tích':'Thua · Bỏ cuộc'):statusNames[r.status])),el('small',casualForfeit?'Không tính điểm hoặc chiến thắng. Không thể vào lại trận.':r.status==='COMPLETED'?`Hạng ${r.placement} · ${r.correct_count} câu đúng · ${r.mode==='RANKED'?((r.result.rpDelta>=0?'+':'')+r.result.rpDelta+' RP'):'Không tính rank'}`:forfeited?'Không thể vào lại trận. RP được chốt khi trận kết thúc.':r.reason||'Chưa hoàn thành'));
       row.append(info);if(!['ACTIVE','WAITING'].includes(r.status))row.append(button('Ôn lại →',()=>loadReview(r.id)));$('race-history').append(row);}
   }catch(e){message(e.message);}}
   async function loadReview(id){
@@ -99,6 +102,10 @@
     }
     if(ended){const me=data.players.find(p=>p.username===data.me),result=me.result||{};$('result-title').textContent=data.phase==='CANCELLED'?'Trận đã được hủy':data.mode==='DAILY'?(result.rewarded?'Hoàn thành thử thách!':'Hẹn bạn ở thử thách ngày mai'):result.promoted?'Thăng hạng · '+result.after.name:result.demoted?'Tiếp tục hành trình · '+result.after.name:'Hoàn thành · Hạng '+me.placement;
       $('result-rp').textContent=data.phase==='CANCELLED'?'Không thay đổi RP · không dùng thẻ':data.mode==='RANKED'?(result.rpDelta>=0?'+':'')+result.rpDelta+' RP'+(result.after?' · '+result.after.name+' · '+result.after.rp+' RP':''):data.mode==='DAILY'?(result.rewarded?'Đã nhận thẻ thưởng':'Không ảnh hưởng rank'):'Đấu thường · Không tính RP';
+      $('result-rp').dataset.direction=Number(result.rpDelta)<0?'loss':Number(result.rpDelta)>0?'gain':'steady';
+      const rankedResult=data.phase==='COMPLETED'&&data.mode==='RANKED'&&result.before&&result.after;
+      $('result-rank-meter').classList.toggle('hidden',!rankedResult);
+      if(rankedResult)window.RankProgress?.render($('result-rank-meter'),result.after,{before:result.before,delta:result.rpDelta,title:result.title,key:data.matchId});
       $('result-detail').textContent=data.phase==='CANCELLED'?data.reason:`${me.correct}/${data.questionCount} câu đúng · ${me.score} điểm.`+(result.card==='SHIELD'?' Đã dùng thẻ bảo vệ.':result.card==='DOUBLE'?' Đã dùng thẻ x2 RP.':'')+(result.promoted&&result.after.step%3===0?' Đã nhận điểm đệm khi lên bậc mới.':'');
       $('view-review').disabled=false;if(terminalSeen!==data.matchId+data.phase){terminalSeen=data.matchId+data.phase;refresh();history();}
     }
@@ -121,16 +128,19 @@
   $('cancel-queue').addEventListener('click',()=>send('race_cancel_queue'));$('start-match').addEventListener('click',()=>send('race_start'));$('delete-room').addEventListener('click',()=>{if(confirm('Xóa phòng chờ này?'))send('race_delete');});
   const rankedLeaveWarning='Bạn đang trong trận xếp hạng quan trọng, bạn vẫn rời phòng chứ ?';
   const inRankedMatch=()=>state.mode==='RANKED'&&['QUESTION','RESULT'].includes(state.phase);
+  const inActiveMatch=()=>['QUESTION','RESULT'].includes(state.phase);
+  const leaveWarning=()=>inRankedMatch()?rankedLeaveWarning:state.mode==='BOT'?'Rời trận chơi với máy? Trận sẽ bị hủy và không tính thành tích.':'Rời trận đấu thường? Bạn sẽ bị ghi nhận bỏ cuộc, không tính điểm hoặc chiến thắng của trận này và không thể vào lại trận.';
   document.querySelectorAll('.race-header a[href="/"], #back-to-portal').forEach(link=>link.addEventListener('click',event=>{
-    if(!inRankedMatch())return;
+    if(!inActiveMatch())return;
     event.preventDefault();
-    if(pendingHome||!confirm(rankedLeaveWarning))return;
+    if(pendingHome||!confirm(leaveWarning()))return;
     pendingHome={href:link.href,matchId:state.matchId};
     if(!send('race_leave'))pendingHome=null;
   }));
-  $('leave-match').addEventListener('click',()=>{if(!['QUESTION','RESULT'].includes(state.phase)||confirm(inRankedMatch()?rankedLeaveWarning:'Rời trận đang chơi? Bạn sẽ xếp sau người ở lại và kết quả rank vẫn được ghi.'))send('race_leave');});
+  $('leave-match').addEventListener('click',()=>{if(!inActiveMatch()||confirm(leaveWarning()))send('race_leave');});
   $('back-menu').addEventListener('click',()=>send('race_leave'));$('view-review').addEventListener('click',()=>loadReview(state.matchId));$('wrong-only').addEventListener('change',renderReview);
   $('refresh-overview').addEventListener('click',refresh);$('refresh-history').addEventListener('click',history);
-  window.addEventListener('beforeunload',()=>{leaving=true;socket?.close();});setInterval(updateTimer,200);setInterval(()=>{if(document.hidden)return;if(state.phase==='IDLE')refresh();else if(state.phase==='OTHER_MODE')send('race_resume',{mode});},15000);
+  window.addEventListener('beforeunload',event=>{if(inActiveMatch()&&!leaving){event.preventDefault();event.returnValue='';}});
+  window.addEventListener('pagehide',()=>{leaving=true;socket?.close();});setInterval(updateTimer,200);setInterval(()=>{if(document.hidden)return;if(state.phase==='IDLE')refresh();else if(state.phase==='OTHER_MODE')send('race_resume',{mode});},15000);
   (async()=>{try{const me=await api('/auth/me');if(!me.loggedIn){location.assign('/');return;}user=me.user;$('player-name').textContent=user.username;window.SystemClient?.setAccount(user,me.accountNotice);const params=new URLSearchParams(location.search);choose(params.get('mode')?.toUpperCase()||'RANKED');await refresh();if(params.get('review'))await loadReview(params.get('review'));await history();connect();}catch(e){message(e.message);}})();
 })();

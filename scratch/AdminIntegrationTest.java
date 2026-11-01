@@ -71,10 +71,11 @@ public class AdminIntegrationTest {
             check(guest.last("room_kicked").get("message").toString().startsWith("Bạn đã bị kick"),"kick notification explicitly identifies kick in "+game);
             check(guest.last("room_kicked").get("reason").equals("Chủ phòng đã mời bạn rời phòng."),"kick notification preserves reason in "+game);
             post("/rooms/action",Map.of("game",game,"roomCode",code,"action","notice","reason","Thông báo thử"));check(owner.count("server_notice")>=1,"admin broadcasts to room "+game);
+            boolean alreadyCompleted=MatchService.history("owner").stream().anyMatch(r->code.equals(r.get("room_code"))&&r.get("status").equals("COMPLETED"));
             post("/rooms/action",Map.of("game",game,"roomCode",code,"action","cancel","reason","Hủy để kiểm thử"));
             String closedEvent=game.equals("ARENA")?"arena_room_closed":game.equals("SURVIVAL")?"survival_room_closed":"left_wheel_room";
             check(Boolean.TRUE.equals(owner.last(closedEvent).get("cancelled"))&&owner.last(closedEvent).get("reason").equals("Hủy để kiểm thử"),"cancelled room notification carries exact reason "+game);
-            check(MatchService.history("owner").stream().anyMatch(r->code.equals(r.get("room_code"))&&r.get("status").equals("CANCELLED")),"admin cancellation persisted "+game);
+            check(MatchService.history("owner").stream().anyMatch(r->code.equals(r.get("room_code"))&&r.get("status").equals(alreadyCompleted?"COMPLETED":"CANCELLED")),"admin cancellation preserves a result already completed after opponents left "+game);
             check(MatchService.history("guest").stream().anyMatch(r->code.equals(r.get("room_code"))),"kicked player remains in match history "+game);
         }
         Client owner=new Client("owner"),guest=new Client("guest"),other=new Client("outsider");
@@ -426,7 +427,7 @@ public class AdminIntegrationTest {
             String backup=(String)post("/backup",Map.of()).get("name");check(!items(get("/backups")).isEmpty(),"backup listed");
             var bytes=HTTP.send(HttpRequest.newBuilder(URI.create(base+"/api/admin/backup-file?name="+backup)).header("Cookie",cookie).GET().build(),HttpResponse.BodyHandlers.ofByteArray());
             check(bytes.statusCode()==200&&new String(bytes.body(),0,15,java.nio.charset.StandardCharsets.US_ASCII).equals("SQLite format 3"),"backup downloads a SQLite snapshot");
-            backupUploads(bytes.body());backupConfigurationImports(bytes.body());
+            check(upload(bytes.body(),cookie,csrf,null,"application/octet-stream").statusCode()==404,"backup upload endpoint has been removed");backupConfigurationImports(bytes.body());
             check(request("/api/admin/backup-file?name=../../.env",cookie,null,null,null).statusCode()==400,"backup traversal blocked");
             check(items(get("/logs?q=HOST_KICK")).stream().anyMatch(r->r.get("action").equals("HOST_KICK")),"host kick audit persisted");
             check(Leaderboard.getTop(20).isEmpty(),"entertainment never contributes rank");

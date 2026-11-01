@@ -1,0 +1,319 @@
+/* Light sky, cream cards and golden controls from the original world, study and leaderboard.
+   The original home styles remain in world_portal.css, study_rank.css and login_scene.css. */
+:root{
+  --vm-paper:#fff9e9;--vm-paper-soft:#eaf8ff;--vm-page:#edf8ff;--vm-ink:#263f50;--vm-muted:#4d6574;
+  --vm-accent:#195b80;--vm-accent-deep:#12517f;--vm-gold:#e5b955;--vm-gold-light:#fff0aa;--vm-line:#d8c99e;
+  --vm-success:#3f6e47;--vm-success-bg:#eaf2df;--vm-danger:#a44b3d;--vm-danger-bg:#fae8de;
+}
+body.vm-theme:not(.vm-home){
+  --bg-dark:var(--vm-page);--studio-blue:var(--vm-paper-soft);--glass-bg:var(--vm-paper);--glass-border:var(--vm-line);
+  --neon-gold:var(--vm-gold);--neon-cyan:var(--vm-gold);--neon-green:var(--vm-success);--neon-red:var(--vm-danger);
+  --gold-glow:#e5b95526;--cyan-glow:#e5b95520;--blood-red:var(--vm-danger);--blood-dark:var(--vm-paper-soft);--blood-bright:#dfaa4d;--crimson:#287eaf;
+  --teal:var(--vm-accent);--ink:var(--vm-ink);--line:var(--vm-line);--muted:var(--vm-muted);--cream:var(--vm-paper);--sage:var(--vm-paper-soft);
+  color:var(--vm-ink);font-family:'Segoe UI',Arial,sans-serif;
+  background:linear-gradient(135deg,#edf8fff0,#f6fcffe8),url('/assets/world/sky-world.png') center/cover fixed;
+}
+.vm-theme:not(.vm-home) :is(button,input,select,textarea){font-family:'Segoe UI',Arial,sans-serif}
+.vm-theme:not(.vm-home) :is(h1,h2,h3,h4){color:var(--vm-ink);text-shadow:none;font-family:'Segoe UI',Arial,sans-serif}
+.vm-theme:not(.vm-home) :is(a,button,input,select,textarea,summary):focus-visible{outline:3px solid var(--vm-gold)!important;outline-offset:3px}
+.vm-theme:not(.vm-home) :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea){
+  color:var(--vm-ink)!important;background:#fffdf5!important;border:1px solid var(--vm-line)!important;border-radius:9px;box-shadow:inset 0 1px 3px #287eaf0a;accent-color:var(--vm-accent);
+}
+.vm-theme:not(.vm-home) :is(input,textarea)::placeholder{color:#61727d;opacity:1}
+.vm-theme:not(.vm-home) :is(label,.form-label,.form-group label){color:var(--vm-ink)!important}
+.vm-theme:not(.vm-home) :is(button,.secondary,.ghost,.text-button,.btn-action){color:var(--vm-ink);border-color:var(--vm-line);text-shadow:none}
+.vm-theme:not(.vm-home) :is(.primary,.btn-primary-action,.btn-gameshow,.btn-survival,.btn-start-game,.btn-spin-wheel,.btn-create-room,.btn-gold-action,.btn-red-action,.btn-join-card,#btn-login,#btn-register){
+  background:linear-gradient(180deg,#f7dc86,#e7b74b)!important;color:#644820!important;border:1px solid #d0a34c!important;border-bottom:3px solid #af7f2e!important;border-radius:10px;box-shadow:0 3px 8px #cda54b20;text-shadow:none;font-weight:700;
+}
+.vm-theme:not(.vm-home) :is(.primary,.btn-primary-action,.btn-gameshow,.btn-start-game,.btn-spin-wheel,.btn-create-room,.btn-join-card):hover:not(:disabled){background:linear-gradient(180deg,#ffe79d,#efc965)!important;box-shadow:0 4px 13px #cda54b30}
+.vm-theme:not(.vm-home) :is(.secondary,.ghost,.text-button,.btn-action,.sound-toggle-btn,.lifeline-btn){background:var(--vm-paper-soft)!important;color:var(--vm-accent)!important;border-color:var(--vm-line)!important;box-shadow:none}
+.vm-theme:not(.vm-home) :is(.danger,.btn-leave-pill){background:var(--vm-danger-bg)!important;color:var(--vm-danger)!important;border-color:#d9b0a0!important}
+.vm-theme:not(.vm-home) :is(.muted,.subtext,.empty,.empty-state){color:var(--vm-muted)!important}
+.vm-theme:not(.vm-home) :is(.panel,.stat-card,.room-card,.detail-section,.detail-field,.room-card-header,.settings-grid>article,.operation-card){
+  background:var(--vm-paper)!important;border-color:var(--vm-line)!important;color:var(--vm-ink);box-shadow:0 4px 0 #c9ad7633;
+}
+.vm-theme:not(.vm-home) :is(.detail-section,.detail-field,.room-card-header,.info-strip){background:var(--vm-paper-soft)!important}
+.vm-theme:not(.vm-home) :is(table,.standings-table){color:var(--vm-ink)!important}
+.vm-theme:not(.vm-home) :is(th,.standings-table th){background:#fff1cd!important;color:#74654c!important;border-color:var(--vm-line)!important;font-size:12px}
+.vm-theme:not(.vm-home) :is(td,.standings-table td){color:var(--vm-ink)!important;border-color:#e9dfbf!important}
+.vm-theme:not(.vm-home) tbody tr:hover{background:#f1faff}
+.vm-theme:not(.vm-home) :is(dialog,.modal-content,.modal-card){background:var(--vm-paper)!important;color:var(--vm-ink)!important;border:1px solid var(--vm-line)!important;box-shadow:0 24px 80px #12517f26}
+.vm-theme:not(.vm-home) dialog::backdrop{background:#06365e66;backdrop-filter:blur(4px)}
+.vm-theme:not(.vm-home) .modal-overlay{background:#06365e66!important;backdrop-filter:blur(4px)}
+.vm-theme:not(.vm-home) :is(.modal-title,.modal-header,.dialog-heading){color:var(--vm-ink)!important;border-color:var(--vm-line)!important;text-shadow:none!important}
+.vm-theme:not(.vm-home) :is(.badge,.status-pill,.fact,.room-tag,.room-code-badge,.room-status-badge,.ready-badge,.room-code){background:#fff1cd!important;color:#82652d!important;border-color:#e8d7a4!important;text-shadow:none}
+.vm-theme:not(.vm-home) :is(.badge.cancelled,.badge.interrupted,.ready-badge.not-ready){background:var(--vm-danger-bg)!important;color:var(--vm-danger)!important}
+.vm-theme:not(.vm-home) :is(.badge.active,.ready-badge.is-ready,.btn-ready-toggle.ready-active,.presence-badge.is-online){background:var(--vm-success-bg)!important;color:var(--vm-success)!important;border-color:#a6be8c!important}
+.vm-theme:not(.vm-home) :is(.presence-badge.is-offline,.badge.archived){background:#eff3f4!important;color:#52616c!important}
+.vm-theme:not(.vm-home) :is(pre,.button-group,.pagination){border-color:var(--vm-line)}
+.vm-theme:not(.vm-home) pre{background:#eaf8ff;color:var(--vm-accent)}
+.vm-theme:not(.vm-home) :is(.notice,.portal-message,.world-toast){background:#fff3cc!important;color:#76532c!important;border-color:#e8d7a4!important}
+.vm-theme:not(.vm-home) .error-notice{background:var(--vm-danger-bg)!important;color:var(--vm-danger)!important}
+
+/* The same heraldic mark and wordmark are used at every entry point. */
+.vm-brand{display:inline-flex!important;align-items:center;gap:11px!important;text-decoration:none;color:var(--vm-ink);min-width:0;text-align:left}
+.vm-crest-image{display:block;width:48px;height:51px;object-fit:contain;flex:0 0 auto;filter:drop-shadow(0 2px 2px #316d961f)}
+.vm-wordmark{display:flex!important;flex-direction:column;align-items:flex-start;gap:2px;white-space:nowrap;line-height:1.1;min-width:0}
+.vm-theme .vm-brand>.vm-wordmark{width:auto;height:auto;padding:0;border:0;background:none;clip-path:none;border-radius:0;box-shadow:none;overflow:visible;transform:none;color:inherit;font-family:'Segoe UI',Arial,sans-serif;font-style:normal}
+.vm-wordmark>strong{font-size:18px!important;font-weight:850;letter-spacing:1.7px;color:inherit}
+.vm-wordmark>b{font-size:13px!important;font-weight:750;letter-spacing:2px;color:var(--vm-gold)}
+.vm-wordmark :is(small,.vm-brand-context),.vm-brand>.vm-brand-context{display:block;font-size:8px!important;letter-spacing:1px;color:inherit;opacity:.75;margin:5px 0 0}
+.vm-brand>.vm-brand-context{max-width:125px;line-height:1.5;white-space:normal}
+.vm-brand-bar{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:15px max(20px,calc((100% - 1400px)/2));background:linear-gradient(115deg,#f5fcff,#e4f4fc);border-bottom:3px solid var(--vm-gold);color:#154d76;box-sizing:border-box;width:100%;align-self:stretch}
+.vm-brand-bar .vm-brand{color:#154d76}.vm-brand-bar-context{font-size:12px;letter-spacing:2px;color:var(--vm-muted)}.vm-back-home{color:#195b80!important;text-decoration:none;font-size:13px;white-space:nowrap}
+.vm-auth-brand{display:flex;align-items:center;justify-content:center;gap:16px;margin:0 0 22px;padding:0 0 20px;border-bottom:1px solid var(--vm-line);color:var(--vm-accent)}
+.vm-auth-brand .vm-crest-image{width:68px;height:72px}.vm-auth-brand .vm-wordmark>strong{font-size:21px!important}.vm-auth-brand .vm-wordmark>b{font-size:15px!important}
+
+/* Account surfaces. Home, study and leaderboard retain their original palette. */
+.vm-theme:not(.vm-home) :is(.login-scene .container,.login-card){background:#fffef9f5!important;border-color:var(--vm-line)!important;color:var(--vm-ink)!important}
+.vm-theme:not(.vm-home) .login-scene:after{background:linear-gradient(110deg,#287eaf18,#ffffff00 50%,#287eaf18)!important}
+.vm-theme:not(.vm-home) .login-story{background:linear-gradient(145deg,#eaf8ff,#f4fcff)!important;color:#154d76}
+.vm-theme:not(.vm-home) .login-story :is(h1,h2,p,.brand){color:#154d76!important}.vm-theme:not(.vm-home) .login-story .vm-crest-image{width:58px;height:62px}
+.vm-theme:not(.vm-home) .login-story .login-illustration>span{color:#cfa42d!important;border-color:#ddbf66!important;background:#fff3cc!important}
+.vm-theme:not(.vm-home) .login-scene-toggle{background:#f3fbfff2!important;color:#154d76!important;border-color:#a9d9ee!important}
+.vm-theme:not(.vm-home).vm-account{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100svh}
+.vm-theme:not(.vm-home).vm-account .vm-brand-bar{width:min(440px,95%);border:0;background:transparent;box-shadow:none;padding:20px 0;color:var(--vm-ink)}
+.vm-theme:not(.vm-home).vm-account .vm-brand-bar .vm-brand{color:var(--vm-ink)}.vm-theme:not(.vm-home).vm-account .vm-brand-bar-context{display:none}.vm-theme:not(.vm-home).vm-account .vm-back-home{color:var(--vm-accent)!important}
+.vm-theme:not(.vm-home).vm-account :is(main,.container){background:var(--vm-paper)!important;color:var(--vm-ink)!important;border:1px solid var(--vm-line);box-shadow:0 5px 0 #c9ad7644}
+.vm-theme:not(.vm-home).vm-account a{color:var(--vm-accent)}
+
+/* Administration: light navigation, cream tables and soft blue surroundings. */
+.vm-admin .sidebar{background:linear-gradient(165deg,#f5fcff,#eaf6fc)!important;color:#154d76;border-right:1px solid #cce4ef}
+.vm-admin .sidebar .brand{color:#154d76!important;gap:8px!important;margin-bottom:27px}.vm-admin .sidebar .vm-crest-image{width:42px;height:46px}
+.vm-admin .sidebar .vm-wordmark>strong{font-size:16px!important}.vm-admin .sidebar .vm-wordmark>b{font-size:11px!important}
+.vm-admin .sidebar nav>button{color:#426c84!important;background:transparent!important;border-color:transparent!important;font-size:13px}
+.vm-admin .sidebar nav>button.active,.vm-admin .sidebar nav>button:hover{background:#d7edf8!important;color:#154d76!important;border-left-color:#e5b955!important}
+.vm-admin :is(.sidebar .nav-label,.sidebar-bottom,.sidebar .player-link){color:#60839b!important}
+.vm-admin .topbar{background:#fbfeff!important;border-color:var(--vm-line)}
+.vm-admin :is(.topbar,.breadcrumbs,.page-header p,.panel-heading p,.stat-card small){color:var(--vm-muted)}
+.vm-admin main{background:transparent}.vm-admin .stat-card strong{color:var(--vm-accent)}
+.vm-admin :is(.stat-icon,.small-label,.eyebrow){color:#9e864f}
+.vm-admin .table-wrap td{font-size:13px;line-height:1.65}.vm-admin .table-wrap th{font-size:12px}
+.vm-admin :is(.detail-facts dd,.detail-section p,.dialog-heading h2){color:var(--vm-ink)}
+.vm-admin .detail-field dt{color:var(--vm-muted)}.vm-admin .detail-question[open]>summary{background:#fff1cd}
+.vm-admin .correct-option{background:var(--vm-success-bg)!important;border-color:#9bb686!important}
+.vm-admin .correct-option strong{color:var(--vm-success)}
+.vm-admin .form-draft-note{background:#fff0c8;border-color:#d7b974;color:#426c84}
+.vm-admin .admin-badge{background:#eaf8ff;color:#426c84;border-color:#cce4ef}
+
+/* Every legacy game uses the classroom's paper cards, question form and answer states. */
+.vm-game::before,.vm-game::after{display:none!important}
+.vm-game :is(.arena-header,.wheel-header,.survival-header){background:var(--vm-paper)!important;border-color:var(--vm-line)!important;color:var(--vm-ink)!important;box-shadow:0 3px 0 #c9ad7633}
+.vm-game :is(.arena-logo-text,.wheel-title,.survival-logo-text){background:none!important;-webkit-text-fill-color:var(--vm-ink)!important;color:var(--vm-ink)!important;text-shadow:none!important;font-family:'Segoe UI',Arial,sans-serif;letter-spacing:.5px}
+.vm-game :is(.arena-logo-badge,.wheel-logo-badge,.survival-logo-badge){background:linear-gradient(#fff0b0,#f2d472)!important;color:#78561d!important;border-color:#ddbf66!important;text-shadow:none;box-shadow:none}
+.vm-game :is(.hud-stat,.user-badge,.game-hud-bar,.game-status-header,.room-info-strip,.room-info-banner,.room-counter-circle,.turn-timer-box,.turn-indicator,.phase-indicator){background:var(--vm-paper-soft)!important;border-color:var(--vm-line)!important;color:var(--vm-ink)!important;box-shadow:none}
+.vm-game :is(.hud-stat strong,.hud-stat span,.room-counter-circle .num,.room-counter-circle .label,.room-info-details,.podiums-header,.player-chip,.room-player-count){color:var(--vm-ink)!important;text-shadow:none}
+.vm-game :is(.stage-card,.waiting-container,.question-frame,.result-card,.end-card-box,.milestone-bonus-card,.standings-table-wrapper,.wheel-stage,.phrase-board,.action-controls-box,.hint-banner,.wheel-log-box,.podiums-container,.room-card){
+  background:var(--vm-paper)!important;color:var(--vm-ink)!important;border:1px solid var(--vm-line)!important;border-radius:15px;box-shadow:0 5px 0 #c7a96d33,0 10px 22px #67482708;
+}
+.vm-game :is(.stage-card,.room-card)::before{background:var(--vm-gold)!important;box-shadow:none}
+.vm-game :is(.stage-card,.result-card,.end-card-box,.room-card,.waiting-container,.action-controls-box) :is(h1,h2,h3,h4,p,label,small){color:var(--vm-ink)!important;text-shadow:none}
+.vm-game :is(.lobby-title-group h2,.room-card-title,.modal-title,.winner-champion-name,.question-title){color:var(--vm-ink)!important;background:none!important;-webkit-text-fill-color:var(--vm-ink)!important;text-shadow:none!important}
+.vm-game .question-frame{border:2px solid #dbc68b!important;position:relative;overflow:visible}
+.vm-game .question-frame:before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#e5b955,#fff0aa,#e5b955)}
+.vm-game .question-title{font-size:clamp(20px,2.1vw,29px);line-height:1.6;font-weight:750;text-transform:none;letter-spacing:0;white-space:normal;overflow-wrap:anywhere}
+.vm-game :is(.question-badge,.phase-penalty-pill,.main-player-badge,.arena-main-player-label){background:#fff1cd!important;color:#82652d!important;border-color:#e8d7a4!important;text-shadow:none}
+.vm-game :is(.answer-btn,.option-btn){background:#fffdf5!important;color:var(--vm-ink)!important;border:1px solid #dbcda4!important;border-bottom:3px solid #cbb588!important;border-radius:12px;box-shadow:0 3px 0 #c9ad7626;text-shadow:none;font-size:16px;font-weight:600;line-height:1.5}
+.vm-game :is(.answer-btn,.option-btn):hover:not(:disabled){background:#fff1c0!important;border-color:#cfa34b!important;transform:translateY(-1px)}
+.vm-game .answer-letter{background:#fff3cc!important;color:#85632d!important;border-color:#ddbf66!important;box-shadow:none;text-shadow:none}
+.vm-game :is(.answer-btn,.option-btn).selected{background:#fff1c7!important;border-color:#cfa34b!important;box-shadow:0 0 0 2px #c8a45f40}
+.vm-game :is(.answer-btn,.option-btn).correct{background:var(--vm-success-bg)!important;color:#315d3b!important;border-color:#7ea36c!important;box-shadow:0 0 0 2px #7ea36c33}
+.vm-game :is(.answer-btn,.option-btn).wrong{background:var(--vm-danger-bg)!important;color:#8b3e32!important;border-color:#c98e79!important;box-shadow:none}
+.vm-game :is(.answer-btn,.option-btn).correct .answer-letter{background:#49754c!important;color:#fff9e9!important}
+.vm-game :is(.answer-btn,.option-btn).wrong .answer-letter{background:#a75c4a!important;color:#fff9e9!important}
+.vm-game :is(.answer-btn,.option-btn).correct,.vm-game :is(.answer-btn,.option-btn).wrong{animation:none!important;filter:none!important;box-shadow:0 2px 0 #8b714322!important}
+.vm-game :is(.podium-seat,.podium-slot,.player-chip){background:#f4fbff!important;border-color:#cce4ef!important;color:var(--vm-ink)!important;box-shadow:none}
+.vm-game :is(.podium-seat.active-player,.podium-seat.is-me,.podium-seat.main-player,.podium-slot.active-turn,.player-chip.is-host){background:#fff1c7!important;border-color:#cfa34b!important;box-shadow:0 0 0 2px #d7bd7b33}
+.vm-game :is(.seat-name,.seat-idx,.podium-username,.podium-score,.main-player-seat-label){color:var(--vm-ink)!important;text-shadow:none}
+.vm-game :is(.podium-seat.eliminated,.eliminated-row){background:#eff3f4!important;opacity:.7}
+.vm-game .podium-seat.is-bot{background:#edf6ea!important;border-color:#c5dcbd!important}
+.vm-game :is(.player-status-badge.alive,.ready-badge.is-ready){background:var(--vm-success-bg)!important;color:var(--vm-success)!important;border-color:#97b37b!important}
+.vm-game :is(.player-status-badge.eliminated,.phase-indicator.phase-danger,.timer-dial.danger .timer-number){color:var(--vm-danger)!important;border-color:#cb9681!important;text-shadow:none}
+.vm-game .timer-number{color:var(--vm-accent)!important;text-shadow:none}
+.vm-game .timer-circle-bg{stroke:#e9dfbf}
+.vm-game .timer-circle-progress{stroke:var(--vm-gold);filter:none}
+.vm-game .timer-dial.danger .timer-circle-progress{stroke:var(--vm-danger);filter:none}
+.vm-game .player-status-badge{box-shadow:none;text-shadow:none}
+.vm-game :is(.hp-bar,.hp-bar-large){background:#e4f0f5!important;border-color:#cce4ef!important}
+.vm-game .hp-bar-fill{background:linear-gradient(90deg,#668d55,#8cac66);box-shadow:none}
+.vm-game .hud-hp-wrapper:has(.hp-bar.danger) .hud-hp-val{color:var(--vm-danger)!important}
+.vm-game :is(.hud-hp-wrapper,.vm-score-panel,#lifelines-panel,#lifeline-result,#role-badge-game){background:var(--vm-paper-soft)!important;color:var(--vm-accent)!important;border-color:var(--vm-line)!important;box-shadow:none}
+.vm-game :is(.hud-hp-header span:first-child,.vm-health-label,.vm-lifeline-heading,#answer-phase-label){color:var(--vm-accent)!important;text-shadow:none}
+.vm-game :is(.vm-score-panel strong,.hud-hp-val){color:var(--vm-success)!important}
+.vm-game .survival-logo-icon{filter:none!important;display:flex;align-items:center;justify-content:center}.vm-game .survival-logo-icon img{width:46px;height:49px}
+.vm-game :is(.result-card,.end-card-box) [style*="color"]{color:var(--vm-ink)!important;text-shadow:none}
+.vm-game :is(.vm-summary-box,#role-badge-waiting,#main-player-result-badge){background:var(--vm-paper-soft)!important;color:var(--vm-ink)!important;border-color:var(--vm-line)!important}
+.vm-game :is(.vm-summary-box,#result-screen,#end-screen) [style*="color"]{color:var(--vm-ink)!important;text-shadow:none}
+.vm-game :is(#game-my-hp,.hud-hp-val){color:var(--vm-success)!important}
+.vm-game :is(.hud-hp-wrapper:has(.hp-bar.danger) .hud-hp-val,div:has(>#game-hp-bar.danger) #game-my-hp){color:var(--vm-danger)!important}
+.vm-game :is(#btn-leave-game-ingame,#btn-leave-result-ingame,#btn-delete-room,#btn-delete-room-game,#btn-survival-delete){background:var(--vm-danger-bg)!important;color:var(--vm-danger)!important;border-color:#d9b0a0!important}
+.vm-game :is(#btn-cancel-modal,#btn-close-modal,#btn-close-ask-modal){color:var(--vm-accent)!important}
+.vm-game :is(.hint-banner,.wheel-log-box,.game-status-header){color:var(--vm-ink)!important}
+.vm-game .hint-banner{background:#fff3cc!important;border-color:#e8d7a4!important}
+.vm-game .phrase-board{background:#eaf8ff!important}.vm-game .letter-box{background:#d7edf8!important;color:#154d76!important;border-color:#a5cce2!important;box-shadow:0 3px 0 #287eaf22;text-shadow:none}
+.vm-game .letter-box.revealed{background:#fffdf5!important;color:#51402b!important;border-color:#ddbf66!important;text-shadow:none}
+.vm-game #wheel-svg>circle{fill:#fff3cc;stroke:#cfa34b}.vm-game #wheel-svg>circle:nth-last-child(2){fill:#ffe49e;stroke:#f2d472}
+.vm-game .wheel-pointer{border-top-color:#e5b955!important;filter:drop-shadow(0 2px 2px #287eaf22)}
+.vm-game :is(#spin-result-banner,#waiting-msg,.hud-hp-val,.result-banner,.result-banner h2,.room-info-details p){color:var(--vm-accent)!important;text-shadow:none!important}
+.vm-game .vm-mode-note{width:100%;box-sizing:border-box;background:#eaf8ff!important;border-bottom:1px solid #bcddeb;color:#426c84!important;font-family:'Segoe UI',Arial,sans-serif!important}
+.vm-game .vm-mode-note a{color:#195b80!important;font-weight:700}
+.vm-game .room-notice{background:#f3fbff;border-color:#bcddeb;color:#65462c;box-shadow:0 3px 14px #287eaf18}
+.vm-game .host-tools{position:static!important;width:calc(100% - 32px);max-width:520px;margin:18px auto;background:var(--vm-paper);color:var(--vm-ink);border-color:var(--vm-line);box-shadow:0 4px 0 #c9ad7633}
+
+/* Ranked and casual race, review questions, cards and results share the same form. */
+.vm-theme:not(.vm-home).vm-race .race-header{background:linear-gradient(110deg,#f5fcff,#eaf8ff);border-color:#cce4ef;color:#154d76}
+.vm-race .race-header .vm-brand,.vm-race .race-header .header-links :is(a,strong,span){color:#154d76!important}.vm-race .race-header .vm-crest-image{width:42px;height:45px}
+.vm-race :is(.rank-card,.answer-option,.race-lane,.daily-info,.review-question,.rank-meter){background:var(--vm-paper)!important;border-color:var(--vm-line)!important;color:var(--vm-ink)}
+.vm-race .answer-option{font-size:15px;color:var(--vm-ink)!important;border-bottom:3px solid #cbb588}
+.vm-race .answer-option>span:first-child{background:#fff3cc;color:#85632d}
+.vm-race .answer-option.chosen{background:#fff1c7!important;border-color:#cfa34b!important}
+.vm-race .answer-option.correct{background:var(--vm-success-bg)!important;border-color:#8bac76!important}
+.vm-race .answer-option.incorrect{background:var(--vm-danger-bg)!important;border-color:#c98e79!important}
+.vm-race :is(.question-panel>h2,.result-panel h2){color:var(--vm-ink);line-height:1.5}
+.vm-race :is(.question-feedback,.history-entry small,.leader-entry small,.lane-score small){color:var(--vm-muted)}
+.vm-race .lane-track{background:#e4f0f5}.vm-race .lane-fill{background:#9ccddc}.vm-race .race-lane.me .lane-fill{background:#e5b955}
+.vm-race .lane-marker{background:#287eaf;color:#ffffff}.vm-race .rank-meter-track{background:#e4f0f5}.vm-race .rank-meter-fill{background:linear-gradient(90deg,#f3cf65,#e5b955)}
+.vm-race .rank-emblem{box-shadow:0 4px 15px #73512a22}.vm-race .rank-meter[data-direction=loss] .rank-meter-fill{background:linear-gradient(90deg,#a45b49,#cf9673)}
+.vm-theme:not(.vm-home) .rank-meter{background:var(--vm-paper-soft);border-color:var(--vm-line)}.vm-theme:not(.vm-home) .rank-meter-track{background:#e4f0f5}.vm-theme:not(.vm-home) .rank-meter-fill{background:linear-gradient(90deg,#f3cf65,#e5b955)}.vm-theme:not(.vm-home) .rank-meter[data-direction=loss] .rank-meter-fill{background:linear-gradient(90deg,#a45b49,#cf9673)}
+.vm-theme:not(.vm-home) :is(.account-notice-dialog,.host-tools){background:var(--vm-paper)!important;border-color:var(--vm-line)!important;color:var(--vm-ink)!important}
+.vm-theme:not(.vm-home) .server-announcement{background:linear-gradient(100deg,#eaf8ff,#f4fcff)!important;color:#154d76!important;border-color:#bcddeb}
+
+@media(max-width:800px){
+  .vm-admin .sidebar .vm-wordmark{display:none!important}.vm-admin .sidebar .vm-crest-image{width:40px;height:44px}.vm-admin .sidebar .brand{margin-left:0;margin-right:0}
+  .vm-brand-bar-context{display:none}.vm-game .vm-brand-bar{padding:10px 16px}.vm-game .vm-brand-bar .vm-crest-image{width:39px;height:42px}
+}
+@media(max-width:600px){
+  .vm-crest-image{width:36px;height:39px}.vm-wordmark>strong{font-size:14px!important;letter-spacing:1.2px}.vm-wordmark>b{font-size:10px!important;letter-spacing:1.3px}.vm-brand-context{display:none!important}
+  .vm-game .question-title{font-size:20px;line-height:1.55}.vm-game :is(.answer-btn,.option-btn){font-size:14px;padding:12px;min-height:62px}
+  .vm-game .vm-back-home{font-size:11px}.vm-game .vm-brand-bar{gap:12px}.vm-game :is(.stage-card,.question-frame,.result-card){border-radius:12px}
+  .vm-theme:not(.vm-home) .vm-auth-brand{gap:12px;margin-bottom:16px;padding-bottom:14px}.vm-auth-brand .vm-crest-image{width:56px;height:60px}.vm-auth-brand .vm-wordmark>strong{font-size:18px!important}.vm-auth-brand .vm-wordmark>b{font-size:12px!important}
+  .vm-race .race-header .vm-crest-image{width:34px;height:37px}.vm-race .race-header .vm-brand{gap:7px!important}.vm-race .race-header .header-links{gap:9px}
+}
+@media(prefers-reduced-motion:reduce){.vm-theme:not(.vm-home) *{scroll-behavior:auto!important}.vm-crest-image{filter:none}}
+
+/* Keep the original world and classroom colors; only the new name and crest are shared. */
+.vm-home .world-brand{color:#fff2bd}
+.vm-home .scene-brand{color:#fff9df}
+.vm-home .vm-wordmark>b{color:#ffe18a}
+.vm-home .vm-auth-brand{color:#245c4b}
+.vm-theme:not(.vm-home) .vm-brand-bar{box-shadow:0 2px 10px #287eaf0d}
+.vm-admin .sidebar-bottom{border-color:#cce4ef}
+.vm-admin .sidebar-bottom small{color:#60839b}
+.vm-admin .sidebar nav>button.active{box-shadow:inset 3px 0 #e5b955}
+.vm-admin .sidebar nav>button:hover{background:#e0f0f9!important}
+.vm-game #end-winners-list>div{background:#fff1cd!important;border-color:#e8d7a4!important}
+
+/* Readable text on light surfaces. The world, study and leaderboard are excluded. */
+.vm-theme:not(.vm-home) .vm-wordmark>b{color:#725018}
+.vm-theme:not(.vm-home) :is(.small-label,.eyebrow,.subtext,.muted,.empty-state){color:var(--vm-muted)!important}
+.vm-theme:not(.vm-home) :is(.link-button,.player-link){color:#195b80}
+.vm-theme:not(.vm-home) :is(.secondary,.ghost,.text-button,.btn-action,.sound-toggle-btn,.lifeline-btn){color:#195b80!important}
+.vm-theme:not(.vm-home) :is(.badge.CANCELLED,.badge.ARCHIVED,.badge.blocked){background:var(--vm-danger-bg)!important;color:#8c3f31!important}
+.vm-theme:not(.vm-home) :is(.badge.DRAFT,.badge.INTERRUPTED){background:#fff1cd!important;color:#70521e!important}
+.vm-game :is(.room-card,.room-info-details) :is(strong,small,span){color:var(--vm-ink)!important}
+.vm-game :is(.room-card-title,.podium-username,.podium-score,.seat-name,.question-title){color:var(--vm-ink)!important}
+.vm-game :is(.room-list-empty,.room-settings-summary,.wheel-log-title){color:var(--vm-muted)!important}
+.vm-game :is(.room-card-details,.room-card-details>div){color:var(--vm-muted)!important}
+.vm-game :is(.room-card,#waiting-screen) [style*="color"]{color:var(--vm-ink)!important}
+.vm-game #lobby-screen a{color:#195b80!important}
+.vm-wheel #lobby-screen h3{color:var(--vm-ink)!important}
+.vm-game .modal-overlay :is(p,small){color:var(--vm-muted)!important}
+.vm-game .btn-ready-toggle{background:#eaf2df!important;color:#315d3b!important;border:1px solid #9fb98c!important}
+.vm-theme:not(.vm-home) .btn-ready-toggle.ready-active{background:#cfe5bc!important;color:#23472d!important;border-color:#8eaf78!important}
+.vm-game .podium-seat.main-player :is(.seat-name,.seat-idx,.main-player-seat-label){color:var(--vm-ink)!important}
+.vm-game .host-tools :is(button,.host-tools-delete){background:var(--vm-danger-bg)!important;color:#8c3f31!important;border-color:#d9b0a0!important}
+.vm-game .host-tools p{color:var(--vm-muted)}
+.vm-theme:not(.vm-home).vm-account :is(h2,main>p:not([id])){color:var(--vm-ink)!important}
+.vm-theme:not(.vm-home).vm-account a{color:#195b80!important}
+.vm-account #btn-reset{background:linear-gradient(#f7dc86,#e7b74b);color:#513a1d;border:1px solid #c49c44;font-size:16px}
+.vm-account #btn-resend{background:#eaf8ff;color:#195b80;border:1px solid #bcddeb;font-size:15px}
+
+/* A single centered sign-in card leaves the moving sky visible on both sides. */
+.vm-admin #login-screen{display:grid;grid-template-columns:minmax(0,1fr);place-items:center;min-height:100svh;padding:36px 20px 74px}
+.vm-admin #login-screen .login-card{width:min(480px,100%);max-width:100%;margin:0;padding:34px 36px;background:#fffef9f7!important;border:1px solid #c7dfe9;box-shadow:0 12px 50px #123c6026}
+.vm-admin #login-screen .admin-login-brand{margin-bottom:24px;color:#154d76}
+.vm-admin #login-screen .admin-login-brand .vm-brand-context{display:none}
+.vm-admin #login-screen :is(p,label,.player-link){font-size:15px;line-height:1.65;color:var(--vm-ink)}
+.vm-admin #login-screen h2{font-size:30px;margin:0 0 12px}
+.vm-admin #login-screen :is(input,button){font-size:16px;min-height:48px}
+.vm-admin #login-screen .login-scene-toggle{min-height:38px;font-size:12px!important}
+.vm-admin #login-screen .error{color:#8c3f31}
+.vm-admin #login-screen .player-link{display:inline-block;color:#195b80;margin-top:2px}
+
+/* Administration text is sized for reading rather than dense thumbnail labels. */
+.vm-admin{font-size:15px;line-height:1.65}
+.vm-admin .sidebar{width:270px;padding-left:16px;padding-right:16px}
+.vm-admin .sidebar nav>button{padding:12px 13px;gap:12px;font-size:20px;line-height:1.4;align-items:flex-start}
+.vm-admin .sidebar nav>button span{font-size:15px;line-height:1.5}
+.vm-admin .sidebar .nav-label{font-size:11px;letter-spacing:1px;color:var(--vm-muted)!important}
+.vm-admin .sidebar-bottom{font-size:13px}.vm-admin .sidebar-bottom small{font-size:12px}
+.vm-admin :is(.sidebar>.player-link,.breadcrumbs,.topbar-actions,.topbar-actions .ghost){font-size:13px}
+.vm-admin :is(.breadcrumbs,.breadcrumbs strong,.breadcrumbs>span,.topbar-actions .muted,footer){color:var(--vm-muted)}
+.vm-admin :is(.topbar-actions .muted,.admin-badge){font-size:11px}
+.vm-admin :is(.page-header>div>p:last-child,.panel-heading p,.info-strip,.notice,.toolbar .muted,.pagination){font-size:14px;line-height:1.65}
+.vm-admin :is(#page-description,.pagination,.info-strip,.sidebar-bottom small){color:var(--vm-muted)}
+.vm-admin :is(.panel-heading h2,.panel h2){font-size:20px;line-height:1.4}
+.vm-admin :is(label,input,select,textarea,.toggle-label,.primary,.secondary,.ghost,.danger,.link-button){font-size:14px}
+.vm-admin :is(.toolbar select,.table-wrap td button,.room-actions button,.room-member button){font-size:13px}
+.vm-admin .table-wrap th{font-size:13px;font-weight:650}
+.vm-admin .table-wrap td{font-size:14px;line-height:1.65}
+.vm-admin :is(.table-wrap .subtext,.badge,.presence-badge,.table-wrap .muted,.stat-card small){font-size:12px}
+.vm-admin :is(.stat-card>span,.stat-card small,.operation-card p,.room-member,.room-code,.audit-summary p){color:var(--vm-muted);font-size:14px}
+.vm-admin :is(.stat-card small,.panel .muted,dialog .muted,.room-card .small-label){font-size:13px}
+.vm-admin :is(.detail-field dt,.detail-field dd,.detail-question>summary,.detail-options,.form-draft-note,#detail-body){font-size:14px}
+.vm-admin :is(.correct-option strong,.option-letter){font-size:12px}
+.vm-admin footer{font-size:12px}
+
+/* Ranked race: menus, room settings, match status and results share readable sizes. */
+.vm-race{font-size:16px;line-height:1.6}
+.vm-race .race-header{min-height:90px;height:auto;padding-top:14px;padding-bottom:14px;flex-wrap:wrap}
+.vm-race :is(.header-links,#connection-status){font-size:14px;color:var(--vm-muted)}
+.vm-race :is(.page-heading>div>p:last-child,.panel p,.rank-card p,.card-options label,.field-grid label,.join-form label,.inline-label){font-size:14px;line-height:1.7;color:var(--vm-muted)}
+.vm-race :is(.rank-card small,.rank-card span,.card-options small,.fine-print){font-size:13px!important;line-height:1.6;color:var(--vm-muted)}
+.vm-race :is(.primary,.secondary,.text-button,.mode-tabs button,input,select){font-size:15px}
+.vm-race .mode-tabs{flex-wrap:wrap}
+.vm-race .mode-tabs button{color:#425e70}
+.vm-race .mode-tabs button.active{background:#e2f2fa;color:#154d76;border-color:#94bed2;font-weight:700}
+.vm-race :is(.facts .fact,.question-meta,.lobby-controls p,.history-entry small,.leader-entry small,.review-question p,.lane-score small){font-size:13px;line-height:1.6;color:var(--vm-muted)}
+.vm-race :is(.history-entry strong,.leader-entry strong,.review-question h3,.lane-name,.lane-score,.race-lane){font-size:15px}
+.vm-race :is(.question-panel>h2,#question-text){font-size:clamp(22px,2vw,28px);line-height:1.6}
+.vm-race .answer-option{font-size:17px;line-height:1.6;min-height:64px}
+.vm-race .question-feedback{font-size:15px;line-height:1.8}
+.vm-race .rank-meter-points{font-size:21px}.vm-race .rank-meter-change{font-size:15px}.vm-race .rank-meter-caption{font-size:14px}
+.vm-race :is(.eyebrow,.small-label,footer){font-size:12px;color:var(--vm-muted)}
+.vm-race .card-options label{border-color:#c7dfe9}
+.vm-race :is(.time-track,.lane-track){background:#dcebf1}
+.vm-race #question-timer{color:#154d76}
+.vm-race .lane-marker{background:#195b80;color:white}
+.vm-race .race-lane.me .lane-marker{background:#f5d77e;color:#513a1d}
+.vm-race .lane-name small{font-size:13px;line-height:1.6;color:var(--vm-muted)}
+.vm-race .card-options strong{color:var(--vm-ink)}
+.vm-race #mode-brand-label{font-size:11px!important;color:var(--vm-muted);opacity:1;letter-spacing:.7px}
+.vm-race .room-card :is(small,span){color:var(--vm-muted)}
+
+@media(max-width:1150px) and (min-width:801px){.vm-admin .sidebar{width:250px}}
+@media(max-width:800px){
+  .vm-admin .sidebar{width:67px;padding-left:7px;padding-right:7px}
+  .vm-admin .sidebar nav>button{justify-content:center;align-items:center;font-size:24px;padding:13px 0}
+  .vm-admin .sidebar nav>button span{display:none}
+}
+@media(max-width:600px){
+  .vm-admin #login-screen{padding:22px 16px 76px}
+  .vm-admin #login-screen .login-card{padding:26px 23px}
+  .vm-admin #login-screen h2{font-size:27px}
+  .vm-admin .sidebar{width:58px;padding-left:4px;padding-right:4px}
+  .vm-admin .page-header{flex-wrap:wrap}
+  .vm-admin .page-header>.secondary{font-size:13px}
+  .vm-admin .topbar-actions{flex-wrap:wrap;gap:8px;font-size:13px}
+  .vm-admin .topbar{height:auto;min-height:65px;padding-top:12px;padding-bottom:12px}
+  .vm-admin .table-wrap table{min-width:560px}
+  .vm-admin .button-group{flex-wrap:wrap}
+  .vm-race .race-header{gap:14px}
+  .vm-race .header-links{width:100%;justify-content:space-between;flex-wrap:wrap;gap:12px}
+  .vm-race .page-heading{align-items:stretch}
+  .vm-race .rank-card{min-width:0;gap:16px}
+  .vm-race .mode-tabs button{padding:11px 13px;font-size:14px}
+  .vm-race .answer-option{font-size:16px}
+  .vm-race :is(.history-entry,.leader-entry,.section-heading){flex-wrap:wrap}
+  .vm-race .rank-meter-heading{flex-wrap:wrap}
+}

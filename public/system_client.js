@@ -28,7 +28,8 @@
     const key=value.id?'notice-'+value.id:JSON.stringify([value.kind,value.reason,value.blocked_until,fallback]);if(seen.has(key))return;seen.add(key);currentNotice=value;
     let dialog=document.getElementById('account-notice-dialog');
     if(!dialog){dialog=element('dialog',undefined,'account-notice-dialog');dialog.id='account-notice-dialog';const heading=element('h2'),reason=element('p',undefined,'account-notice-reason'),time=element('p',undefined,'account-notice-until'),button=element('button','Đã hiểu');button.type='button';button.addEventListener('click',acknowledge);dialog.append(heading,reason,time,button);dialog.addEventListener('cancel',e=>{e.preventDefault();acknowledge();});document.body.append(dialog);}
-    dialog.querySelector('h2').textContent={LOCK:'Tài khoản đã bị khóa',DISCONNECT:'Phiên đăng nhập đã bị ngắt',UNLOCK:'Tài khoản đã được mở khóa',MAINTENANCE:'Server đang bảo trì'}[value.kind]||'Thông báo tài khoản';
+    dialog.querySelector('h2').textContent={LOCK:'Tài khoản đã bị khóa',DISCONNECT:'Phiên đăng nhập đã bị ngắt',UNLOCK:'Tài khoản đã được mở khóa',MAINTENANCE:'Server đang bảo trì',SESSION_REPLACED:'Tài khoản đã đăng nhập ở nơi khác',SESSION_STARTED:'Đã chuyển phiên đăng nhập'}[value.kind]||'Thông báo tài khoản';
+    if(value.kind==='SESSION_REPLACED')invalid=true;
     if(value.kind==='MAINTENANCE')invalid=true;
     dialog.querySelector('.account-notice-reason').textContent=value.kind==='MAINTENANCE'?value.reason:value.reason?'Lý do: '+value.reason:fallback;
     const until=Number(value.blocked_until||0);dialog.querySelector('.account-notice-until').textContent=value.kind==='LOCK'?(until===-1?'Khóa đến khi quản trị viên mở lại.':until>Date.now()?'Thời hạn: '+new Date(until).toLocaleString('vi-VN'):''):'';
@@ -36,8 +37,8 @@
   }
   function authError(data){
     if(atAdmin()&&data.accountNotice?.kind==='MAINTENANCE')return;
-    if(expectedLogout)return;invalid=true;remember(data);inlineReason(data.message||'Phiên đã kết thúc.');showNotice(data.accountNotice||{},data.message||'Phiên đăng nhập đã kết thúc.');
-    if(!atAdmin()&&typeof window.checkAuth==='function')window.checkAuth();
+    if(expectedLogout)return;window.MatchLeaveGuard?.reset();invalid=true;remember(data);inlineReason(data.message||'Phiên đã kết thúc.');showNotice(data.accountNotice||{},data.message||'Phiên đăng nhập đã kết thúc.');
+    if(data.accountNotice?.kind!=='SESSION_REPLACED'&&!atAdmin()&&typeof window.checkAuth==='function')window.checkAuth();
   }
   function maintenance(value={enabled:false}){
     const previous=maintenanceState;
@@ -67,6 +68,7 @@
   }
   function showKick(data={}){showRoomAction(data,'Bạn đã bị kick khỏi phòng','room-kick-dialog');}
   function showCancellation(data={}){if(maintenanceState.enabled)return;showRoomAction(data,data.queueCancelled?'Lượt tìm trận đã bị hủy':'Trận đấu đã bị hủy','match-cancel-dialog');}
+  function showDeparture(data={}){showRoomAction(data,'Bạn đã rời trận đấu','match-departure-dialog');}
   function connect(){
     if(source)source.close();if(!window.EventSource)return;
     const active=new EventSource('/api/events');source=active;
@@ -83,8 +85,8 @@
     if(user){invalid=false;try{const last=JSON.parse(sessionStorage.getItem('account-last-reason')||'null');if(last&&last.username!==user.username)sessionStorage.removeItem('account-last-reason');}catch{}}
     if(notice&&Object.keys(notice).length)showNotice(notice);
   }
-  window.SystemClient={setAccount,showNotice,showKick,showCancellation,setMaintenance:maintenance,handleAuthError:authError,expectLogout(value=true){expectedLogout=value;},refresh(){fetch('/auth/me',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(data=>{if(data){if(data.maintenance)maintenance(data.maintenance);setAccount(data.loggedIn?data.user:null,data.accountNotice);}}).catch(()=>{});}};
+  window.SystemClient={setAccount,showNotice,showKick,showCancellation,showDeparture,setMaintenance:maintenance,handleAuthError:authError,expectLogout(value=true){expectedLogout=value;},refresh(){fetch('/auth/me',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(data=>{if(data){if(data.maintenance)maintenance(data.maintenance);setAccount(data.loggedIn?data.user:null,data.accountNotice);if(data.loginNotice)showNotice(data.loginNotice);}}).catch(()=>{});}};
   try{const previous=JSON.parse(sessionStorage.getItem('account-last-reason')||'null');if(previous){inlineReason(previous.message);sessionStorage.removeItem('account-last-reason');}}catch{}
   connect();window.SystemClient.refresh();
-  window.addEventListener('beforeunload',()=>source?.close());
+  window.addEventListener('pagehide',()=>source?.close());
 })();

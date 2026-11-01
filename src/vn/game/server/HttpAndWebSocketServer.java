@@ -84,12 +84,15 @@ public class HttpAndWebSocketServer {
         this.adminController=new AdminController(userRepository,new AdminController.Runtime(){
             public Map<String,Object> rooms(){return Map.of("items",java.util.stream.Stream.of(arenaGame.adminRooms(),wheelGame.adminRooms(),survivalGame.adminRooms()).flatMap(List::stream).toList());}
             public int connections(){
+                return onlineUsernames().size();
+            }
+            public Set<String> onlineUsernames(){
                 Set<String> online=clientEvents.onlineUsernames();
                 for(WebSocketClient client:connections){
                     String name=client.getUsername();
                     if(!client.isClosed()&&name!=null&&sessionManager.getUsername(socketSessions.get(client))!=null)online.add(name.toLowerCase(Locale.ROOT));
                 }
-                return online.size();
+                return online;
             }
             public void disconnect(String username,String reason){
                 endPlayerSessions(username,"Phiên đã kết thúc bởi quản trị viên. Lý do: "+reason,true);
@@ -167,7 +170,20 @@ public class HttpAndWebSocketServer {
         try{return AdminStore.maintenanceStatus();}catch(java.sql.SQLException e){throw new IllegalStateException("Chưa tải được trạng thái bảo trì.",e);}
     }
     private String createPlayerSession(String name){
-        synchronized(playerAccessLock){if(Boolean.TRUE.equals(maintenanceStatus().get("enabled")))return null;return sessionManager.createSession(name);}
+        synchronized(playerAccessLock){
+            if(Boolean.TRUE.equals(maintenanceStatus().get("enabled")))return null;
+            if(sessionManager.hasUserSession(name)){
+                var notice=SessionManager.replacementNotice();
+                // Finish cleanup before the new session can join a room; stale sockets cannot re-enter.
+                Map<String,Object> event=Map.of("username",name,"message",notice.get("reason"),"accountNotice",notice);
+                clientEvents.notifyUser(name,event);
+                for(WebSocketClient client:new ArrayList<>(connections))if(name.equalsIgnoreCase(client.getUsername())){
+                    var packet=new HashMap<String,Object>(event);packet.put("type","auth_error");client.send(JsonUtil.toJson(packet));
+                    raceGame.disconnect(client);arenaGame.handleDisconnect(client);wheelGame.handleDisconnect(client);survivalGame.handleDisconnect(client);client.close();
+                }
+            }
+            return sessionManager.createSession(name);
+        }
     }
     private void enforceMaintenance(){
         synchronized(playerAccessLock){
@@ -300,6 +316,7 @@ public class HttpAndWebSocketServer {
                 err.put("type", "auth_error");
                 err.put("message", Boolean.TRUE.equals(maintenance.get("enabled"))?maintenance.get("message"):"Bạn phải đăng nhập để chơi game!");
                 if(Boolean.TRUE.equals(maintenance.get("enabled")))err.put("accountNotice",Map.of("kind","MAINTENANCE","reason",maintenance.get("message")));
+                else if(!sessionManager.endedNotice(sessionId).isEmpty())err.put("accountNotice",sessionManager.endedNotice(sessionId));
                 client.send(JsonUtil.toJson(err));
                 Thread.sleep(200);
                 client.close();
@@ -307,8 +324,10 @@ public class HttpAndWebSocketServer {
             }
 
             // Vòng lặp lắng nghe các Frame từ WebSocket Client
-            connections.add(client);
-            socketSessions.put(client,sessionId);
+            synchronized(playerAccessLock){
+                if(!Objects.equals(username,sessionManager.getUsername(sessionId))){client.send(JsonUtil.toJson(Map.of("type","auth_error","message","Phiên đăng nhập đã được thay thế.","accountNotice",sessionManager.endedNotice(sessionId))));client.close();return;}
+                connections.add(client);socketSessions.put(client,sessionId);
+            }
             DataInputStream dataIn = new DataInputStream(in);
             while (!client.isClosed()) {
                 int b0 = dataIn.read();
@@ -380,6 +399,9 @@ public class HttpAndWebSocketServer {
     }
 
     private void routeWebSocketMessage(WebSocketClient client, String text) {
+        synchronized(playerAccessLock){routeAuthorizedMessage(client,text);}
+    }
+    private void routeAuthorizedMessage(WebSocketClient client,String text){
         try {
             if(Boolean.TRUE.equals(maintenanceStatus().get("enabled"))){enforceMaintenance();client.close();return;}
             if(!Objects.equals(client.getUsername(),sessionManager.getUsername(socketSessions.get(client)))||AdminStore.isBlocked(client.getUsername())||userRepository.isAdmin(client.getUsername())){client.close();return;}
@@ -559,7 +581,7 @@ public class HttpAndWebSocketServer {
             try { contentLength = Integer.parseInt(clStr); } catch (NumberFormatException ignored) {}
         }
 
-        int maxBody=path.equals("/api/admin/backup-upload")?AdminStore.MAX_BACKUP_UPLOAD_BYTES:path.startsWith("/api/admin/")?1500000:65536;
+        int maxBody=path.startsWith("/api/admin/")?1500000:65536;
         if (contentLength < 0 || contentLength > maxBody) {
             sendJson(out, 400, Map.of("error", "Nội dung yêu cầu quá lớn hoặc không hợp lệ."), null);
             socket.close();
@@ -568,7 +590,7 @@ public class HttpAndWebSocketServer {
         // Content-Length tính theo byte, không phải số ký tự (mật khẩu có thể có dấu).
         byte[] bodyBytes = in.readNBytes(contentLength);
         if (bodyBytes.length != contentLength) throw new EOFException("Thiếu nội dung HTTP.");
-        String body = path.equals("/api/admin/backup-upload")?"":new String(bodyBytes, StandardCharsets.UTF_8);
+        String body = new String(bodyBytes, StandardCharsets.UTF_8);
 
         if("GET".equals(method)&&"/api/events".equals(path)){
             String name=sessionManager.getUsername(sessionId);
@@ -849,7 +871,9 @@ public class HttpAndWebSocketServer {
                     resp.put("user", userMap);
                 } else {
                     resp.put("loggedIn", false);
+                    var ended=sessionManager.endedNotice(sessionId);if(!ended.isEmpty())resp.put("accountNotice",ended);
                 }
+                if(username!=null){var intro=sessionManager.takeLoginNotice(sessionId);if(!intro.isEmpty())resp.put("loginNotice",intro);}
                 String feedbackId=AdminSessions.cookieValue(headers.get("cookie"),"auth_feedback");
                 Feedback flash=feedbackId==null?null:feedback.remove(feedbackId);
                 if(flash!=null&&flash.expires()>System.currentTimeMillis())resp.put("accountNotice",flash.value());
@@ -974,7 +998,7 @@ public class HttpAndWebSocketServer {
     }
     private void endPlayerSessions(String username,String message,Map<String,Object> notice,boolean moderation){
         Map<String,Object> event=Map.of("username",username,"message",message,"accountNotice",notice);
-        clientEvents.notifyUser(username,event);sessionManager.removeUserSessions(username);
+        clientEvents.notifyUser(username,event);sessionManager.removeUserSessions(username,notice);
         if(moderation)raceGame.moderate(username,message);
         for(WebSocketClient c:connections)if(username.equalsIgnoreCase(c.getUsername())){
             Map<String,Object> packet=new HashMap<>(event);packet.put("type","auth_error");c.send(JsonUtil.toJson(packet));c.close();

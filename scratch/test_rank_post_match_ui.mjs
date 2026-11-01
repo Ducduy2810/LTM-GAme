@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 class Element{
-  constructor(){this.children=[];this.events={};this.style={};this.checked=false;const classes=new Set();this.classList={add:c=>classes.add(c),remove:c=>classes.delete(c),contains:c=>classes.has(c),toggle(c,force){const enabled=force===undefined?!classes.has(c):force;if(enabled)classes.add(c);else classes.delete(c);}};}
+  constructor(){this.children=[];this.events={};this.style={};this.dataset={};this.checked=false;const classes=new Set();this.classList={add:c=>classes.add(c),remove:c=>classes.delete(c),contains:c=>classes.has(c),toggle(c,force){const enabled=force===undefined?!classes.has(c):force;if(enabled)classes.add(c);else classes.delete(c);}};}
   append(...nodes){this.children.push(...nodes);}replaceChildren(...nodes){this.children=[...nodes];}addEventListener(type,fn){this.events[type]=fn;}scrollIntoView(){}querySelector(){return new Element();}
 }
 const nodes=new Map(),get=id=>{if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);};

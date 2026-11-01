@@ -365,8 +365,8 @@ function handleUpdatePlayers(data) {
         chip.className = `player-chip ${p.isHost ? 'is-host' : ''}`;
 
         let roleTag = '';
-        if (p.isSuperAdmin) roleTag = '<span style="color:#fde047; margin-left:4px; font-weight:800;">🛡️ (Admin)</span>';
-        else if (p.isHost)  roleTag = '<span style="color:#fde047; margin-left:4px; font-weight:800;">👑 (Chủ phòng)</span>';
+        if (p.isSuperAdmin) roleTag = '<span style="color:#9a7135; margin-left:4px; font-weight:800;">🛡️ (Admin)</span>';
+        else if (p.isHost)  roleTag = '<span style="color:#9a7135; margin-left:4px; font-weight:800;">👑 (Chủ phòng)</span>';
 
         let readyTag = '';
         if (p.isHost || p.isSuperAdmin) readyTag = '<span class="ready-badge is-ready" style="margin-left:6px;">Chủ Trì</span>';
@@ -444,28 +444,28 @@ function handleUpdatePlayers(data) {
             btnStart.style.opacity  = '1';
             btnStart.innerText      = '👑 Bắt đầu Trận Đấu (Super Admin)';
             waitingMsg.innerText    = '🛡️ Bạn là Super Admin – Có toàn quyền bắt đầu bất kỳ lúc nào!';
-            waitingMsg.style.color  = '#10b981';
+            waitingMsg.style.color  = '#3f6e47';
         } else if (data.allReady || data.players.length === 1) {
             btnStart.disabled       = false;
             btnStart.style.opacity  = '1';
             btnStart.innerText      = '👑 Bắt đầu Trận Đấu';
             waitingMsg.innerText    = '👑 Mọi người đã sẵn sàng! Bạn có thể bắt đầu trận đấu.';
-            waitingMsg.style.color  = '#10b981';
+            waitingMsg.style.color  = '#3f6e47';
         } else {
             btnStart.disabled       = true;
             btnStart.style.opacity  = '0.6';
             btnStart.innerText      = '⏳ Đang chờ người chơi Sẵn sàng...';
             waitingMsg.innerText    = '⏳ Vẫn còn người chơi chưa bấm Sẵn sàng.';
-            waitingMsg.style.color  = '#facc15';
+            waitingMsg.style.color  = '#9a7135';
         }
     } else {
         btnStart.style.display = 'none';
         if (meInRoom && meInRoom.isReady) {
             waitingMsg.innerText    = `✅ Bạn đã sẵn sàng! Chờ Chủ phòng [${data.hostUsername}] bắt đầu...`;
-            waitingMsg.style.color  = '#10b981';
+            waitingMsg.style.color  = '#3f6e47';
         } else {
             waitingMsg.innerText    = '👉 Hãy bấm [SẴN SÀNG] để Chủ phòng có thể bắt đầu trận đấu!';
-            waitingMsg.style.color  = '#facc15';
+            waitingMsg.style.color  = '#9a7135';
         }
     }
 }
@@ -498,11 +498,11 @@ function handleGameStarted(data) {
     if (roleBadgeGame) {
         if (amIMainPlayer) {
             roleBadgeGame.innerText   = `👑 NGƯỜI CHƠI CHÍNH – Bạn đối đầu với ${totalInitialOpponents} đối thủ!`;
-            roleBadgeGame.style.color = '#fde047';
+            roleBadgeGame.style.color = '#9a7135';
             roleBadgeGame.style.borderColor = 'rgba(253,224,71,0.5)';
         } else {
             roleBadgeGame.innerText   = `⚔️ ĐỐI THỦ của ${data.mainPlayer}`;
-            roleBadgeGame.style.color = '#93c5fd';
+            roleBadgeGame.style.color = '#765a37';
             roleBadgeGame.style.borderColor = 'rgba(147,197,253,0.3)';
         }
     }
@@ -655,28 +655,28 @@ function handleRoundResult(data) {
             mainBadge.style.display = 'block';
             if (data.mainPlayerCorrect) {
                 resultInfo.innerText    = `✅ Người Chơi Chính trả lời ĐÚNG! ${data.eliminatedBotCount + (data.eliminatedRealOpponents ? data.eliminatedRealOpponents.length : 0)} đối thủ bị loại.`;
-                resultInfo.style.color  = '#10b981';
+                resultInfo.style.color  = '#3f6e47';
                 mainBadge.innerText     = `👑 Bạn là Người Chơi Chính – Đáp án đúng!`;
                 mainBadge.style.background = 'rgba(16,185,129,0.2)';
-                mainBadge.style.color      = '#10b981';
+                mainBadge.style.color      = '#3f6e47';
                 mainBadge.style.border     = '1px solid rgba(16,185,129,0.5)';
             } else {
                 resultInfo.innerText    = `❌ Người Chơi Chính trả lời SAI – Trận đấu kết thúc!`;
-                resultInfo.style.color  = '#ef4444';
+                resultInfo.style.color  = '#a44b3d';
                 mainBadge.innerText     = `👑 Bạn là Người Chơi Chính – Đáp án SAI!`;
                 mainBadge.style.background = 'rgba(239,68,68,0.2)';
-                mainBadge.style.color      = '#ef4444';
+                mainBadge.style.color      = '#a44b3d';
                 mainBadge.style.border     = '1px solid rgba(239,68,68,0.5)';
             }
         } else {
             mainBadge.style.display = 'none';
             if (!amIAlive && data.eliminatedRealOpponents && data.eliminatedRealOpponents.includes(currentUsername)) {
                 resultInfo.innerText   = '❌ Rất tiếc! Bạn đã trả lời sai và bị loại khỏi trận đấu!';
-                resultInfo.style.color = '#ef4444';
+                resultInfo.style.color = '#a44b3d';
             } else if (amIAlive) {
                 if (data.mainPlayerCorrect) {
                     resultInfo.innerText   = '✅ Người Chơi Chính đúng! Bạn sống sót vòng này.';
-                    resultInfo.style.color = '#10b981';
+                    resultInfo.style.color = '#3f6e47';
                 } else {
                     resultInfo.innerText   = '❌ Người Chơi Chính trả lời sai – Trận đấu kết thúc!';
                     resultInfo.style.color = '#f59e0b';
@@ -711,7 +711,7 @@ function handleEndGame(data) {
             if (window.arenaSound) window.arenaSound.playVictory();
         } else {
             trophy.innerText       = '💔';
-            title.style.color      = '#ef4444';
+            title.style.color      = '#a44b3d';
             title.innerText        = '😞 Bạn Đã Thua – Đấu Trường Vẫn Còn Đối Thủ!';
         }
     } else {
@@ -722,7 +722,7 @@ function handleEndGame(data) {
             if (window.arenaSound) window.arenaSound.playVictory();
         } else {
             trophy.innerText       = '🎉';
-            title.style.color      = '#10b981';
+            title.style.color      = '#3f6e47';
             title.innerText        = `🎉 ${data.mainPlayer} Thua – Các Đối Thủ Chiến Thắng!`;
         }
     }
@@ -761,12 +761,12 @@ function showLifelineResult(html) {
 
 function showLifelineSurvey(dist, total) {
     const letters = ['A', 'B', 'C', 'D'];
-    let html = `<div style="color:#fde047; font-weight:700; margin-bottom:6px;">📊 Khảo sát (${total} người đã trả lời):</div>`;
+    let html = `<div style="color:#9a7135; font-weight:700; margin-bottom:6px;">📊 Khảo sát (${total} người đã trả lời):</div>`;
     dist.forEach((pct, i) => {
         html += `<div style="margin:3px 0; display:flex; align-items:center; gap:8px;">
             <span style="width:16px; font-weight:700;">${letters[i]}</span>
             <div style="flex:1; background:rgba(255,255,255,0.08); border-radius:4px; overflow:hidden; height:14px;">
-                <div style="width:${pct}%; background:${i===0?'#ef4444':i===1?'#3b82f6':i===2?'#10b981':'#f59e0b'}; height:100%;"></div>
+                <div style="width:${pct}%; background:${i===0?'#a44b3d':i===1?'#3b82f6':i===2?'#3f6e47':'#f59e0b'}; height:100%;"></div>
             </div>
             <span style="width:36px; text-align:right; font-size:12px;">${pct}%</span>
         </div>`;
@@ -829,10 +829,10 @@ function renderLeaderboard(entries = [], tbodyId, directEl) {
         let html = '';
         entries.slice(0, 10).forEach((e, i) => {
             const isMe = e.username === currentUsername;
-            html += `<div style="display:flex; align-items:center; gap:10px; padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.06); ${isMe ? 'color:#fde047;' : 'color:#e2e8f0;'}">
+            html += `<div style="display:flex; align-items:center; gap:10px; padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.06); ${isMe ? 'color:#9a7135;' : 'color:#e2e8f0;'}">
                 <span style="width:22px; text-align:center;">${medals[i] || (i+1)}</span>
                 <span style="flex:1; font-weight:${isMe?'800':'400'};">${escapeGameHtml(e.username)}</span>
-                <span style="color:#10b981; font-size:12px;">${e.rankPoints || 0} pts</span>
+                <span style="color:#3f6e47; font-size:12px;">${e.rankPoints || 0} pts</span>
                 <span style="color:#94a3b8; font-size:11px;">${e.totalWins || 0}W</span>
             </div>`;
         });
@@ -842,13 +842,13 @@ function renderLeaderboard(entries = [], tbodyId, directEl) {
         let html = '';
         entries.forEach((e, i) => {
             const isMe = e.username === currentUsername;
-            html += `<tr style="${isMe ? 'color:#fde047; font-weight:700; background:rgba(253,224,71,0.05);' : ''}">
+            html += `<tr style="${isMe ? 'color:#9a7135; font-weight:700; background:rgba(253,224,71,0.05);' : ''}">
                 <td style="padding:6px 8px;">${medals[i] || (i+1)}</td>
                 <td style="padding:6px 8px;">${escapeGameHtml(e.username)}</td>
-                <td style="padding:6px 8px; text-align:center; color:#10b981; font-weight:700;">${e.rankPoints || 0}</td>
+                <td style="padding:6px 8px; text-align:center; color:#3f6e47; font-weight:700;">${e.rankPoints || 0}</td>
                 <td style="padding:6px 8px; text-align:center;">${e.totalWins || 0}</td>
                 <td style="padding:6px 8px; text-align:center;">${e.totalGames || 0}</td>
-                <td style="padding:6px 8px; text-align:center; color:#ef4444;">${e.totalEliminated || 0}</td>
+                <td style="padding:6px 8px; text-align:center; color:#a44b3d;">${e.totalEliminated || 0}</td>
             </tr>`;
         });
         tbody.innerHTML = html;
@@ -876,7 +876,7 @@ function renderRoomList(rooms = []) {
 
         let adminDeleteBtn = '';
         if ((isCurrentUserAdmin||(r.hostUsername||'').toLowerCase()===(currentUsername||'').toLowerCase()) && ['WAITING','END'].includes(r.gameState) && r.roomCode !== 'DT100') {
-            adminDeleteBtn = `<button class="btn-join-card" style="background:#ef4444; border-color:#dc2626; margin-left:6px;" onclick="closeRoomByAdmin('${r.roomCode}')">Đóng</button>`;
+            adminDeleteBtn = `<button class="btn-join-card" style="background:#a44b3d; border-color:#dc2626; margin-left:6px;" onclick="closeRoomByAdmin('${r.roomCode}')">Đóng</button>`;
         }
 
         card.innerHTML = `
@@ -1138,7 +1138,7 @@ if (btnSound) {
 }
 
 // Đóng WebSocket khi rời trang
-window.addEventListener('beforeunload', () => socket.close());
+window.addEventListener('pagehide', () => socket.close());
 
 // YÊU CẦU 5: Tạm dừng và tiếp tục trận đấu
 document.getElementById('btn-pause-game').addEventListener('click', () => {
@@ -1152,7 +1152,7 @@ document.getElementById('btn-resume-game').addEventListener('click', () => {
 
 // Nút rời phòng trong lúc chơi game
 document.getElementById('btn-leave-game-ingame').addEventListener('click', () => {
-    if (confirm('Bạn có chắc muốn rời phòng? (Tiến trình trò chơi của bạn sẽ bị mất)')) {
+    if (window.MatchLeaveGuard?.confirmLeave()??confirm('Rời trận sẽ không được tính thành tích. Bạn vẫn rời chứ?')) {
         socket.send(JSON.stringify({ type: 'leave_room' }));
     }
 });
@@ -1171,7 +1171,7 @@ if (btnClearLeaderboard) {
     });
 }
 document.getElementById('btn-leave-result-ingame').addEventListener('click', () => {
-    if (confirm('Bạn có chắc muốn rời phòng?')) {
+    if (window.MatchLeaveGuard?.confirmLeave()??confirm('Rời trận sẽ không được tính thành tích. Bạn vẫn rời chứ?')) {
         socket.send(JSON.stringify({ type: 'leave_room' }));
     }
 });

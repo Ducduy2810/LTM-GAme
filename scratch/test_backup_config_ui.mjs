@@ -35,7 +35,7 @@ let open=all(get('backups-table')).find(node=>node.tag==='button'&&node.textCont
 await open.events.click();assert.equal(get('backup-config-dialog').open,true);checks++;assert.equal(get('backup-config-name').textContent,'upload-test.db');checks++;
 assert.equal(requests.filter(r=>r.options?.method==='POST').length,0);checks++;
 const content=all(get('backup-config-preview'));assert.equal(content.filter(n=>n.tag==='h3').length,3);checks++;
-assert.ok(content.some(n=>n.textContent==='Đang dùng')&&content.some(n=>n.textContent==='Trong file'));checks++;
+assert.ok(content.some(n=>n.textContent==='Tại thời điểm sao lưu · Cố định')&&content.some(n=>n.textContent==='Máy chủ hiện tại · Đối chiếu'));checks++;
 assert.ok(content.some(n=>n.textContent==='15')&&content.some(n=>n.textContent==='19'));checks++;
 assert.ok(content.some(n=>n.textContent==='Config <img src=x>'));checks++;assert.equal(content.some(n=>n.tag==='img'),false);checks++;
 assert.equal(get('backup-config-warnings').children[0].textContent,preview.warnings[0]);checks++;

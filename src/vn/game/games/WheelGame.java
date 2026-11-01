@@ -174,6 +174,8 @@ public class WheelGame implements AutoCloseable {
             return;
         }
 
+        if(clientRoomMap.get(client)==room)return;
+        if(room.hasForfeited(client.getUsername())){sendError(client,"Bạn đã rời trận này và không được tính thành tích. Hãy chờ trận mới.");return;}
         if (room.getPlayerCount() >= room.getMaxPlayers()) {
             sendError(client, "Phòng [" + roomCode + "] đã đầy (Tối đa 4 người)!");
             return;

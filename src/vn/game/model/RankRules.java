@@ -7,25 +7,26 @@ public final class RankRules {
     private RankRules(){}
     private static final String[] TIERS={"BRONZE","SILVER","GOLD","PLATINUM","DIAMOND"};
     private static final String[] NAMES={"Đồng","Bạc","Vàng","Bạch Kim","Kim Cương"};
-    public record Position(int step,int rp){
-        public Position{if(step<0||step>14||rp<0||rp>1_000_000||step<14&&rp>99)throw new IllegalArgumentException("Rank/RP không hợp lệ.");}
-        public int total(){return step*100+rp;}
-        public String name(){return NAMES[step/3]+" "+(3-step%3);}
-        public String tier(){return TIERS[step/3];}
+    public static final int MASTER_STEP=15;
+    public record Position(int step,long rp){
+        public Position{if(step<0||step>MASTER_STEP||rp<0||step<MASTER_STEP&&rp>99||rp>Long.MAX_VALUE-step*100L)throw new IllegalArgumentException("Rank/RP không hợp lệ.");}
+        public long total(){return step*100L+rp;}
+        public String name(){return step==MASTER_STEP?"Cao Thủ":NAMES[step/3]+" "+(3-step%3);}
+        public String tier(){return step==MASTER_STEP?"MASTER":TIERS[step/3];}
         public Map<String,Object> json(){return Map.of("step",step,"rp",rp,"total",total(),"name",name(),"tier",tier());}
     }
     public static Position advance(Position before,int delta){
         return advance(before,delta,20,70);
     }
     public static Position advance(Position before,int delta,int buffer,int demotionRp){
-        int step=before.step(),rp=before.rp();
+        int step=before.step();long rp=before.rp();
         if(delta<0){
             if(rp==0&&step>0)return new Position(step-1,demotionRp);
             return new Position(step,Math.max(0,rp+delta));
         }
-        rp+=delta;
-        while(rp>=100&&step<14){rp-=100;step++;if(step%3==0)rp+=buffer;}
-        return new Position(step,Math.min(1_000_000,rp));
+        rp=Math.addExact(rp,delta);
+        while(rp>=100&&step<MASTER_STEP){rp-=100;step++;if(step%3==0)rp+=buffer;}
+        return new Position(step,rp);
     }
     public static double[] rewards(int players){
         if(players<2||players>4)throw new IllegalArgumentException("Trận PvP cần 2–4 người.");
@@ -39,5 +40,5 @@ public final class RankRules {
         int[] rewards={((Number)rules.get("firstRP")).intValue(),((Number)rules.get(players==2?"duelSecondRP":"secondRP")).intValue(),((Number)rules.get("thirdRP")).intValue(),((Number)rules.get("fourthRP")).intValue()};
         double sum=0;for(int i=first;i<first+count;i++)sum+=rewards[i];return (int)Math.round(sum/count);
     }
-    public static String title(int step,int serverPosition){return step<14||serverPosition<1||serverPosition>100?"":serverPosition<=10?"Huyền Thoại":"Cao Thủ";}
+    public static String title(int step,int serverPosition){return step<MASTER_STEP?"":serverPosition>=1&&serverPosition<=10?"Huyền Thoại":"Cao Thủ";}
 }

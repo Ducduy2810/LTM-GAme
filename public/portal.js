@@ -70,7 +70,7 @@
   }
   gameCards('games-list','casual');gameCards('bot-list','bot');gameCards('pvp-list','pvp');
   const statusNames={ACTIVE:'Đang chơi',COMPLETED:'Hoàn thành',CANCELLED:'Đã hủy',INTERRUPTED:'Bị gián đoạn'};
-  const outcomes={WIN:'Thắng',LOSS:'Kết thúc',LEFT:'Đã rời trận',CANCELLED:'Đã hủy'};
+  const outcomes={WIN:'Thắng',LOSS:'Kết thúc',LEFT:'Đã rời trận',FORFEITED:'Bỏ cuộc · Không tính thành tích',CANCELLED:'Đã hủy'};
   function renderHistory(target,rows) {
     const container=$(target);container.replaceChildren();
     if(!rows.length){container.append(el('div','Chưa có trận nào. Hãy ghé khu giải trí để bắt đầu!','empty-state'));return;}
@@ -79,7 +79,7 @@
       const row=el('div',undefined,'history-row'),meta=el('div',undefined,'history-meta');
       meta.append(el('strong',game?.name || r.game_type),el('small',`${new Date(r.started_at).toLocaleString('vi-VN')} · ${r.mode==='BOT'?'Có máy':'Đấu thường'} · ${r.room_code}`));
       const result=el('div',undefined,'history-result');
-      result.append(el('div',r.status==='COMPLETED'?(outcomes[r.outcome]||r.outcome):statusNames[r.status]),el('small',r.status==='COMPLETED'?`${r.score} điểm · Không tính rank`:'Không tính rank'));
+      result.append(el('div',r.outcome==='FORFEITED'?outcomes.FORFEITED:r.status==='COMPLETED'?(outcomes[r.outcome]||r.outcome):statusNames[r.status]),el('small',r.outcome==='FORFEITED'?'Không tính điểm hoặc chiến thắng':r.status==='COMPLETED'?`${r.score} điểm · Không tính rank`:'Không tính rank'));
       row.append(el('span',game?.icon||'⚑','history-icon'),meta,result);container.append(row);
     });
   }
@@ -168,6 +168,7 @@
     $('hud-rank').textContent=(rank.title||rank.currentName||'Đồng 3')+' · '+(rank.current_points||0)+' RP';
     $('profile-current-rank').textContent=rank.title||rank.currentName||'Đồng 3';$('profile-highest-rank').textContent=rank.highestTitle||rank.highestName||'Đồng 3';
     $('profile-current-points').textContent=(rank.current_points||0)+' RP';$('profile-highest-points').textContent=(rank.highest_points||0)+' RP';
+    window.RankProgress?.render($('profile-rank-meter'),{step:Number(rank.current_step||0),rp:Number(rank.current_points||0),name:rank.currentName},{title:rank.title});
   }
   async function loadProfile(){
     if(!currentUser)return;try{const data=await api('/auth/profile');if(!currentUser||currentUser.username!==data.username)return;renderRank(data.rank);$('google-password-help').classList.toggle('hidden',!data.googleLinked);}catch(e){message(e.message);}

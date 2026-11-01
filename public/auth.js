@@ -92,7 +92,9 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     // 2. Đăng nhập
+    let loginBusy=false;
     document.getElementById('btn-login').onclick = async () => {
+        if(loginBusy)return;
         const user = document.getElementById('login-username').value.trim();
         const pass = document.getElementById('login-password').value;
 
@@ -102,6 +104,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
+        loginBusy=true;document.getElementById('btn-login').disabled=true;
         try {
             const res = await fetch('/auth/login', {
                 method: 'POST',
@@ -110,7 +113,7 @@ document.addEventListener("DOMContentLoaded", () => {
             });
             const data = await res.json();
             if (data.success) {
-                checkAuth();
+                await checkAuth();
             } else {
                 msgBox.style.color = '#ef4444';
                 msgBox.innerText = data.error || 'Sai tên đăng nhập hoặc mật khẩu!';
@@ -119,6 +122,8 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (e) {
             msgBox.style.color = '#ef4444';
             msgBox.innerText = 'Lỗi kết nối máy chủ!';
+        } finally {
+            loginBusy=false;document.getElementById('btn-login').disabled=false;
         }
     };
 
@@ -178,6 +183,7 @@ async function checkAuth() {
         if(res.ok===false){document.getElementById('auth-msg').innerText=data.error||'Chưa kết nối được máy chủ.';return;}
         if(data.maintenance)window.SystemClient?.setMaintenance(data.maintenance);
         window.SystemClient?.setAccount(data.loggedIn?data.user:null,data.accountNotice);
+        if(data.loginNotice)window.SystemClient?.showNotice(data.loginNotice);
 
         if (data.loggedIn) {
             document.getElementById('auth-section').classList.add('hidden');

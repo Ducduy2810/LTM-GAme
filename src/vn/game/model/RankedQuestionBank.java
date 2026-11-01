@@ -7,7 +7,7 @@ public final class RankedQuestionBank {
     private RankedQuestionBank(){}
     public static final List<String> TIERS=List.of("BRONZE","SILVER","GOLD","PLATINUM","DIAMOND");
     private static final List<String> NAMES=List.of("Đồng","Bạc","Vàng","Bạch Kim","Kim Cương");
-    public static String tierForTotal(int total){return TIERS.get(Math.min(4,Math.max(0,total)/300));}
+    public static String tierForTotal(long total){return TIERS.get((int)Math.min(4,Math.max(0L,total)/300));}
     public static String name(String tier){int index=TIERS.indexOf(tier);if(index<0)throw new IllegalArgumentException("Bậc rank không hợp lệ.");return NAMES.get(index);}
     public static Map<String,Integer> requirements(String tier,int count){
         name(tier);if(count<10||count>15)throw new IllegalArgumentException("Đấu rank cần 10–15 câu hỏi.");

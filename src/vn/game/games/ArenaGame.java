@@ -193,6 +193,8 @@ public class ArenaGame implements AutoCloseable {
     }
 
     private synchronized void joinRoomInternal(WebSocketClient client, ArenaRoom room) {
+        if(clientRoomMap.get(client)==room)return;
+        if(room.hasForfeited(client.getUsername())){sendError(client,"Bạn đã rời trận này và không được tính thành tích. Hãy chờ trận mới.");return;}
         if (!room.canJoin(client.getUsername())) {
             sendError(client, "Trận đấu đang diễn ra hoặc phòng đã bị đóng. Không thể vào phòng lúc này.");
             return;

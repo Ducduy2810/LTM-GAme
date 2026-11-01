@@ -14,6 +14,7 @@ public final class AdminController {
     public interface Runtime {
         Map<String,Object> rooms();
         int connections();
+        default Set<String> onlineUsernames(){return Set.of();}
         void disconnect(String username,String reason);
         void roomAction(String actor,String game,String room,String action,String target,String reason);
         default void announce(Map<String,Object> announcement){}
@@ -52,14 +53,10 @@ public final class AdminController {
             if(!Set.of("GET","POST").contains(method))return Reply.json(405,Map.of("error","Phương thức không hỗ trợ."));
             if(!validOrigin(headers))return Reply.json(403,Map.of("error","Nguồn yêu cầu không hợp lệ."));
             Map<String,Object> v=Map.of();
-            boolean upload=path.equals("/api/admin/backup-upload");
+            if(path.equals("/api/admin/backup-upload"))return Reply.json(404,Map.of("error","Chức năng tải bản sao lưu lên đã được gỡ bỏ."));
             if("POST".equals(method)){
-                if(upload){
-                    if(!headers.getOrDefault("content-type","").equalsIgnoreCase("application/octet-stream"))return Reply.json(415,Map.of("error","Hãy tải lên file dữ liệu SQLite."));
-                }else{
                 if(!headers.getOrDefault("content-type","").toLowerCase(Locale.ROOT).startsWith("application/json"))return Reply.json(415,Map.of("error","Yêu cầu cần JSON."));
                 v=JsonUtil.parseObject(new String(body,java.nio.charset.StandardCharsets.UTF_8));
-                }
             }
             String id=AdminSessions.cookieValue(headers.get("cookie"),"admin_session");
             if("/api/admin/login".equals(path)){
@@ -88,7 +85,7 @@ public final class AdminController {
             if("GET".equals(method))switch(path){
                 case "/api/admin/session":result=Map.of("username",actor,"csrfToken",session.csrf,"idleMinutes",30);break;
                 case "/api/admin/overview":{Map<String,Object> data=new LinkedHashMap<>(AdminStore.overview());data.put("connections",runtime.connections());result=data;break;}
-                case "/api/admin/users":result=Map.of("items",AdminStore.users(q.getOrDefault("q",""),offset(q)));break;
+                case "/api/admin/users":{var rows=AdminStore.users(q.getOrDefault("q",""),offset(q));var online=runtime.onlineUsernames();for(var row:rows)row.put("online",online.contains(String.valueOf(row.get("username")).toLowerCase(Locale.ROOT)));result=Map.of("items",rows);break;}
                 case "/api/admin/rooms":result=runtime.rooms();break;
                 case "/api/admin/topics":result=Map.of("items",AdminStore.topics());break;
                 case "/api/admin/content":result=Map.of("items",AdminStore.content(q.getOrDefault("kind","QUESTION"),q.getOrDefault("q",""),q.getOrDefault("status",""),q.getOrDefault("mode",""),q.getOrDefault("difficulty",""),q.getOrDefault("rankTier","")));break;
@@ -147,7 +144,6 @@ public final class AdminController {
                     break;
                 }
                 case "/api/admin/backup":result=Map.of("name",AdminStore.backup(actor));break;
-                case "/api/admin/backup-upload":result=Map.of("name",AdminStore.uploadBackup(actor,body));break;
                 case "/api/admin/backup-config/apply":{
                     result=AdminStore.applyBackupConfiguration(actor,AdminStore.required(v,"name",150),AdminStore.required(v,"fingerprint",64));
                     runtime.maintenanceChanged();runtime.announce(vn.game.model.ServerAnnouncement.publicView());break;

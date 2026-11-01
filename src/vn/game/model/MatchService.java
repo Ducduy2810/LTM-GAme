@@ -94,10 +94,10 @@ public final class MatchService {
                     if (ps.executeUpdate() == 0) { c.rollback(); return false; }
                 }
                 if (cancelled) {
-                    try (PreparedStatement ps = c.prepareStatement("UPDATE match_players SET outcome='CANCELLED' WHERE match_id=?")) {
+                    try (PreparedStatement ps = c.prepareStatement("UPDATE match_players SET score=0,placement=0,outcome='CANCELLED' WHERE match_id=? AND outcome NOT IN ('FORFEITED','KICKED')")) {
                         ps.setString(1,id); ps.executeUpdate();
                     }
-                } else try (PreparedStatement ps = c.prepareStatement("UPDATE match_players SET score=?,placement=?,outcome=? WHERE match_id=? AND username=?")) {
+                } else try (PreparedStatement ps = c.prepareStatement("UPDATE match_players SET score=?,placement=?,outcome=? WHERE match_id=? AND username=? AND outcome NOT IN ('FORFEITED','KICKED')")) {
                     for (Result r : results) {
                         ps.setInt(1,r.score()); ps.setInt(2,r.placement()); ps.setString(3,r.outcome());
                         ps.setString(4,id); ps.setString(5,r.username()); ps.addBatch();
@@ -136,4 +136,5 @@ public final class MatchService {
             ps.setInt(1,score);ps.setString(2,outcome);ps.setString(3,id);ps.setString(4,username);ps.setString(5,id);ps.executeUpdate();
         }catch(SQLException e){throw new IllegalStateException("Không lưu được trạng thái rời trận",e);}
     }
+    public static void forfeit(String id,String username){departure(id,username,0,"FORFEITED");}
 }

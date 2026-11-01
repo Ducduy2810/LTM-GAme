@@ -5,7 +5,7 @@
     window.history.replaceState(null, '', window.location.pathname);
     if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) {
         message.textContent = 'Liên kết xác nhận không hợp lệ. Hãy mở đúng liên kết trong email đăng ký.';
-        message.style.color = '#ef4444';
+        message.style.color = 'var(--vm-danger, #a44b3d)';
         return;
     }
     try {
@@ -16,9 +16,9 @@
         });
         const data = await response.json();
         message.textContent = data.message || data.error || 'Chưa thể xác nhận email.';
-        message.style.color = data.success ? '#10b981' : '#ef4444';
+        message.style.color = data.success ? 'var(--vm-success, #3f6e47)' : 'var(--vm-danger, #a44b3d)';
     } catch (error) {
         message.textContent = 'Không kết nối được máy chủ. Hãy mở lại liên kết từ email để thử lại.';
-        message.style.color = '#ef4444';
+        message.style.color = 'var(--vm-danger, #a44b3d)';
     }
 })();

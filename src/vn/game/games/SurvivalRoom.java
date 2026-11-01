@@ -101,6 +101,8 @@ public class SurvivalRoom {
 
     // Theo dõi username đã từng trong phòng (để cho phép rejoin khi đang chơi)
     private final Set<String> recentlyLeftUsernames = Collections.synchronizedSet(new HashSet<>());
+    private final Set<String> forfeitedUsernames=new HashSet<>();
+    public synchronized boolean hasForfeited(String username){return username!=null&&!Set.of("WAITING","END").contains(gameState)&&forfeitedUsernames.contains(username.toLowerCase(Locale.ROOT));}
     private final List<Question> questions = new ArrayList<>();
 
     private volatile String gameState = "WAITING"; // WAITING, QUESTION, RESULT, END
@@ -219,6 +221,7 @@ public class SurvivalRoom {
     public synchronized boolean handleJoin(WebSocketClient client) {
         String username = client.getUsername();
         if (!canJoin(username)) return false;
+        if(!Set.of("WAITING","END").contains(gameState)&&forfeitedUsernames.contains(username.toLowerCase(Locale.ROOT))){sendError(client,"Bạn đã rời trận này và không được tính thành tích. Hãy chờ trận mới.");return false;}
         PlayerState previous = players.values().stream().filter(p -> p.username.equalsIgnoreCase(username)).findFirst().orElse(null);
 
         // Xóa kết nối cũ trùng username (reconnect/rejoin)
@@ -283,6 +286,8 @@ public class SurvivalRoom {
         if (closed || !players.containsKey(client)) return;
         String leavingUsername = client.getUsername();
         boolean wasHost = (leavingUsername != null && leavingUsername.equalsIgnoreCase(hostUsername));
+        boolean active=!Set.of("WAITING","END","CLOSED").contains(gameState);
+        if(active&&!kickedUsernames.contains(leavingUsername.toLowerCase(Locale.ROOT))){MatchService.forfeit(matchId,leavingUsername);forfeitedUsernames.add(leavingUsername.toLowerCase(Locale.ROOT));client.send(JsonUtil.toJson(Map.of("type","match_forfeited","message","Bạn đã rời trận. Không tính điểm, chiến thắng hoặc thành tích của trận này; không thể vào lại trận đang diễn ra.")));}
 
         // Ghi nhận username để cho phép rejoin sau
         if (leavingUsername != null) {
@@ -294,6 +299,7 @@ public class SurvivalRoom {
                 "roomCode", roomCode, "message", "Người chơi [" + leavingUsername + "] đã mất kết nối."));
 
         if (players.isEmpty()) {
+            if(active){MatchService.finish(matchId,true,"Người chơi rời trận; hủy trận đang chơi và không tính thành tích",List.of());++timerGeneration;gameState="WAITING";if(currentTimer!=null){currentTimer.cancel(false);currentTimer=null;}}
             // Chỉ reset khi không đang chơi
             if ("WAITING".equals(gameState) || "END".equals(gameState)) {
                 gameState = "WAITING";
@@ -317,6 +323,7 @@ public class SurvivalRoom {
             }
         }
         broadcastPlayers();
+        if(active&&players.size()==1){PlayerState remaining=players.values().iterator().next();if(remaining.isAlive)endGame("Đối thủ đã rời trận; người ở lại chiến thắng.",remaining.username);}
         finishIfAllAnswered();
     }
 
@@ -358,6 +365,7 @@ public class SurvivalRoom {
 
     private synchronized void startGame() {
         gameState = "STARTING";
+        forfeitedUsernames.clear();recentlyLeftUsernames.clear();
         isPaused = false;
         lastRoundResult = null;
         currentRound = 0;

@@ -39,6 +39,11 @@ public final class RaceStore {
         try(Connection c=AdminStore.connect();Statement st=c.createStatement()){
             st.execute("UPDATE player_ranks SET current_tier='BRONZE',current_points=MIN(current_points,99) WHERE current_tier='UNRANKED'");
             st.execute("UPDATE player_ranks SET highest_tier='BRONZE',highest_points=MIN(highest_points,99) WHERE highest_tier='UNRANKED'");
+            // Preserve accumulated total RP when migrating the former unlimited Diamond I.
+            st.execute("UPDATE player_ranks SET current_step=15,current_tier='MASTER',current_points=current_points-100 WHERE current_step=14 AND current_points>=100");
+            st.execute("UPDATE player_ranks SET highest_step=15,highest_tier='MASTER',highest_points=highest_points-100 WHERE highest_step=14 AND highest_points>=100");
+            st.execute("UPDATE player_ranks SET highest_step=current_step,highest_tier=current_tier,highest_points=current_points WHERE highest_step<current_step OR (highest_step=current_step AND highest_points<current_points)");
+            st.execute("UPDATE player_ranks SET highest_title='' WHERE highest_step<15");
         }
         seedQuestions();seedRankedQuestions();
     }
@@ -63,12 +68,12 @@ public final class RaceStore {
             }catch(Exception e){c.rollback();throw e;}
         }
     }
-    public static Map<String,Integer> rankTotals(Collection<String> names)throws SQLException{
-        Map<String,Integer> result=new HashMap<>();List<String> list=new ArrayList<>(names);
+    public static Map<String,Long> rankTotals(Collection<String> names)throws SQLException{
+        Map<String,Long> result=new HashMap<>();List<String> list=new ArrayList<>(names);
         try(Connection c=AdminStore.connect()){
             for(int start=0;start<list.size();start+=900){
                 var batch=list.subList(start,Math.min(start+900,list.size()));
-                for(var row:AdminStore.rows(c,"SELECT u.username,r.current_step*100+r.current_points AS total FROM users u JOIN player_ranks r ON r.user_id=u.id WHERE u.username IN ("+String.join(",",Collections.nCopies(batch.size(),"?"))+")",batch.toArray()))result.put((String)row.get("username"),((Number)row.get("total")).intValue());
+                for(var row:AdminStore.rows(c,"SELECT u.username,r.current_step*100+r.current_points AS total FROM users u JOIN player_ranks r ON r.user_id=u.id WHERE u.username IN ("+String.join(",",Collections.nCopies(batch.size(),"?"))+")",batch.toArray()))result.put((String)row.get("username"),((Number)row.get("total")).longValue());
             }
         }
         return result;
@@ -181,8 +186,8 @@ public final class RaceStore {
         try(Connection c=AdminStore.connect()){
             int id=userId(c,username);ensureRank(c,id);
             Map<String,Object> row=AdminStore.rows(c,"SELECT * FROM player_ranks WHERE user_id=?",id).get(0);
-            RankRules.Position current=new RankRules.Position(((Number)row.get("current_step")).intValue(),((Number)row.get("current_points")).intValue());
-            RankRules.Position highest=new RankRules.Position(((Number)row.get("highest_step")).intValue(),((Number)row.get("highest_points")).intValue());
+            RankRules.Position current=new RankRules.Position(((Number)row.get("current_step")).intValue(),((Number)row.get("current_points")).longValue());
+            RankRules.Position highest=new RankRules.Position(((Number)row.get("highest_step")).intValue(),((Number)row.get("highest_points")).longValue());
             int place=rankPosition(c,id);String title=((Number)row.get("ranked_games")).intValue()>0?RankRules.title(current.step(),place):"";
             Map<String,Object> result=new LinkedHashMap<>();result.put("current",current.json());result.put("highest",highest.json());result.put("title",title);result.put("highestTitle",row.get("highest_title"));result.put("serverPosition",place);result.put("games",row.get("ranked_games"));result.put("wins",row.get("ranked_wins"));
             result.put("cards",availableCards(c,id));
@@ -196,7 +201,7 @@ public final class RaceStore {
     public static List<Map<String,Object>> leaderboard()throws SQLException{
         try(Connection c=AdminStore.connect()){
             var list=AdminStore.rows(c,"SELECT u.username,r.current_step,r.current_points,r.highest_step,r.highest_points,r.ranked_games,r.ranked_wins FROM player_ranks r JOIN users u ON u.id=r.user_id WHERE r.ranked_games>0 AND LOWER(u.role)<>'admin' AND u.blocked_until<>-1 AND u.blocked_until<=? ORDER BY (r.current_step*100+r.current_points) DESC,r.ranked_wins DESC,u.username COLLATE NOCASE LIMIT 100",System.currentTimeMillis());
-            for(int i=0;i<list.size();i++){var row=list.get(i);int step=((Number)row.get("current_step")).intValue();row.put("position",i+1);row.put("rankName",new RankRules.Position(step,((Number)row.get("current_points")).intValue()).name());row.put("title",RankRules.title(step,i+1));}return list;
+            for(int i=0;i<list.size();i++){var row=list.get(i);int step=((Number)row.get("current_step")).intValue();row.put("position",i+1);row.put("rankName",new RankRules.Position(step,((Number)row.get("current_points")).longValue()).name());row.put("title",RankRules.title(step,i+1));}return list;
         }
     }
     public static Map<String,Object> adminLeaderboard(String query,String status,int offset)throws SQLException{
@@ -222,9 +227,9 @@ public final class RaceStore {
             var total=AdminStore.rows(c,cte+"SELECT COUNT(*) AS total FROM ranked r"+filter,now,"%"+query.trim()+"%",status,status,status).get(0).get("total");
             var rows=AdminStore.rows(c,cte+"SELECT r.*,p.position FROM ranked r LEFT JOIN positions p ON p.user_id=r.user_id"+filter+" ORDER BY CASE WHEN p.position IS NULL THEN 1 ELSE 0 END,p.position,(r.current_step*100+r.current_points) DESC,r.ranked_wins DESC,r.username COLLATE NOCASE LIMIT 50 OFFSET ?",now,"%"+query.trim()+"%",status,status,status,pageOffset);
             for(var row:rows){int step=((Number)row.get("current_step")).intValue();int position=row.get("position") instanceof Number n?n.intValue():0;
-                row.put("blocked",((Number)row.get("blocked")).intValue()==1);row.put("rankName",new RankRules.Position(step,((Number)row.get("current_points")).intValue()).name());
-                row.put("highestRankName",new RankRules.Position(((Number)row.get("highest_step")).intValue(),((Number)row.get("highest_points")).intValue()).name());
-                row.put("title",RankRules.title(step,position));row.put("totalRP",step*100+((Number)row.get("current_points")).intValue());
+                row.put("blocked",((Number)row.get("blocked")).intValue()==1);row.put("rankName",new RankRules.Position(step,((Number)row.get("current_points")).longValue()).name());
+                row.put("highestRankName",new RankRules.Position(((Number)row.get("highest_step")).intValue(),((Number)row.get("highest_points")).longValue()).name());
+                row.put("title",RankRules.title(step,position));row.put("totalRP",step*100+((Number)row.get("current_points")).longValue());
             }
             c.commit();return Map.of("items",rows,"total",total,"offset",pageOffset,"limit",50,"counts",counts);
         }
@@ -258,6 +263,7 @@ public final class RaceStore {
         try(Connection c=AdminStore.connect()){
             c.setAutoCommit(false);try{
                 update(c,"UPDATE race_players SET forfeited=1 WHERE match_id=? AND username=? AND EXISTS(SELECT 1 FROM race_matches WHERE id=? AND status='ACTIVE')",match,username,match);
+                update(c,"UPDATE race_players SET score=0,correct_count=0,placement=0 WHERE match_id=? AND username=? AND forfeited=1 AND EXISTS(SELECT 1 FROM race_matches WHERE id=? AND mode IN ('CASUAL','BOT') AND status='ACTIVE')",match,username,match);
                 // Scope release to the old match so late actions cannot remove a newer membership.
                 update(c,"DELETE FROM race_participation WHERE match_id=? AND user_id=(SELECT user_id FROM race_players WHERE match_id=? AND username=? AND forfeited=1)",match,match,username);
                 c.commit();
@@ -277,11 +283,11 @@ public final class RaceStore {
                     if(!r.bot()){
                         var player=AdminStore.rows(c,"SELECT user_id,use_shield,use_double FROM race_players WHERE match_id=? AND username=?",match,r.username()).get(0);int id=((Number)player.get("user_id")).intValue();
                         if(mode.equals("RANKED")){
-                            var rank=AdminStore.rows(c,"SELECT * FROM player_ranks WHERE user_id=?",id).get(0);RankRules.Position before=new RankRules.Position(((Number)rank.get("current_step")).intValue(),((Number)rank.get("current_points")).intValue());
+                            var rank=AdminStore.rows(c,"SELECT * FROM player_ranks WHERE user_id=?",id).get(0);RankRules.Position before=new RankRules.Position(((Number)rank.get("current_step")).intValue(),((Number)rank.get("current_points")).longValue());
                             int delta=r.rp();String card="";
                             if(delta<0&&((Number)player.get("use_shield")).intValue()==1){delta=0;card="SHIELD";consume(c,id,"shields");}
                             else if(delta>0&&((Number)player.get("use_double")).intValue()==1){delta*=2;card="DOUBLE";consume(c,id,"doubles");}
-                            RankRules.Position after=RankRules.advance(before,delta,((Number)rules.get("rankBuffer")).intValue(),((Number)rules.get("demotionRP")).intValue());RankRules.Position peak=new RankRules.Position(((Number)rank.get("highest_step")).intValue(),((Number)rank.get("highest_points")).intValue());if(after.total()>peak.total())peak=after;
+                            RankRules.Position after=RankRules.advance(before,delta,((Number)rules.get("rankBuffer")).intValue(),((Number)rules.get("demotionRP")).intValue());RankRules.Position peak=new RankRules.Position(((Number)rank.get("highest_step")).intValue(),((Number)rank.get("highest_points")).longValue());if(after.total()>peak.total())peak=after;
                             update(c,"UPDATE player_ranks SET current_step=?,current_tier=?,current_points=?,highest_step=?,highest_tier=?,highest_points=?,ranked_games=ranked_games+1,ranked_wins=ranked_wins+?,updated_at=? WHERE user_id=?",after.step(),after.tier(),after.rp(),peak.step(),peak.tier(),peak.rp(),r.place()==1&&!r.forfeited()&&r.correct()>0?1:0,System.currentTimeMillis(),id);
                             update(c,"INSERT INTO rank_ledger VALUES(?,?,?,?,?,?,?,?,?)",match,id,r.rp(),delta,before.step(),before.rp(),after.step(),after.rp(),card);
                             result.put("baseDelta",r.rp());result.put("rpDelta",delta);result.put("before",before.json());result.put("after",after.json());result.put("promoted",after.step()>before.step());result.put("demoted",after.step()<before.step());result.put("card",card);
@@ -295,6 +301,7 @@ public final class RaceStore {
                 if(mode.equals("RANKED"))for(Result r:results)if(!r.bot()){
                     var row=AdminStore.rows(c,"SELECT r.user_id,r.current_step,r.highest_title FROM player_ranks r JOIN users u ON u.id=r.user_id WHERE u.username=?",r.username()).get(0);int id=((Number)row.get("user_id")).intValue();String title=RankRules.title(((Number)row.get("current_step")).intValue(),rankPosition(c,id));
                     if(!title.isEmpty()&&!"Huyền Thoại".equals(row.get("highest_title")))update(c,"UPDATE player_ranks SET highest_title=? WHERE user_id=?",title,id);
+                    output.get(r.username()).put("title",title);update(c,"UPDATE race_players SET result_json=? WHERE match_id=? AND username=?",JsonUtil.toJson(output.get(r.username())),match,r.username());
                 }
                 update(c,"DELETE FROM race_participation WHERE match_id=?",match);c.commit();return output;
             }catch(Exception e){c.rollback();throw e;}
@@ -327,7 +334,7 @@ public final class RaceStore {
             if(!AdminStore.rows(c,"SELECT 1 FROM race_players p JOIN race_matches m ON m.id=p.match_id WHERE p.user_id=? AND m.status IN ('WAITING','ACTIVE')",id).isEmpty())throw new IllegalArgumentException("Người chơi còn trận chưa chốt kết quả. Chờ kết thúc hoặc hủy trận trước khi sửa dữ liệu.");
             Map<String,Object> before=new LinkedHashMap<>();before.put("rank",AdminStore.rows(c,"SELECT * FROM player_ranks WHERE user_id=?",id));before.put("cards",AdminStore.rows(c,"SELECT * FROM player_cards WHERE user_id=?",id));before.put("daily",AdminStore.rows(c,"SELECT * FROM daily_attempts WHERE user_id=? AND day=?",id,today(System.currentTimeMillis())));
             if(action.equals("setRank")){
-                RankRules.Position position=new RankRules.Position(integer(input,"step"),integer(input,"rp"));var row=AdminStore.rows(c,"SELECT highest_step,highest_points FROM player_ranks WHERE user_id=?",id).get(0);RankRules.Position peak=new RankRules.Position(((Number)row.get("highest_step")).intValue(),((Number)row.get("highest_points")).intValue());if(position.total()>peak.total())peak=position;
+                RankRules.Position position=new RankRules.Position(integer(input,"step"),points(input,"rp"));var row=AdminStore.rows(c,"SELECT highest_step,highest_points FROM player_ranks WHERE user_id=?",id).get(0);RankRules.Position peak=new RankRules.Position(((Number)row.get("highest_step")).intValue(),((Number)row.get("highest_points")).longValue());if(position.total()>peak.total())peak=position;
                 update(c,"UPDATE player_ranks SET current_step=?,current_tier=?,current_points=?,highest_step=?,highest_tier=?,highest_points=?,updated_at=? WHERE user_id=?",position.step(),position.tier(),position.rp(),peak.step(),peak.tier(),peak.rp(),System.currentTimeMillis(),id);
             }else if(action.equals("setCards")){
                 int shields=integer(input,"shields"),doubles=integer(input,"doubles");if(shields<0||shields>999||doubles<0||doubles>999)throw new IllegalArgumentException("Số thẻ cần 0–999.");update(c,"UPDATE player_cards SET shields=?,doubles=? WHERE user_id=?",shields,doubles,id);
@@ -337,4 +344,5 @@ public final class RaceStore {
         }catch(Exception e){c.rollback();throw e;}}
     }
     public static int integer(Map<String,Object> input,String key){if(!(input.get(key) instanceof Number n)||n.doubleValue()!=n.intValue())throw new IllegalArgumentException("Trường "+key+" cần số nguyên.");return n.intValue();}
+    public static long points(Map<String,Object> input,String key){if(!(input.get(key) instanceof Number n)||!Double.isFinite(n.doubleValue())||n.doubleValue()!=n.longValue()||n.longValue()<0)throw new IllegalArgumentException("Trường "+key+" cần số nguyên không âm.");return n.longValue();}
 }

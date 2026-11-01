@@ -36,3 +36,8 @@ scratch/race-*.png
 scratch/admin-ranking-test-*/
 scratch/admin-ranking-*.png
 scratch/world-*.png
+
+# Local benchmark databases and scratch measurements
+scratch/network-benchmark-*/
+scratch/network-results-*/
+scratch/presence-test-*/
