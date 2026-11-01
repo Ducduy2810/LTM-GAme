@@ -1,6 +1,6 @@
 # Vũ Môn Tranh Hùng
 
-**Cổng trò chơi học tập nhiều người chơi thời gian thực — Đồ án Lập trình mạng.**
+**Cổng trò chơi học tập nhiều người chơi cùng nhiều chế độ chơi thời gian thực — BTL Lập trình mạng.**
 
 Backend Java SE tự xử lý TCP Socket, HTTP và WebSocket; trình duyệt là client. Hệ thống gồm phòng ôn luyện, ba trò chơi giải trí, Đường đua Kiến thức với đấu xếp hạng và trang quản trị riêng. Tài khoản, nội dung, lịch sử và điểm rank được lưu trong SQLite.
 
@@ -33,7 +33,7 @@ Backend Java SE tự xử lý TCP Socket, HTTP và WebSocket; trình duyệt là
 
 Ứng dụng tạo một không gian vừa ôn tập kiến thức vừa thi đấu cùng người khác. Những vấn đề cần xử lý ở tầng mạng là đồng bộ câu hỏi và thời gian, nhận nhiều đáp án đồng thời, chống gửi lại đáp án, phát hiện mất kết nối và ghi kết quả nhất quán.
 
-Server là nơi quyết định trạng thái trận, hạn trả lời, điểm và phần thưởng. Client hiển thị dữ liệu, gửi thao tác và phản hồi cho người chơi; đồng hồ trên trình duyệt không quyết định đáp án có còn hợp lệ hay không.
+Server là nơi quyết định trạng thái trận, quản lí người chơi, quản lí câu hỏi, quản lí các chế độ chơi, cầu hình bảo trì, điểm và phần thưởng. Client hiển thị dữ liệu, gửi thao tác và phản hồi cho người chơi; đồng hồ trên trình duyệt không quyết định đáp án có còn hợp lệ hay không.
 
 ### Chức năng
 
@@ -48,7 +48,9 @@ Server là nơi quyết định trạng thái trận, hạn trả lời, điểm
 | Xếp hạng | Đồng → Bạc → Vàng → Bạch Kim → Kim Cương, mỗi bậc 3 cấp; sau Kim Cương 1 là Cao Thủ tích lũy RP; Top 10 Cao Thủ mang danh hiệu Huyền Thoại |
 | Quản trị | Quản lý tài khoản và online/offline; nội dung/CSV/chủ đề; phòng và lịch sử; cấu hình; thông báo; nhật ký; sao lưu |
 
-Chỉ chế độ **RANKED** của Đường đua thay đổi RP. Ba trò chơi giải trí, đấu thường, chơi bot và thử thách ngày không cộng rank. Thử thách ngày có thể thưởng thẻ dùng trong đấu rank.
+Chỉ chế độ **RANKED** của Đường đua thay đổi RP xếp hàng. Khi chơi chế độ **RANK** người chơi sẽ được chơi với người chơi khác cùng mức RANK với mình để tránh ghép với người chơi lệch trình độ trong đấu xếp hạng, gây mất cân bằng xếp hàng.Ngoài ra mỗi mức RANK sẽ có các bộ câu hỏi riêng dành cho mức RANK đó.
+
+ Ba trò chơi giải trí, đấu thường, chơi bot và thử thách ngày không cộng rank. Thử thách ngày có thể thưởng thẻ dùng trong đấu rank.
 
 Rời trận đang chơi có cảnh báo. Bỏ trận đấu thường với người khác làm mất quyền nhận thành tích của người rời; nếu chỉ còn người đó chơi với bot, trận được hủy. Đăng nhập ở thiết bị khác kết thúc phiên cũ và thông báo cho cả hai phía. Chi tiết: [Phiên đăng nhập và rời trận](report/phien-dang-nhap-va-roi-tran.md).
 

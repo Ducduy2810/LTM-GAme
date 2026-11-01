@@ -42,13 +42,13 @@ set CP=bin;%SQLITE_JAR%;lib\slf4j-api-2.0.13.jar;lib\slf4j-nop-2.0.13.jar
 
 :: Bien dich voi classpath co SQLite
 "%JDK_BIN%\javac.exe" --release 17 -encoding UTF-8 -cp "%SQLITE_JAR%;lib\slf4j-api-2.0.13.jar" -d bin ^
-    src/vn/game/config/*.java ^
-    src/vn/game/util/*.java ^
-    src/vn/game/model/*.java ^
-    src/vn/game/db/*.java ^
-    src/vn/game/server/*.java ^
-    src/vn/game/games/*.java ^
-    src/vn/game/*.java
+    common/vn/game/config/*.java ^
+    common/vn/game/util/*.java ^
+    common/vn/game/model/*.java ^
+    service/vn/game/db/*.java ^
+    server/vn/game/server/*.java ^
+    service/vn/game/games/*.java ^
+    server/vn/game/*.java
 
 if %errorlevel% neq 0 (
     echo [LOI] Khong the bien dich source code Java!

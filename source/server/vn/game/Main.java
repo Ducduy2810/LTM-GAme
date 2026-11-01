@@ -25,7 +25,10 @@ public class Main {
 
     public static void main(String[] args) {
         int port = 3000;
-        File publicDir = new File("public");
+        File publicDir = new File("client");
+        if (!publicDir.exists()) {
+            publicDir = new File("public");
+        }
         if (!publicDir.exists()) {
             publicDir = new File("../public");
         }
